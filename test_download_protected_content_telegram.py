@@ -5,13 +5,20 @@
 # 3. El script creará 'ultimate_session.session' para no pedir login cada vez.
 # ==============================================================================
 
+#Notas importantes:
+#El archivo .session: Telegram crea un archivo llamado ultimate_session.session. Este archivo ya contiene el token de acceso. Si quieres máxima seguridad, asegúrate de que nadie tenga acceso a ese archivo tampoco.
+#getpass en IDEs: Si usas PyCharm o VS Code, a veces la consola interna no soporta getpass correctamente y parece que "se queda trabada". Si eso pasa, simplemente escribe y dale a Enter (aunque no veas nada), o ejecuta el script directamente en la terminal de Windows/Linux.
+#Backup: Si borras secret.key, no podrás recuperar el config_segura.bin. ¡Guarda bien esa llave!
+
+
 import os, sys, json, asyncio, subprocess, re
 from datetime import datetime
+
 
 # --- AUTO-INSTALADOR DE DEPENDENCIAS ---
 def check_dependencies():
     # Añadimos mtranslate para la traducción automática
-    libs = ["telethon", "mtranslate"]
+    libs = ["telethon", "mtranslate", "cryptography.fernet", "getpass"]
     for lib in libs:
         try:
             __import__(lib)
@@ -22,12 +29,27 @@ def check_dependencies():
 check_dependencies()
 from telethon import TelegramClient, errors, events
 from mtranslate import translate
+import getpass
+from cryptography.fernet import Fernet
 
 # --- CONFIGURACIÓN GLOBAL ---
-CONFIG_FILE = 'config.json'
+CONFIG_FILE = 'config.bin'
 CARPETA_BASE = 'Descargas_Telegram'
 # Lista negra de spam y contenido inadecuado
 SPAM_LIST = ["crypto", "ganar dinero", "casino", "poker", "estafa", "bet", "sex", "porn", "gore", "nude"]
+# --- GESTIÓN DE LLAVE ---
+# En un entorno real, la KEY debería ser una variable de entorno del sistema
+# o guardarse en un archivo separado muy protegido.
+KEY_FILE = "secret.key"
+
+def cargar_o_generar_llave():
+    if os.path.exists(KEY_FILE):
+        return open(KEY_FILE, "rb").read()
+    else:
+        key = Fernet.generate_key()
+        with open(KEY_FILE, "wb") as f:
+            f.write(key)
+        return key
 
 # --- SISTEMA DE LOGS EN TIEMPO REAL ---
 def log(tipo, mensaje):
@@ -180,22 +202,27 @@ async def modulo_filtro_vigilante(client):
     await client.run_until_disconnected()
 
 # --- INTERFAZ CLI PRINCIPAL ---
-
 async def main():
     if not os.path.exists(CARPETA_BASE): os.makedirs(CARPETA_BASE)
-    
+    key = cargar_o_generar_llave()
+    cipher = Fernet(key)
     def load_config():
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f: return json.load(f)
+            with open(CONFIG_FILE, 'rB') as f: 
+                datos_cifrados = f.read()
+                datos_decodificados = cipher.decrypt(datos_cifrados).decode()
+                return json.load(datos_decodificados)
         return None
 
     config = load_config()
     if not config:
         print("\n--- CONFIGURACIÓN INICIAL ---")
         aid = input("API ID: ")
-        ahash = input("API HASH: ")
-        with open(CONFIG_FILE, 'w') as f: json.dump({'api_id': int(aid), 'api_hash': ahash}, f)
-        config = {'api_id': int(aid), 'api_hash': ahash}
+        ahash = getpass.getpass("API HASH (no se verá lo que escribas): ")
+        config = json.dumps({'api_id': int(aid), 'api_hash': ahash})
+        contenido_cifrado = cipher.encrypt(config.encode())
+        with open(CONFIG_FILE, 'wb') as f:
+            f.write(contenido_cifrado)
 
     client = TelegramClient('ultimate_session', config['api_id'], config['api_hash'])
     
@@ -207,8 +234,8 @@ async def main():
     except errors.SessionPasswordNeededError:
         # Este error ocurre si client.start() no pudo pedirla por alguna razón o si usas una versión manual
         print("\n[!] Verificación en dos pasos activada.")
-        password = input("Introduce tu contraseña de Cloud Password: ")
-        await client.sign_in(password=password)
+        pwd_2fa = getpass.getpass("Introduce tu contraseña de Cloud Password: ")
+        await client.sign_in(password=pwd_2fa)
         log("OK", "Contraseña 2FA aceptada.")
     except Exception as e:
         log("ERR", f"Error crítico al iniciar sesión: {e}")
