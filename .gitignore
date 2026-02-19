@@ -23,6 +23,7 @@ TestResults.xml
 Descargas_Telegram/
 .env
 venv/
-config.json
+config.bin
 credentials.txt
 ultimate_session.session
+secret.key

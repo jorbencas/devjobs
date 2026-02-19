@@ -11,25 +11,38 @@
 #Backup: Si borras secret.key, no podrás recuperar el config_segura.bin. ¡Guarda bien esa llave!
 
 
-import os, sys, json, asyncio, subprocess, re
+import os, sys, json, asyncio, subprocess, getpass, platform
 from datetime import datetime
+# --- INSTALADOR AUTOMÁTICO DE SISTEMA Y LIBRERÍAS ---
+def sistema_auto_setup():
+    print("[*] Verificando entorno y dependencias...")
+    
+    # Lista de librerías Python necesarias
+    libs = ["telethon", "mtranslate", "cryptography", "cryptg"]
+    
+    # 1. Intentar instalar dependencias de sistema si es Linux (Ubuntu)
+    if platform.system().lower() == "linux":
+        try:
+            # Verificamos si tenemos pip, si no, intentamos instalarlo
+            subprocess.check_call(["python3", "-m", "pip", "--version"], stdout=subprocess.DEVNULL)
+        except:
+            print("[!] Pip no detectado. Instalando dependencias de sistema...")
+            subprocess.check_call(["sudo", "apt", "update", "-y"])
+            subprocess.check_call(["sudo", "apt", "install", "-y", "python3-pip", "python3-venv"])
 
-
-# --- AUTO-INSTALADOR DE DEPENDENCIAS ---
-def check_dependencies():
-    # Añadimos mtranslate para la traducción automática
-    libs = ["telethon", "mtranslate", "cryptography.fernet", "getpass"]
+    # 2. Instalar librerías de Python
     for lib in libs:
         try:
-            __import__(lib)
+            __import__(lib if lib != "cryptography" else "feather") # Verificación simple
         except ImportError:
-            print(f"[!] Instalando {lib}...")
+            print(f"[+] Instalando librería: {lib}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
 
-check_dependencies()
+# Ejecutar el instalador antes de cargar lo demás
+sistema_auto_setup()
+
 from telethon import TelegramClient, errors, events
 from mtranslate import translate
-import getpass
 from cryptography.fernet import Fernet
 
 # --- CONFIGURACIÓN GLOBAL ---
@@ -87,11 +100,11 @@ async def download_media_robust(client, message, folder):
 
     try:
         log("DB", f"Bajando: {file_name}")
-        with open(temp_path, 'ab') as f:
+        # 'wb' es mejor para descargas multihilo (Turbo)
+        with open(temp_path, 'wb') as f:
             def prog(c, t):
                 print(f"    -> {file_name}: {(c/t)*100:.1f}%", end='\r')
             await client.download_media(message, file=f, progress_callback=prog)
-        
         os.rename(temp_path, full_path)
         print() # Limpiar línea de progreso
         log("OK", f"Completado: {file_name}")
@@ -100,25 +113,16 @@ async def download_media_robust(client, message, folder):
         log("ERR", f"Fallo en descarga {file_name}: {e}")
         return False
 
-# --- MÓDULOS DEL MENÚ ---
 
 async def modulo_descarga_masiva(client):
     log("INFO", "Iniciando Módulo de Descarga Masiva")
     print("\na) Enlace Único\nb) Rango de IDs (Ej: 100-200)\nc) Procesar enlaces.txt")
     sub_op = input("\nSelecciona: ").lower()
     trad = input("¿Traducir textos detectados? (s/n): ").lower() == 's'
-
     enlaces = []
     if sub_op == 'a':
         enlaces.append(input("Pega el enlace: ").strip())
     elif sub_op == 'b':
-        url_ref = input("Pega un enlace del chat para identificarlo: ").strip()
-        inicio = int(input("ID Inicio: "))
-        fin = int(input("ID Fin: "))
-        # Extraemos la base de la URL para reconstruir los enlaces del rango
-        base_url = "/".join(url_ref.split('/')[:-1])
-        enlaces = [f"{base_url}/{i}" for i in range(inicio, fin + 1)]
-    elif sub_op == 'c':
         if os.path.exists('enlaces.txt'):
             with open('enlaces.txt', 'r') as f:
                 enlaces = [l.strip() for l in f if l.strip()]
@@ -128,23 +132,29 @@ async def modulo_descarga_masiva(client):
     folder = os.path.join(CARPETA_BASE, "Masivo")
     os.makedirs(folder, exist_ok=True)
 
+    peer_cache = {} # Para acelerar la resolución de canales
     for link in enlaces:
         try:
             partes = link.split('/')
             msg_id = int(partes[-1].split('?')[0])
-            peer = int('-100' + partes[-2]) if '/c/' in link else partes[-2]
+            peer_str = partes[-2]
             
-            msg = await client.get_messages(peer, ids=msg_id)
-            texto_listo = procesar_texto_inteligente(msg.text, trad)
-            
+            # Si el canal no está en caché, lo buscamos
+            if peer_str not in peer_cache:
+                target = int('-100' + peer_str) if '/c/' in link else peer_str
+                peer_cache[peer_str] = await client.get_input_entity(target)
+
+            msg = await client.get_messages(peer_cache[peer_str], ids=msg_id) 
+            if not msg: continue
+
+            texto_listo = procesar_texto_inteligente(msg.text, trad)            
             if texto_listo == "FILTERED_CONTENT":
                 log("SPAM", f"Mensaje {msg_id} bloqueado por filtro.")
                 continue
             
             if trad and texto_listo: log("TRAD", f"ID {msg_id}: {texto_listo[:60]}...")
-            
-            await download_media_robust(client, msg, folder)
-            await asyncio.sleep(0.5)
+            if msg.media:
+                await download_media_robust(client, msg, folder)
         except Exception as e:
             log("ERR", f"Error en enlace {link}: {e}")
 
@@ -183,7 +193,7 @@ async def modulo_clonacion(client):
         log("INFO", f"Se encontraron {len(cola_descarga)} archivos en la cola.")
         if input("¿Procesar descarga ahora? (s/n): ").lower() == 's':
             folder = os.path.join(CARPETA_BASE, "Clonados")
-            os.makedirs(folder, exist_ok=True)
+            os.makedirs(folder, exist1_ok=True)
             for msg in cola_descarga:
                 await download_media_robust(client, msg, folder)
 
@@ -208,10 +218,10 @@ async def main():
     cipher = Fernet(key)
     def load_config():
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'rB') as f: 
+            with open(CONFIG_FILE, 'rb') as f: 
                 datos_cifrados = f.read()
-                datos_decodificados = cipher.decrypt(datos_cifrados).decode()
-                return json.load(datos_decodificados)
+                datos_planos = cipher.decrypt(datos_cifrados).decode('utf-8')
+                return json.loads(datos_planos)
         return None
 
     config = load_config()
@@ -219,12 +229,12 @@ async def main():
         print("\n--- CONFIGURACIÓN INICIAL ---")
         aid = input("API ID: ")
         ahash = getpass.getpass("API HASH (no se verá lo que escribas): ")
-        config = json.dumps({'api_id': int(aid), 'api_hash': ahash})
+        config = json.dumps({'api_id': aid, 'api_hash': ahash})
         contenido_cifrado = cipher.encrypt(config.encode())
         with open(CONFIG_FILE, 'wb') as f:
             f.write(contenido_cifrado)
 
-    client = TelegramClient('ultimate_session', config['api_id'], config['api_hash'])
+    client = TelegramClient('ultimate_session', int(config['api_id']), config['api_hash'])
     
     try:
         # start() maneja: Teléfono -> Código -> Contraseña (2FA) automáticamente
