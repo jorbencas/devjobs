@@ -1,149 +1,248 @@
+# ==============================================================================
+# INSTRUCCIONES:
+# 1. Ve a my.telegram.org -> "API development tools" -> Crea una app.
+# 2. Obtendrás api_id y api_hash. Cópialos cuando el script los pida.
+# 3. El script creará 'ultimate_session.session' para no pedir login cada vez.
+# ==============================================================================
 
-# Obtener tus credenciales de API:
+import os, sys, json, asyncio, subprocess, re
+from datetime import datetime
 
-# Ve a my.telegram.org.
-
-# Entra en "API development tools".
-
-# Crea una "app" (pon cualquier nombre). Obtendrás un api_id y un api_hash.
-
-# Instalar la librería:
-
-# Bash
-
-# pip install telethon
-# El Script de Python
-# Este script toma el enlace del mensaje (por ejemplo: https://t.me/c/12345/678) y descarga el video incluso si tiene restricciones de guardado.
-
-
-# Notas importantes para que funcione:
-# Primera ejecución: La primera vez que lo corras, el script te pedirá tu número de teléfono (con código de país, ej: +34...) y el código que te llegará dentro de la app de Telegram. Esto creará un archivo llamado sesion_descarga.session para que no tengas que loguearte cada vez.
-
-# Privacidad: El script solo funciona si tú (la cuenta del api_id) tienes acceso al grupo o canal. No puede descargar de grupos donde no eres miembro.
-
-# Enlaces de canales privados: El script está diseñado para manejar enlaces tipo t.me/c/XXXXX/YYY. Si el enlace tiene un formato distinto, asegúrate de estar dentro del grupo en tu cuenta de Telegram.
-import os, sys, json, asyncio, subprocess
-
-# --- AUTO-INSTALADOR ---
+# --- AUTO-INSTALADOR DE DEPENDENCIAS ---
 def check_dependencies():
-    try:
-        import telethon
-    except ImportError:
-        print("[!] Instalando Telethon...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "telethon"])
+    # Añadimos mtranslate para la traducción automática
+    libs = ["telethon", "mtranslate"]
+    for lib in libs:
+        try:
+            __import__(lib)
+        except ImportError:
+            print(f"[!] Instalando {lib}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
 
 check_dependencies()
 from telethon import TelegramClient, errors, events
+from mtranslate import translate
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN GLOBAL ---
 CONFIG_FILE = 'config.json'
 CARPETA_BASE = 'Descargas_Telegram'
+# Lista negra de spam y contenido inadecuado
+SPAM_LIST = ["crypto", "ganar dinero", "casino", "poker", "estafa", "bet", "sex", "porn", "gore", "nude"]
 
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f: return json.load(f)
-    return None
+# --- SISTEMA DE LOGS EN TIEMPO REAL ---
+def log(tipo, mensaje):
+    iconos = {"INFO": "ℹ️", "OK": "✅", "WARN": "⚠️", "ERR": "❌", "DB": "🚀", "SPAM": "🚫", "TRAD": "📝"}
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {iconos.get(tipo, '🔹')} {mensaje}")
 
-def save_config(api_id, api_hash):
-    with open(CONFIG_FILE, 'w') as f: json.dump({'api_id': api_id, 'api_hash': api_hash}, f)
+# --- MÓDULO DE INTELIGENCIA (FILTRO Y TRADUCCIÓN) ---
+def procesar_texto_inteligente(texto, activar_traduccion=False):
+    if not texto: return None
+    
+    # Filtro de Spam/Indeseado
+    if any(word in texto.lower() for word in SPAM_LIST):
+        return "FILTERED_CONTENT"
+    
+    # Traducción automática
+    if activar_traduccion:
+        try:
+            return translate(texto, "es")
+        except:
+            return texto
+    return texto
 
-# --- LÓGICA DE DESCARGA (CON RESUME) ---
+# --- LÓGICA DE DESCARGA ROBUSTA (CON RESUME) ---
 async def download_media_robust(client, message, folder):
     if not message or not message.media: return False
     
-    file_name = message.file.name if message.file.name else f"file_{message.id}.dat"
+    file_name = message.file.name if message.file.name else f"file_{message.id}{message.file.ext}"
     full_path = os.path.join(folder, file_name)
     temp_path = full_path + ".part"
 
-    if os.path.exists(full_path): return True
+    if os.path.exists(full_path):
+        log("INFO", f"Ya existe: {file_name}")
+        return True
 
     try:
+        log("DB", f"Bajando: {file_name}")
         with open(temp_path, 'ab') as f:
-            await client.download_media(message, file=f)
+            def prog(c, t):
+                print(f"    -> {file_name}: {(c/t)*100:.1f}%", end='\r')
+            await client.download_media(message, file=f, progress_callback=prog)
+        
         os.rename(temp_path, full_path)
+        print() # Limpiar línea de progreso
+        log("OK", f"Completado: {file_name}")
         return True
     except Exception as e:
-        print(f"\n[!] Error descargando {file_name}: {e}")
+        log("ERR", f"Fallo en descarga {file_name}: {e}")
         return False
 
-# --- MÓDULOS ESPECIALES ---
+# --- MÓDULOS DEL MENÚ ---
+
+async def modulo_descarga_masiva(client):
+    log("INFO", "Iniciando Módulo de Descarga Masiva")
+    print("\na) Enlace Único\nb) Rango de IDs (Ej: 100-200)\nc) Procesar enlaces.txt")
+    sub_op = input("\nSelecciona: ").lower()
+    trad = input("¿Traducir textos detectados? (s/n): ").lower() == 's'
+
+    enlaces = []
+    if sub_op == 'a':
+        enlaces.append(input("Pega el enlace: ").strip())
+    elif sub_op == 'b':
+        url_ref = input("Pega un enlace del chat para identificarlo: ").strip()
+        inicio = int(input("ID Inicio: "))
+        fin = int(input("ID Fin: "))
+        # Extraemos la base de la URL para reconstruir los enlaces del rango
+        base_url = "/".join(url_ref.split('/')[:-1])
+        enlaces = [f"{base_url}/{i}" for i in range(inicio, fin + 1)]
+    elif sub_op == 'c':
+        if os.path.exists('enlaces.txt'):
+            with open('enlaces.txt', 'r') as f:
+                enlaces = [l.strip() for l in f if l.strip()]
+        else:
+            log("ERR", "No se encontró enlaces.txt")
+
+    folder = os.path.join(CARPETA_BASE, "Masivo")
+    os.makedirs(folder, exist_ok=True)
+
+    for link in enlaces:
+        try:
+            partes = link.split('/')
+            msg_id = int(partes[-1].split('?')[0])
+            peer = int('-100' + partes[-2]) if '/c/' in link else partes[-2]
+            
+            msg = await client.get_messages(peer, ids=msg_id)
+            texto_listo = procesar_texto_inteligente(msg.text, trad)
+            
+            if texto_listo == "FILTERED_CONTENT":
+                log("SPAM", f"Mensaje {msg_id} bloqueado por filtro.")
+                continue
+            
+            if trad and texto_listo: log("TRAD", f"ID {msg_id}: {texto_listo[:60]}...")
+            
+            await download_media_robust(client, msg, folder)
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            log("ERR", f"Error en enlace {link}: {e}")
 
 async def modulo_clonacion(client):
     origen = input("ID/Username del canal ORIGEN: ")
     destino = input("ID/Username del canal DESTINO: ")
     limite = int(input("¿Cuántos mensajes clonar?: "))
-    descargar = input("¿Deseas descargar los archivos multimedia? (s/n): ").lower() == 's'
+    descargar = input("¿Descargar multimedia también? (s/n): ").lower() == 's'
+    trad = input("¿Traducir contenido al clonar? (s/n): ").lower() == 's'
     
     cola_descarga = []
-    print(f"[*] Clonando {limite} mensajes...")
+    log("INFO", f"Clonando {limite} mensajes...")
 
     async for message in client.iter_messages(origen, limit=limite, reverse=True):
         try:
-            # Reenviar mensaje
-            await client.send_message(destino, message)
+            texto = procesar_texto_inteligente(message.text, trad)
+            if texto == "FILTERED_CONTENT":
+                log("SPAM", f"Saltando ID {message.id} (Contenido inadecuado)")
+                continue
+
+            # Clonar mensaje (si hay traducción, enviamos el texto traducido)
+            if trad and texto:
+                await client.send_message(destino, texto, file=message.media if not descargar else None)
+            else:
+                await client.send_message(destino, message)
+
             if descargar and message.media:
                 cola_descarga.append(message)
-            print(f"    -> Clonado ID: {message.id} (En cola: {len(cola_descarga)})", end='\r')
+            
+            log("OK", f"Clonado ID: {message.id}")
             await asyncio.sleep(0.8)
         except Exception as e:
-            print(f"\n[!] Error en ID {message.id}: {e}")
+            log("ERR", f"Error en ID {message.id}: {e}")
 
-    if cola_descarga:
-        print(f"\n\n[*] Se encontraron {len(cola_descarga)} archivos multimedia.")
-        procesar = input("¿Procesar cola de descarga ahora? (s/n): ").lower() == 's'
-        if procesar:
+    if descargar and cola_descarga:
+        log("INFO", f"Se encontraron {len(cola_descarga)} archivos en la cola.")
+        if input("¿Procesar descarga ahora? (s/n): ").lower() == 's':
             folder = os.path.join(CARPETA_BASE, "Clonados")
             os.makedirs(folder, exist_ok=True)
-            for i, msg in enumerate(cola_descarga):
-                print(f"[*] Bajando {i+1}/{len(cola_descarga)}...")
+            for msg in cola_descarga:
                 await download_media_robust(client, msg, folder)
 
-async def modulo_filtro(client):
-    palabras = input("Palabras clave (separadas por coma): ").lower().split(',')
-    print(f"[*] Monitorizando... (Ctrl+C para salir)")
-
+async def modulo_filtro_vigilante(client):
+    log("INFO", "Modo Vigilante Activo. Ctrl+C para salir.")
+    palabras = input("Palabras clave extra para alertas (separadas por coma): ").lower().split(',')
+    
     @client.on(events.NewMessage)
     async def handler(event):
-        if any(p in event.message.message.lower() for p in palabras):
-            print(f"[!] Coincidencia detectada!")
-            await client.send_message('me', f"🔔 Alerta: {event.message.message}")
-    
+        texto = event.message.message
+        # Usamos el filtro inteligente automático + palabras extra
+        if procesar_texto_inteligente(texto) == "FILTERED_CONTENT" or any(p in texto.lower() for p in palabras):
+            log("SPAM", f"¡Contenido detectado en un chat! -> {texto[:50]}...")
+            await client.send_message('me', f"🔔 Alerta Vigilante:\n{texto}")
+
     await client.run_until_disconnected()
 
-# --- INTERFAZ CLI ---
+# --- INTERFAZ CLI PRINCIPAL ---
 
 async def main():
     if not os.path.exists(CARPETA_BASE): os.makedirs(CARPETA_BASE)
     
+    def load_config():
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f: return json.load(f)
+        return None
+
     config = load_config()
     if not config:
-        save_config(int(input("API ID: ")), input("API HASH: "))
-        config = load_config()
+        print("\n--- CONFIGURACIÓN INICIAL ---")
+        aid = input("API ID: ")
+        ahash = input("API HASH: ")
+        with open(CONFIG_FILE, 'w') as f: json.dump({'api_id': int(aid), 'api_hash': ahash}, f)
+        config = {'api_id': int(aid), 'api_hash': ahash}
 
     client = TelegramClient('ultimate_session', config['api_id'], config['api_hash'])
-    await client.start()
+    
+    try:
+        # start() maneja: Teléfono -> Código -> Contraseña (2FA) automáticamente
+        log("INFO", "Iniciando cliente... Si pide contraseña (2FA), escríbela en la terminal.")
+        await client.start() 
+        log("OK", "Conexión establecida con éxito.")        
+    except errors.SessionPasswordNeededError:
+        # Este error ocurre si client.start() no pudo pedirla por alguna razón o si usas una versión manual
+        print("\n[!] Verificación en dos pasos activada.")
+        password = input("Introduce tu contraseña de Cloud Password: ")
+        await client.sign_in(password=password)
+        log("OK", "Contraseña 2FA aceptada.")
+    except Exception as e:
+        log("ERR", f"Error crítico al iniciar sesión: {e}")
+        return
 
     while True:
-        print(f"\n{'='*40}\n   TELEGRAM ULTIMATE TOOLBOX CLI\n{'='*40}")
-        print("1. Descargas Directas (Enlace/Rango/TXT)")
-        print("2. Clonación & Backup (Con cola de descarga)")
-        print("3. Modo Vigilante (Filtro por palabras)")
-        print("4. Salir")
+        print(f"\n{'='*45}\n   TELEGRAM ULTIMATE TOOLBOX CLI\n{'='*45}")
+        print("1. Descargas Masivas (Enlace/Rango/TXT)")
+        print("2. Clonación & Backup (Filtro + Traducción)")
+        print("3. Modo Vigilante (Alertas por palabras)")
+        print("4. Re-configurar / Salir")
         
-        choice = input("\nSelecciona una opción: ")
+        choice = input("\nOpción > ")
 
         if choice == '1':
-            print("Función de descarga masiva activada...")
-            # Aquí puedes llamar a la lógica de descarga de rangos anterior
+            await modulo_descarga_masiva(client)
         elif choice == '2':
             await modulo_clonacion(client)
         elif choice == '3':
-            try: await modulo_filtro(client)
-            except KeyboardInterrupt: print("\nFiltro detenido.")
+            try:
+                await modulo_filtro_vigilante(client)
+            except KeyboardInterrupt:
+                log("INFO", "Modo Vigilante detenido.")
         elif choice == '4':
+            log("INFO", "Cerrando sistema...")
             break
 
     await client.disconnect()
 
+def save_config(api_id, api_hash):
+    with open(CONFIG_FILE, 'w') as f: json.dump({'api_id': api_id, 'api_hash': api_hash}, f)
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n\n[!] Script finalizado por el usuario.")
