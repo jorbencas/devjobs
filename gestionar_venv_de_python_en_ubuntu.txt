@@ -1,0 +1,22 @@
+Abre tu terminal y escribe:
+nano ~/.bashrc (o .zshrc si usas Zsh)
+
+Y pega esto al final del archivo:
+
+Bash
+# Crea y activa un entorno virtual llamado .venv en el directorio actual
+mkvenv() {
+    python3 -m venv .venv
+    source .venv/bin/activate
+}
+Guarda el archivo (Ctrl+O, Enter) y sal (Ctrl+X). Luego, aplica los cambios con:
+source ~/.bashrc
+
+Ahora, simplemente escribiendo mkvenv en cualquier carpeta, tendrás tu entorno creado y activo al instante.
+
+2. Alias para activar uno que ya existe
+Si ya tienes el entorno creado, no quieres escribir la ruta completa cada vez. Puedes añadir otro alias sencillo:
+
+Bash
+alias act='source .venv/bin/activate'
+Con esto, solo escribes act y listo.
