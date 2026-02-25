@@ -234,13 +234,36 @@ async def main():
         with open(CONFIG_FILE, 'wb') as f:
             f.write(contenido_cifrado)
 
-    client = TelegramClient('ultimate_session', int(config['api_id']), config['api_hash'])
+    client = TelegramClient(StringSession(), int(config['api_id']), config['api_hash'])
     
     try:
         # start() maneja: Teléfono -> Código -> Contraseña (2FA) automáticamente
         log("INFO", "Iniciando cliente... Si pide contraseña (2FA), escríbela en la terminal.")
-        await client.start() 
-        log("OK", "Conexión establecida con éxito.")        
+        await client.start(phone=lambda: phone) 
+        log("OK", "Conexión establecida con éxito.")
+       # --- PARCHE DE SINCRONIZACIÓN ---
+        # Forzamos una petición al servidor para que la sesión se rellene internamente
+        await client.get_me() 
+        
+        # 2. Intentamos guardar la sesión
+        session_string = client.session.save()
+        
+        if not session_string:
+            # Reintento manual si el save() inicial falló
+            log("WARN", "Sincronizando sesión manualmente...")
+            # Accedemos al valor interno de la sesión si Telethon se pone terco
+            if client.session.auth_key:
+                session_string = client.session.save()
+
+        if session_string:
+            print(f"\n{'='*45}")
+            log("OK", "¡SESIÓN CAPTURADA!")
+            print(f"{'='*45}\n")
+            print(session_string) # Aquí ya NO saldrá None
+            print(f"\n{'='*45}")
+            log("INFO", "Copia todo el texto de arriba para tus Secrets de GitHub.")
+        else:
+            log("ERR", "No se pudo generar el string. Verifica que el código fue correcto.")
     except errors.SessionPasswordNeededError:
         # Este error ocurre si client.start() no pudo pedirla por alguna razón o si usas una versión manual
         print("\n[!] Verificación en dos pasos activada.")
