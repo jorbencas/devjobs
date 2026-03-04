@@ -26,4 +26,8 @@ venv/
 config.bin
 credentials.txt
 ultimate_session.session
+ultimate_session.session-journal
 secret.key
+pdfs_libres
+pdfs_protegidos
+tituls AR
