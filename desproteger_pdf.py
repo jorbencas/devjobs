@@ -167,12 +167,14 @@ class PDFNinjaMaster:
         archivos = [f for f in os.listdir(self.entrada) if f.endswith('.pdf')]
         for nombre in tqdm(archivos, desc="Operación Ninja"):
             r_in, r_out = os.path.join(self.entrada, nombre), os.path.join(self.salida, nombre)
+            print("Hola Mundo")
             if os.path.exists(r_out): continue
             try:
                 doc = fitz.open(r_in)
                 doc.save(r_out, garbage=4 if comprimir else 3, deflate=comprimir)
                 doc.close()
-            except: pass
+            except Exception as e:
+                print(f"Fallo: {e}")
 
     def dividir_pdf(self):
         archivos = [f for f in os.listdir(self.entrada) if f.endswith('.pdf')]
