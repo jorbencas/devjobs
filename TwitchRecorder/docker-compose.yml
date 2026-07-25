@@ -1,0 +1,18 @@
+services:
+  twitchrecorder:
+    build: .
+    container_name: twitchrecorder
+    restart: unless-stopped
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - /home/jorge/test_videos:/recordings
+    environment:
+      - TZ=Europe/Madrid
+
+  run:
+    build: .
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - /home/jorge/test_videos:/recordings
+    environment:
+      - TZ=Europe/Madrid

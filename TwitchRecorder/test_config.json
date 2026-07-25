@@ -1,0 +1,20 @@
+{
+    "channels": [
+        "shinchan_oficial"
+    ],
+    "record_path": "/recordings",
+    "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+    ],
+    "start_time": "00:00",
+    "check_every": 30,
+    "max_duration": "00:01:00",
+    "retry_interval": 60,
+    "copy_to_test": false
+}
