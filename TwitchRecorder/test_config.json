@@ -1,7 +1,9 @@
 {
-    "channels": [
-        "shinchan_oficial"
-    ],
+    "channels": {
+        "shinchan_oficial": {
+            "platform": "twitch"
+        }
+    },
     "record_path": "/recordings",
     "days": [
         "Monday",

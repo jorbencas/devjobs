@@ -1,7 +1,9 @@
 {
-    "channels": [
-        "sendosama"
-    ],
+    "channels": {
+        "sendosama": {
+            "platform": "twitch"
+        }
+    },
 
     "record_path": "/recordings",
 

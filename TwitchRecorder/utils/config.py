@@ -2,6 +2,8 @@ import json
 import platform
 from pathlib import Path
 
+from utils.logger import log
+
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
@@ -26,7 +28,7 @@ def parse_duration(duration_str: str) -> float:
         try:
             return float(duration_str)
         except ValueError:
-            print(f"Formato de duración inválido: '{duration_str}'. Usando 24:00:00 por defecto.")
+            log.warning(f"Formato de duración inválido: '{duration_str}'. Usando 24:00:00 por defecto.")
             return 24.0
 
 
@@ -57,6 +59,22 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
             config[key] = value
 
     return config
+
+
+def get_channels_with_platform(config: dict) -> list:
+    channels = config.get("channels", [])
+
+    if isinstance(channels, dict):
+        result = []
+        for name, info in channels.items():
+            if isinstance(info, dict):
+                platform_name = info.get("platform", "twitch")
+            else:
+                platform_name = "twitch"
+            result.append((name, platform_name))
+        return result
+
+    return [(ch, "twitch") for ch in channels]
 
 
 def save_config(config: dict, path: Path = CONFIG_PATH) -> None:

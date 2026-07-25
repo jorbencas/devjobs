@@ -1,6 +1,6 @@
 # TwitchRecorder
 
-Grabador automático de directos de Twitch con Docker.
+Grabador automático de directos de Twitch, YouTube y Kick con Docker.
 
 ## Requisitos
 
@@ -14,12 +14,6 @@ docker compose up -d
 
 El contenedor se reinicia solo si el PC se reinicia (`restart: unless-stopped`).
 
-## Parar
-
-```bash
-docker compose down
-```
-
 ## Ejecutar una vez (test)
 
 ```bash
@@ -28,11 +22,27 @@ docker compose run --rm run
 
 Ejecuta, graba para y muere. Ideal para probar.
 
+## Dry-run (sin grabar)
+
+```bash
+docker compose run --rm run --dry-run
+```
+
+Detecta el directo pero no graba. Útil para comprobar que la config funciona.
+
+## Parar
+
+```bash
+docker compose down
+```
+
 ## Logs
 
 ```bash
 docker compose logs -f
 ```
+
+Los logs muestran timestamp: `17:35:28 [sendosama] Grabación iniciada`
 
 ## Reconstruir tras cambios en el código
 
@@ -46,10 +56,20 @@ Edita `config.json`:
 
 ```json
 {
-    "channels": ["sendosama"],
+    "channels": {
+        "sendosama": {
+            "platform": "twitch"
+        },
+        "MrBeast": {
+            "platform": "youtube"
+        },
+        "adin": {
+            "platform": "kick"
+        }
+    },
     "record_path": "/recordings",
     "days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
-    "start_time": "21:00",
+    "start_time": "21:30",
     "check_every": 30,
     "max_duration": "24:00:00",
     "retry_interval": 60,
@@ -57,9 +77,27 @@ Edita `config.json`:
 }
 ```
 
+### Formato legacy (solo Twitch)
+
+```json
+{
+    "channels": ["sendosama"]
+}
+```
+
+### Plataformas soportadas
+
+| Plataforma | `platform` | Herramienta | Ejemplo |
+|------------|------------|-------------|---------|
+| Twitch | `twitch` | Streamlink | `sendosama` |
+| YouTube | `youtube` | yt-dlp | `MrBeast` |
+| Kick | `kick` | yt-dlp | `adin` |
+
+### Campos de configuración
+
 | Campo | Descripción |
 |-------|-------------|
-| `channels` | Canales a grabar |
+| `channels` | Canales a grabar (dict con platform o array legacy) |
 | `record_path` | Ruta donde se guardan los vídeos (dentro del contenedor) |
 | `days` | Días de la semana en los que grabar |
 | `start_time` | Hora a la que empezar a comprobar (HH:MM) |
@@ -87,7 +125,8 @@ grabaciones/
 ├── 2026/
 │   └── 07/
 │       ├── sendosama_2026-07-25_21-30-00.mp4
-│       └── sendosama_2026-07-26_21-15-00.mp4
+│       ├── MrBeast_2026-07-26_21-15-00.mp4
+│       └── adin_2026-07-27_22-00-00.mp4
 └── test/
     └── sendosama_2026-07-26_21-15-00.mp4
 ```

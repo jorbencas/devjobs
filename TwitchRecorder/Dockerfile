@@ -13,4 +13,5 @@ COPY . .
 
 RUN mkdir -p /recordings
 
-CMD ["python", "-u", "main.py"]
+ENTRYPOINT ["python", "-u", "main.py"]
+CMD []

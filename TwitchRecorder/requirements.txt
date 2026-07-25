@@ -1,4 +1,5 @@
 streamlink
+yt-dlp
 requests
 python-dotenv
 schedule
