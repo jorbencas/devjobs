@@ -5,7 +5,6 @@
 set -u
 cd "$(dirname "$0")" || exit 1
 
-DEFAULT_URL="https://hdfull.sbs/pelicula/the-king-of-kings"
 LOGDIR="logs"
 LOGFILE="$LOGDIR/ultimo_run.log"
 NAME_PATTERN="hdfull-downloader-downloader-run-"
@@ -53,10 +52,15 @@ cleanup_leftovers() {
 }
 
 ask_url() {
-  echo "URL de la película (vacío = por defecto):"
-  read -r -p "> " MENU_URL
-  MENU_URL="${MENU_URL:-$DEFAULT_URL}"
-  echo "Usando: $MENU_URL"
+  while true; do
+    echo "URL de la película:"
+    read -r -p "> " MENU_URL
+    if [[ -n "$MENU_URL" ]]; then
+      echo "Usando: $MENU_URL"
+      return
+    fi
+    echo "La URL es obligatoria."
+  done
 }
 
 run_foreground() {

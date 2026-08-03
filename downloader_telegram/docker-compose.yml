@@ -1,0 +1,11 @@
+services:
+  telegram:
+    build: .
+    container_name: telegram-downloader
+    volumes:
+      - ./config.bin:/app/config.bin
+      - ./secret.key:/app/secret.key
+      - ./ultimate_session.session:/app/ultimate_session.session
+      - ./Descargas_Telegram:/app/Descargas_Telegram
+    stdin_open: true
+    tty: true

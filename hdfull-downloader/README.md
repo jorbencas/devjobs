@@ -2,6 +2,8 @@
 
 Descargador de películas de **HDFull** (`https://hdfull.sbs`) que automatiza Chromium dentro de Docker, resuelve el reCAPTCHA **manualmente** a través de noVNC y captura el stream real (MPEG-DASH/MP4) usando ffmpeg.
 
+
+
 ## Cómo funciona
 
 ```
@@ -90,7 +92,7 @@ Flujo:
 |---|---|---|
 | `HDFULL_USER` | — | Usuario de HDFull (obligatorio) |
 | `HDFULL_PASS` | — | Contraseña de HDFull (obligatorio) |
-| `HDFULL_URL` | `https://hdfull.sbs/pelicula/the-king-of-kings` | URL de la película (también acepta arg `argv[1]`) |
+| `HDFULL_URL` | — | URL de la película (obligatoria, también acepta arg `argv[1]`) |
 | `HDFULL_CAPTCHA_TIMEOUT` | `900` | Segundos máximo esperando el captcha manual |
 | `HDFULL_OUT` | `/app/downloads` | Directorio de salida |
 
@@ -118,7 +120,7 @@ El script detecta el tipo de stream y elige el método:
 - El buffer de `performance` solo guarda ~150 entradas y puede **evictar el `manifest.mpd`**; si solo aparecen fragmentos (`.m4s`/`.ts`), el script **deriva el manifest** de la base del fragmento (`.../dash/<id>/manifest.mpd`) y lo verifica con una petición HTTP antes de usarlo.
 - Los **señuelos** (`720p.mp4` y demás `.mp4` servidos desde el dominio del reproductor `powwideo.org`) se ignoran para no romper el bucle de extracción antes de encontrar el manifest real.
 - El archivo de salida siempre se fuerza a **MP4** con `-f mp4` (si se llamara `manifest.mpd`, ffmpeg activaría el muxer DASH y generaría cientos de `chunk-stream*.m4s`).
-- El nombre de salida se deriva de la URL de la página (p. ej. `episodio-3.mp4`, `the-king-of-kings.mp4`).
+- El nombre de salida se deriva de la URL de la página (p. ej. `episodio-3.mp4`, `otra-pelicula.mp4`).
 
 ### El problema del "fragmento fantasma"
 

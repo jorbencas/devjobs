@@ -1,0 +1,1988 @@
+TODO LIST - Mejoras para devjobs Ultimate Automation Suite
+=========================================================
+Última actualización: 2026-08-03
+
+================================================================================
+  PROYECTO 1: pdfmanager
+================================================================================
+
+--- Funcionalidad ---
+[ ] Modo batch: procesar todos los PDFs de una carpeta sin menú interactivo
+[ ] Renombrado automático: extraer nombre del contenido del PDF para salida
+[ ] Log de operaciones: guardar qué se hizo a cada archivo y cuándo
+[ ] Modo silencioso: sin progreso, sin colores, solo resultado (para scripts)
+[ ] Extracción de texto: sacar texto de PDFs escaneados con OCR (tesseract)
+[ ] Conversión a Word: exportar PDFs a DOCX editables
+[ ] Conversión a imágenes: PDF a JPG/PNG página por página
+[ ] Combinación selectiva: elegir páginas específicas de varios PDFs para unir
+[ ] Rotación de páginas: girar páginas individuales dentro de un PDF
+[ ] Marcadores: añadir/eliminar marcadores (bookmarks) en el PDF
+[ ] Watermark masivo: poner marca de agua en todos los PDFs de una carpeta
+[ ] Proteger con contraseña: añadir contraseña de apertura a PDFs libres
+[ ] Eliminar páginas: quitar páginas específicas de un PDF
+[ ] Extraer páginas: sacar páginas específicas a un PDF nuevo
+[ ] Mezclar PDFs: intercalar páginas de dos PDFs (1 de A, 1 de B, etc.)
+[ ] Añadir numeración: poner números de página automáticamente
+[ ] Redimensionar páginas: cambiar tamaño de papel (A4, Letter, etc.)
+[ ] OCR batch: procesar varios PDFs escaneados de golpe
+[ ] Reparar PDFs corruptos: intentar recuperar datos de PDFs dañados
+[ ] Comparar PDFs: mostrar diferencias entre dos versiones
+[ ] Extraer imágenes: sacar todas las imágenes de un PDF
+[ ] Añadir cabecera/pie: poner texto fijo en todas las páginas
+[ ] Modo/watch: monitoring de carpeta, procesar nuevos PDFs automáticamente
+[ ] Interfaz web: panel en el navegador para arrastrar y soltar PDFs
+[ ] API REST: endpoint para procesar PDFs vía HTTP
+[ ] Plugin system: permitir añadir operaciones personalizadas
+[ ] Cola de trabajos: encolar múltiples operaciones y ejecutar en serie
+[ ] Reintentos: si falla un PDF, reintentar N veces antes de skippear
+[ ] Notificación push: avisar por ntfy.sh cuando termina el procesamiento
+[ ] Estadísticas: mostrar resumen al final (X desbloqueados, Y comprimidos, etc.)
+[ ] Backup automático: copiar PDFs originales antes de modificar
+[ ] Perfiles: guardar configuraciones de procesamiento (perfil "certificados", "libros", etc.)
+[ ] Soporte PDF/A: convertir a formato de archivo PDF/A (archivístico)
+[ ] Eliminar metadata: limpiar información personal de los PDFs
+[ ] Extraer metadata: mostrar autor, título, fechas, software usado
+[ ] Firma digital: verificar si un PDF está firmado digitalmente
+[ ] Merge por bookmarks: unir PDFs manteniendo los bookmarks como separadores
+[ ] Dividir por bookmarks: separar un PDF en varios según sus bookmarks
+[ ] Compresión por lotes: comprimir todos los PDFs de una carpeta
+[ ] Eliminar restricciones en lote: desbloquear varios PDFs de golpe
+[ ] Historial: recordar los últimos 50 PDFs procesados
+[ ] Undo: deshacer la última operación (restaurar desde backup)
+[ ] Soporte PDF protegido con owner password: manejar restricciones de edición
+[ ] Verificar integridad: comprobar si un PDF está dañado antes de procesarlo
+[ ] Convertir HTML a PDF: renderizar páginas web a PDF
+[ ] Convertir Markdown a PDF: renderizar MD a PDF con estilos
+[ ] Plantillas: crear PDFs desde plantillas con campos rellenables
+[ ] Formularios: rellenar campos de formularios PDF automáticamente
+[ ] Filtros por tamaño: procesar solo PDFs mayores/menores de X MB
+[ ] Filtros por fecha: procesar solo PDFs modificados en un rango
+[ ] Modo dry-run: mostrar qué se haría sin ejecutar
+[ ] Exportar log a CSV: para análisis en Excel/Google Sheets
+
+--- Tests ---
+[ ] Test de desbloqueo con PDF protegido por owner password
+[ ] Test de desbloqueo con PDF protegido por opening password
+[ ] Test de unión de PDFs
+[ ] Test de división de PDFs
+[ ] Test de compresión
+[ ] Test de conversión de imágenes a PDF
+[ ] Test de PDF corrupto
+[ ] Test de PDF vacío
+[ ] Test de PDF con 0 páginas
+[ ] Test de PDF con 1000+ páginas
+[ ] Test de modo batch
+[ ] Test de renombrado automático
+[ ] Test de OCR
+[ ] Test de extracción de texto
+[ ] Test de rendimiento con archivos grandes
+
+--- Docker ---
+[ ] Multi-stage build: imagen más ligera separando build de runtime
+[ ] Health check: añadir healthcheck al docker-compose
+[ ] Volumen de log: mapear carpeta de logs al host
+[ ] Variables de entorno: configurar rutas y opciones por env vars
+[ ] Dockerfile para ARM: soporte para Raspberry Pi
+[ ] Imagen minimalista: base Alpine en vez de Debian
+[ ] Watch mode en Docker: monitorear carpeta automáticamente
+[ ] GPU support: usar GPU para OCR si está disponible
+[ ] Limitar recursos: mem_limit, cpu_count en docker-compose
+[ ] Log rotation: rotación automática de logs dentro del contenedor
+
+--- UX ---
+[ ] Barra de progreso real con tqdm para cada operación
+[ ] Colores adaptativos: detectar si el terminal soporta colores
+[ ] Soporte para terminal sin TTY: detectar y adaptar output
+[ ] Mensajes de error más descriptivos con sugerencias
+[ ] Atajos de teclado en el menú (q para salir, b para batch, etc.)
+[ ] Modo verbose/debug: mostrar comandos internos de ffmpeg/pikepdf
+[ ] Confirmación antes de sobrescribir archivos existentes
+[ ] Resumen antes de ejecutar: mostrar qué se va a hacer y pedir confirmación
+[ ] Tiempo estimado: mostrar cuánto tardará antes de empezar
+[ ] Sonido al terminar (opcional): beep del terminal
+
+--- Seguridad ---
+[ ] Verificar integridad de PDFs antes y después (hash SHA256)
+[ ] No sobrescribir originales por defecto: siempre crear copia
+[ ] Sandbox: ejecutar operaciones en entorno aislado
+[ ] Rate limiting: no procesar más de X PDFs por minuto
+[ ] Audit log: registrar quién procesó qué y cuándo
+
+--- Documentación ---
+[ ] Ejemplos reales: certificados, títulos, contratos
+[ ] Vídeo tutorial: screencast de uso
+[ ] Troubleshooting: errores comunes y soluciones
+[ ] API docs: documentación de la interfaz de comandos
+[ ] Changelog: historial de cambios por versión
+
+--- Rendimiento ---
+[ ] Procesamiento paralelo: usar multiprocess para batch
+[ ] Cache de resultados: no re-procesar PDFs que no cambiaron
+[ ] Streaming: procesar PDFs grandes sin cargar todo en memoria
+[ ] Compresión incremental: solo recomprimir si el original cambió
+[ ] Lazy loading: cargar páginas bajo demanda para PDFs grandes
+
+--- Integración ---
+[ ] Hook de git: process PDFs on commit
+[ ] Script de cron: ejecutar batch a las 3am
+[ ] ntfy.sh: notificación al terminar
+[ ] Telegram bot: enviar PDF procesado por Telegram
+[ ] Google Drive: subir resultados automáticamente
+[ ] Nextcloud: sincronizar con carpeta de Nextcloud
+
+--- Mantenimiento ---
+[ ] Auto-update: comprobar si hay nueva versión del script
+[ ] Limpiar cache: eliminar archivos temporales periódicamente
+[ ] Rotate logs: rotar logs antiguos automáticamente
+[ ] Monitoreo de espacio: avisar si el disco se llena
+[ ] Deprecation warnings: avisar de features que se van a quitar
+
+--- Code quality ---
+[ ] Type hints en Python
+[ ] Docstrings en todas las funciones
+[ ] Linting con ruff o flake8
+[ ] Formatting con black
+[ ] Pre-commit hooks
+[ ] CI/CD con GitHub Actions
+[ ] Coverage report
+
+--- Ideas locas ---
+[ ] PDF to comic: convertir PDFs escaneados a formato cómic (CBR)
+[ ] PDF to audiobook: usar TTS para leer PDFs en voz alta
+[ ] PDF translator: traducir PDFs automáticamente con LLM
+[ ] PDF summarizer: resumir PDFs largos con IA
+[ ] PDF signer: firmar PDFs con firma digital
+[ ] PDF encryptor: cifrar PDFs con AES-256
+[ ] PDF watermark remover: eliminar marcas de agua
+[ ] PDF page reorder: reordenar páginas arrastrando (UI)
+[ ] PDF comparison visual: mostrar diferencias lado a lado
+[ ] PDF template engine: crear PDFs desde datos estructurados
+
+================================================================================
+  PROYECTO 2: downloader_telegram
+================================================================================
+
+--- Funcionalidad ---
+[ ] Reintentos automáticos: reintentar descargas fallidas N veces
+[ ] Barra de progreso real: mostrar mensajes descargados/total
+[ ] Filtros por fecha: descargar solo mensajes de un rango
+[ ] Filtros por tipo: solo texto, solo fotos, solo vídeos, solo documentos
+[ ] Filtros por tamaño: descargar solo archivos mayores/menores de X MB
+[ ] Exportar a JSON: metadata completa (autor, fecha, tipo, caption)
+[ ] Exportar a CSV: para análisis en Excel
+[ ] Rate limiting configurable: mensajes por segundo/por minuto
+[ ] Deduplicación: no descargar mensajes que ya existen
+[ ] Resume: continuar descarga desde donde se quedó
+[ ] Modo espejo: clonar canal y mantener sincronizado automáticamente
+[ ] Búsqueda en canales: buscar mensajes por texto y descargar los que coincidan
+[ ] Filtros por usuario: descargar solo mensajes de usuarios específicos
+[ ] Filtros por reply: descargar solo mensajes que responden a otros
+[ ] Filtros por forwarded: descargar solo mensajes reenviados
+[ ] Filtros por media group: agrupar fotos/videos de un mismo post
+[ ] Descarga de storys: soporte para storys de Telegram
+[ ] Descarga de polls: exportar encuestas a formato estructurado
+[ ] Descarga de contactos: exportar contactos compartidos
+[ ] Descarga de ubicaciones: exportar ubicaciones a JSON
+[ ] Descarga de voice messages: transcribir audio a texto con whisper
+[ ] Descarga de stickers: guardar stickers como imágenes
+[ ] Descarga de GIFs: guardar GIFs animados de Telegram
+[ ] Descarga de documentos: todos los tipos (PDF, ZIP, etc.)
+[ ] Notificación push: avisar por ntfy.sh cuando termine
+[ ] Modo watch: monitorear canal y descargar nuevos mensajes automáticamente
+[ ] Webhook: notificar por HTTP cuando haya nuevos mensajes
+[ ] API REST: endpoint para descargar mensajes vía HTTP
+[ ] Database: guardar mensajes en SQLite para búsqueda local
+[ ] Stats: mostrar estadísticas de un canal (mensajes/día, más activos, etc.)
+[ ] Backup programado: ejecutar descarga automáticamente cada N horas
+[ ] Multi-canales: descargar de varios canales a la vez
+[ ] Prioridades: canal A tiene prioridad sobre canal B
+[ ] Filtros por palabra clave: descargar solo mensajes que contengan X
+[ ] Auto-translate: traducir mensajes automáticamente al descargar
+[ ] Compresión: comprimir archivos grandes antes de guardar
+[ ] Hash verification: verificar integridad de archivos descargados
+[ ] Log rotativo: logs que no crezcan indefinidamente
+[ ] Modo seco: mostrar qué se descargaría sin descargar
+[ ] Exportar a Markdown: formatear mensajes como documento MD
+[ ] Exportar a HTML: página web con los mensajes formateados
+[ ] Exportar a PDF: documento PDF con los mensajes
+[ ] Geolocalización: mostrar ubicaciones en mapa
+[ ] Face detection: detectar caras en fotos para organizar
+[ ] OCR automático: extraer texto de imágenes
+[ ] Audio transcription: transcribir voice messages con whisper
+[ ] Video thumbnails: generar miniaturas de vídeos
+[ ] Duplicate detection: detectar archivos duplicados por hash
+[ ] Smart naming: nombrar archivos según contenido/contexto
+[ ] Folder structure: organizar por fecha/canal/tipo automáticamente
+
+--- Seguridad ---
+[ ] Cifrado de descargas: cifrar archivos descargados con AES
+[ ] Secure delete: borrar archivos de forma segura (overwrite)
+[ ] Audit log: registrar cada descarga con timestamp y usuario
+[ ] Rate limit por canal: no abusar de un canal específico
+[ ] Session rotation: rotar sesiones de Telegram periódicamente
+[ ] IP rotation: usar proxy para evitar rate limits
+[ ] 2FA support: soporte para autenticación de dos factores
+[ ] Token refresh: renovar tokens automáticamente
+[ ] Backup de session: backup de la sesión de Telegram
+[ ] Encriptar config: cifrar config.bin con contraseña del usuario
+
+--- Tests ---
+[ ] Test de descarga de mensaje simple
+[ ] Test de descarga de multimedia
+[ ] Test de descarga de documento
+[ ] Test de clonación de canal
+[ ] Test de filtro por fecha
+[ ] Test de filtro por tipo
+[ ] Test de deduplicación
+[ ] Test de resume
+[ ] Test de rate limiting
+[ ] Test de reintentos
+[ ] Test de sesión cifrada
+[ ] Test de exportación JSON
+[ ] Test de exportación CSV
+[ ] Test de modo watch
+[ ] Test de conexión perdida y reconexión
+
+--- Docker ---
+[ ] Multi-stage build
+[ ] Health check
+[ ] Volumen de config persistente
+[ ] Variables de entorno para todas las opciones
+[ ] Imagen ARM (Raspberry Pi)
+[ ] Log rotation
+[ ] Resource limits
+[ ] GPU para OCR/transcripción
+[ ] Sidecar con base de datos
+[ ] Cron job en contenedor para backups automáticos
+
+--- UX ---
+[ ] Menú mejorado con submenús navegables
+[ ] Búsqueda en menú: filtrar opciones escribiendo
+[ ] Historial de comandos: recordar últimas 10 descargas
+[ ] Favoritos: marcar canales como favoritos para acceso rápido
+[ ] Preview: mostrar primeros 5 mensajes antes de descargar todo
+[ ] Confirmación masiva: pedir confirmación antes de descargar >100 mensajes
+[ ] Progress ring: indicador visual de progreso circular
+[ ] Sound alerts: sonido al terminar o al error
+[ ] Color output: verde=éxito, rojo=error, amarillo=warning
+[ ] Help contextual: mostrar ayuda de cada opción al seleccionarla
+
+--- Rendimiento ---
+[ ] Descarga paralela: varios mensajes a la vez (cuidado con rate limits)
+[ ] Compresión gzip: comprimir archivos de texto
+[ ] Chunked download: descargar archivos grandes en trozos
+[ ] Connection pooling: reusar conexiones HTTP
+[ ] Cache de metadata: cachear info de canales
+[ ] Lazy load: cargar mensajes bajo demanda
+[ ] Batch insert: insertar varios mensajes en DB de golpe
+[ ] Index optimizado: índices en SQLite para búsquedas rápidas
+[ ] Memory streaming: no cargar todo en RAM
+[ ] Disk streaming: escribir directamente a disco
+
+--- Integración ---
+[ ] ntfy.sh: notificación push al terminar
+[ ] Telegram bot: controlar descargas desde otro chat
+[ ] Web dashboard: panel web para gestionar descargas
+[ ] Google Drive: subir resultados automáticamente
+[ ] Nextcloud: sincronizar con Nextcloud
+[ ] Plex: importar vídeos descargados a Plex
+[ ] Jellyfin: importar a Jellyfin
+[ ] Webhook a Discord: notificar en Discord
+[ ] Webhook a Slack: notificar en Slack
+[ ] RSS feed: generar feed RSS con nuevos mensajes
+
+--- Mantenimiento ---
+[ ] Auto-update check
+[ ] Session health check: verificar que la sesión no expiró
+[ ] Cleanup de archivos temporales
+[ ] Log compression: comprimir logs antiguos
+[ ] Disk space monitor
+[ ] Config migration: migrar config entre versiones
+[ ] Deprecation warnings
+[ ] Version check: comprobar compatibilidad de versión
+[ ] Backup automático de config
+[ ] Restore desde backup
+
+--- Documentación ---
+[ ] Guía de instalación paso a paso
+[ ] Ejemplos reales de uso
+[ ] Troubleshooting: errores comunes
+[ ] API docs
+[ ] Changelog
+[ ] Contributing guide
+[ ] Video tutorial
+
+--- Code quality ---
+[ ] Type hints
+[ ] Docstrings
+[ ] Linting
+[ ] Formatting
+[ ] Pre-commit hooks
+[ ] CI/CD
+[ ] Coverage
+[ ] Error handling mejorado
+
+--- Ideas locas ---
+[ ] AI caption generator: generar captions automáticos con IA
+[ ] Sentiment analysis: analizar sentimiento de mensajes
+[ ] Word cloud: generar nube de palabras de un canal
+[ ] Activity heatmap: mostrar actividad del canal en calendario
+[ ] Top users: ranking de usuarios más activos
+[ ] Message translator: traducir mensajes en tiempo real
+[ ] Auto-reply: responder automáticamente a mensajes
+[ ] Spam detector: detectar y filtrar spam
+[ ] Content moderator: moderar contenido automáticamente
+[ ] Analytics dashboard: dashboard con métricas del canal
+
+================================================================================
+  PROYECTO 3: hdfull-downloader
+================================================================================
+
+--- Funcionalidad ---
+[ ] Cola de películas: pasar lista de URLs y descargar una tras otra
+[ ] Retry automático: si falla el captcha, reintentar sin reiniciar todo
+[ ] Calidad selectable: elegir entre 720p, 1080p, etc. si hay opciones
+[ ] Subtítulos: descargar subtítulos si están disponibles
+[ ] Metadata: guardar título, sinopsis, año, género en info.txt
+[ ] Portada: descargar la imagen de portada de la película
+[ ] Notificación push: avisar por ntfy.sh cuando termine
+[ ] Multi-source: soportar más allá de HDFull (otros sitios)
+[ ] Batch mode: descargar varias películas de una lista
+[ ] Schedule: programar descargas para la noche (ahorrar ancho de banda)
+[ ] Speed limit: limitar velocidad de descarga
+[ ] Split: dividir película en partes de X MB
+[ ] Merge: unir partes de una película descargada por separado
+[ ] Verify: verificar que el MP4 descargado es reproducible
+[ ] Preview: generar miniatura del vídeo antes de descargar
+[ ] Rename: renombrar archivo según título de la película
+[ ] Organize: mover a carpeta por género/año después de descargar
+[ ] History: mantener historial de películas descargadas
+[ ] Watchlist: lista de películas pendientes de descargar
+[ ] RSS: suscribirse a feed de nuevas películas en HDFull
+[ ] Search: buscar películas en HDFull desde la línea de comandos
+[ ] Subtitles download: descargar subtítulos de opensubtitles
+[ ] Dual audio: descargar con doble audio si está disponible
+[ ] Quality auto: elegir mejor calidad disponible automáticamente
+[ ] Resume download: continuar descarga si se interrumpe
+[ ] Partial download: descargar solo un rango de tiempo
+[ ] Audio extraction: extraer solo audio de la película
+[ ] Chapter detection: detectar capítulos si es serie
+[ ] Series mode: descargar todos los episodios de una temporada
+[ ] Season pack: descargar temporada completa de golpe
+[ ] Subtitle sync: sincronizar subtítulos con el vídeo
+[ ] Rating fetch: obtener rating de IMDb/TMDB automáticamente
+[ ] Trailer download: descargar tráiler como preview
+[ ] Behind the scenes: descargar material extra si está disponible
+[ ] Commentary track: descargar pista de comentario si existe
+[ ] Multiple audio tracks: descargar varias pistas de audio
+[ ] Forced subtitles: descargar subtítulos forzados (idioma original)
+[ ] Clean install: eliminar contenedor y reinstalar de cero
+[ ] Backup config: respaldar configuración y sesiones
+[ ] Export watchlist: exportar lista de pendientes a JSON
+[ ] Import watchlist: importar lista desde JSON/CSV
+[ ] notifications: notificar por多种 canales (email, push, telegram)
+[ ] Auto-cleanup: eliminar archivos temporales automáticamente
+[ ] Disk space check: verificar espacio antes de descargar
+[ ] Bandwidth monitor: mostrar velocidad de descarga en tiempo real
+[ ] ETA: mostrar tiempo estimado de finalización
+[ ] Pause/Resume: pausar y reanudar descargas
+[ ] Queue management: gestionar cola de descargas
+[ ] Priority: dar prioridad a ciertas descargas
+[ ] Duplicate check: verificar si ya se descargó antes
+[ ] Quality comparison: comparar calidad antes de descargar
+
+--- Seguridad ---
+[ ] Credential rotation: rotar credenciales periódicamente
+[ ] Encrypted storage: cifrar credenciales con contraseña del usuario
+[ ] Session validation: verificar que la sesión no expiró
+[ ] CAPTCHA solver automático: intentar resolver captcha con IA
+[ ] Proxy support: usar proxy para evitar rate limits
+[ ] VPN detection: detectar si hay VPN activa
+[ ] IP leak check: verificar que no hay leak de IP real
+[ ] Secure delete: borrar archivos temporales de forma segura
+[ ] Audit log: registrar cada descarga
+[ ] Rate limiting: no abusar del servidor
+
+--- Tests ---
+[ ] Test de login exitoso
+[ ] Test de login fallido
+[ ] Test de captcha resuelto
+[ ] Test de captcha no resuelto
+[ ] Test de descarga DASH
+[ ] Test de descarga HLS
+[ ] Test de descarga MP4 directo
+[ ] Test de descarga blob
+[ ] Test de reintentos
+[ ] Test de cola de películas
+[ ] Test de verificación de MP4
+[ ] Test de extracción de metadata
+[ ] Test de notificación
+[ ] Test de backup/restore
+[ ] Test de rendimiento con película grande
+
+--- Docker ---
+[ ] Multi-stage build
+[ ] Health check
+[ ] Volumen de downloads persistente
+[ ] Volumen de config persistente
+[ ] Variables de entorno para todo
+[ ] Imagen ARM
+[ ] Log rotation
+[ ] Resource limits
+[ ] GPU para decodificación
+[ ] Cron en contenedor para backups
+
+--- UX ---
+[ ] Menú mejorado con iconos
+[ ] Progress bar real con ETA
+[ ] Colores adaptativos
+[ ] Sonido al terminar
+[ ] Preview de calidad antes de descargar
+[ ] Confirmación antes de descargar
+[ ] Resumen de película antes de descargar
+[ ] Speed display: mostrar velocidad de descarga
+[ ] Disk space display: mostrar espacio disponible
+[ ] Network status: mostrar estado de la red
+
+--- Rendimiento ---
+[ ] Connection pooling
+[ ] Parallel download: descargar múltiples partes a la vez
+[ ] Chunked download: archivos grandes en trozos
+[ ] Cache de metadata
+[ ] Lazy load de páginas
+[ ] Memory streaming
+[ ] Disk streaming
+[ ] Compression: comprimir durante la descarga
+[ ] Bandwidth throttling: limitar ancho de banda
+[ ] Resume chunks: reanudar desde el último chunk
+
+--- Integración ---
+[ ] ntfy.sh push
+[ ] Telegram bot notification
+[ ] Discord webhook
+[ ] Slack webhook
+- [ ] Email notification
+[ ] Plex/Jellyfin auto-add
+[ ] Radarr integration
+[ ] Sonarr integration
+[ ] Trakt.tv scrobbling
+[ ] Letterboxd logging
+
+--- Mantenimiento ---
+[ ] Auto-update
+[ ] Session health check
+[ ] Cleanup automático
+[ ] Log compression
+[ ] Disk monitor
+[ ] Config migration
+[ ] Deprecation warnings
+[ ] Version check
+[ ] Backup automático
+[ ] Restore
+
+--- Documentación ---
+[ ] Guía paso a paso
+[ ] Ejemplos reales
+[ ] Troubleshooting
+[ ] API docs
+[ ] Changelog
+[ ] Contributing guide
+[ ] Video tutorial
+[ ] Architecture diagram
+[ ] FAQ
+[ ] Known issues
+
+--- Code quality ---
+[ ] Type hints
+[ ] Docstrings
+[ ] Linting
+[ ] Formatting
+[ ] Pre-commit hooks
+[ ] CI/CD
+[ ] Coverage
+[ ] Error handling
+[ ] Logging estructurado
+[ ] Profiling
+
+--- Ideas locas ---
+[ ] AI recommendation: sugerir películas basado en historial
+[ ] Quality predictor: predecir calidad basado en fuente
+[ ] Subtitle translator: traducir subtítulos automáticamente
+[ ] Synopsis generator: generar sinopsis con IA
+[ ] Review aggregator: agregar reviews de múltiples fuentes
+[ ] Watch party: organizar noche de cine con amigos
+[ ] Gift mode: regalar película a otro usuario
+[ ] Wishlist: lista de deseos compartida
+[ ] Price tracker: rastrear precio en plataformas legales
+[ ] Legal alternative finder: encontrar dónde ver legalmente
+
+================================================================================
+  PROYECTO 4: TwitchRecorder
+================================================================================
+
+--- Funcionalidad ---
+[ ] Multi-usuario: varias configuraciones de grabación simultáneas
+[ ] Compactación: comprimir grabaciones antiguas con ffmpeg
+[ ] Notificaciones: avisar por ntfy.sh al empezar/terminar directo
+[ ] WebUI: panel en navegador para ver estado y grabaciones
+[ ] Retención: borrar grabaciones de más de N días automáticamente
+[ ] Clips: extraer clips de las grabaciones
+[ ] Highlights: detectar momentos clave (kills, wins, etc.)
+[ ] Thumbnail: capturar miniatura del directo
+[ ] Chat grab: guardar el chat junto con el stream
+[ ] VOD download: descargar VODs en vez de grabar en vivo
+[ ] Multi-quality: grabar en varias calidades a la vez
+[ ] Auto-clip: crear clips automáticamente en momentos virales
+[ ] Stream highlights: compilar highlights del stream
+[ ] Fallback: si falla un source, usar otro automáticamente
+[ ] Reconnect: reconectar automáticamente si se pierde la conexión
+[ ] Schedule grab: programar grabaciones futuras
+[ ] Calendar view: ver grabaciones programadas en calendario
+[ ] Disk management: gestionar espacio automáticamente
+[ ] Move to NAS: mover grabaciones a NAS después de grabar
+[ ] Plex integration: importar grabaciones a Plex automáticamente
+[ ] Jellyfin integration: importar a Jellyfin
+[ ] Emby integration: importar a Emby
+[ ] Subtitle auto: generar subtítulos con whisper
+[ ] Chapter detection: detectar cambios de juego/tema
+[ ] Stream health: monitorear calidad del stream (bitrate, drops)
+[ ] Multi-platform grab: grabar de varias plataformas a la vez
+- [ ] Raid detection: detectar raids y grabar también el stream raid
+- [ ] Host detection: detectar hosts
+- [ ] Event tracking: trackear eventos del stream (follows, subs, etc.)
+- [ ] Clip viral: detectar clips virales y descargarlos
+- [ ] Auto-highlight: crear highlights automáticamente
+- [ ] Music detection: detectar música en el stream
+- [ ] TTS detection: detectar text-to-speech en el chat
+- [ ] Bot integration: integrar con bots de chat
+- [ ] Overlay: overlay con info del stream
+- [ ] Recording stats: estadísticas de grabación
+- [ ] Bandwidth usage: tracking de ancho de banda usado
+- [ ] Storage forecast: predecir cuándo se llenará el disco
+- [ ] Auto-archive: archivar grabaciones antiguas
+- [ ] Compression queue: cola de compresión
+- [ ] Quality selector: elegir calidad del stream
+- [ ] Audio-only mode: grabar solo audio
+- [ ] Clip editor: editor básico de clips
+- [ ] Thumbnail generator: generar miniaturas automáticas
+- [ ] Title tracker: trackear cambios de título del stream
+- [ ] Game tracker: trackear cambios de juego
+- [ ] Viewer count: registrar audiencia del stream
+- [ ] Donation tracker: trackear donaciones
+- [ ] Sub tracker: trackear suscripciones
+- [ ] Follow tracker: trackear follows
+- [ ] Chat analytics: analizar actividad del chat
+- [ ] Emote counter: contar emotes más usados
+- [ ] Spam detector: detectar spam en el chat
+- [ ] Moderation: moderación automática del chat
+- [ ] Alert system: alertas personalizadas
+- [ ] Stream calendar: calendario de streams programados
+- [ ] Reminder: recordatorios de streams
+- [ ] Social media posting: publicar clips en redes sociales
+- [ ] YouTube upload: subir grabaciones a YouTube automáticamente
+- [ ] Clip sharing: compartir clips en redes sociales
+- [ ] Highlight reel: crear compilación de highlights
+- [ ] Best moments: extraer mejores momentos
+- [ ] Fail compilation: compilar fails
+- [ ] Funny moments: compilar momentos graciosos
+- [ ] Pro plays: compilar jugadas pro
+- [ ] Stream summary: resumen del stream con IA
+- [ ] Transcript: transcribir el stream completo
+- [ ] Translation: traducir el stream en tiempo real
+- [ ] Multi-language: grabar con múltiples pistas de audio
+- [ ] Screen recording: grabar pantalla además del stream
+- [ ] Webcam recording: grabar webcam del streamer
+- [ ] Face cam: detectar cara del streamer
+- [ ] Reaction detection: detectar reacciones del streamer
+- [ ] Game detection: detectar qué juego está jugando
+- [ ] Score tracking: trackear puntuación en tiempo real
+- [ ] Stats overlay: overlay con estadísticas del juego
+- [ ] Donation alert: alerta de donación en el stream
+- [ ] Sub alert: alerta de suscripción
+- [ ] Follow alert: alerta de follow
+- [ ] Ra alert: alerta de raid
+- [ ] Host alert: alerta de host
+- [ ] Bit alert: alerta de bits
+- [ ] Cheer alert: alerta de cheers
+- [ ] Gift sub alert: alerta de gift subs
+- [ ] Milestone alert: alerta de hitos
+- [ ] Birthday alert: alerta de cumpleaños
+- [ ] Anniversary alert: alerta de aniversario
+- [ ] Custom alerts: alertas personalizadas
+- [ ] Sound alerts: alertas de sonido
+- [ ] Visual alerts: alertas visuales
+- [ ] Text alerts: alertas de texto
+- [ ] Image alerts: alertas de imagen
+- [ ] Video alerts: alertas de vídeo
+- [ ] GIF alerts: alertas de GIF
+- [ ] Lottie alerts: alertas de Lottie
+- [ ] CSS alerts: alertas de CSS
+- [ ] HTML alerts: alertas de HTML
+- [ ] JS alerts: alertas de JavaScript
+- [ ] API alerts: alertas vía API
+- [ ] Webhook alerts: alertas vía webhook
+- [ ] Email alerts: alertas por email
+- [ ] SMS alerts: alertas por SMS
+- [ ] Push alerts: alertas push
+- [ ] Discord alerts: alertas en Discord
+- [ ] Slack alerts: alertas en Slack
+- [ ] Telegram alerts: alertas en Telegram
+- [ ] Twitter alerts: alertas en Twitter
+- [ ] Facebook alerts: alertas en Facebook
+- [ ] Instagram alerts: alertas en Instagram
+- [ ] TikTok alerts: alertas en TikTok
+- [ ] YouTube alerts: alertas en YouTube
+- [ ] Reddit alerts: alertas en Reddit
+- [ ] Twitch alerts: alertas en Twitch
+- [ ] Kick alerts: alertas en Kick
+- [ ] Rumble alerts: alertas en Rumble
+- [ ] Dailymotion alerts: alertas en Dailymotion
+- [ ] Vimeo alerts: alertas en Vimeo
+- [ ] Facebook Gaming alerts: alertas en Facebook Gaming
+- [ ] Trovo alerts: alertas en Trovo
+- [ ] AfreecaTV alerts: alertas en AfreecaTV
+- [ ] Nimo TV alerts: alertas en Nimo TV
+-[ ] Chzzk alerts: alertas en Chzzk
+- [ ] Bilibili alerts: alertas en Bilibili
+- [ ] Huya alerts: alertas en Huya
+- [ ] Douyu alerts: alertas en Douyu
+- [ ] Panda TV alerts: alertas en Panda TV
+- [ ] Steam alerts: alertas en Steam
+- [ ] Epic Games alerts: alertas en Epic Games
+- [ ] GOG alerts: alertas en GOG
+- [ ] Humble Bundle alerts: alertas en Humble Bundle
+- [ ] itch.io alerts: alertas en itch.io
+- [ ] Game Jolt alerts: alertas en Game Jolt
+- [ ] Newgrounds alerts: alertas en Newgrounds
+- [ ] Kongregate alerts: alertas en Kongregate
+- [ ] Miniclip alerts: alertas en Miniclip
+- [ ] Addicting Games alerts: alertas en Addicting Games
+- [ ] Armor Games alerts: alertas en Armor Games
+- [ ] CrazyGames alerts: alertas en CrazyGames
+- [ ] Poki alerts: alertas en Poki
+- [ ] Y8 alerts: alertas en Y8
+- [ ] Friv alerts: alertas en Friv
+- [ ] SilverGames alerts: alertas en SilverGames
+- [ ] Newgrounds alerts: alertas en Newgrounds
+- [ ] Albino Blacksheep alerts: alertas en Albino Blacksheep
+- [ ] eBaum's World alerts: alertas en eBaum's World
+- [ ] Break alerts: alertas en Break
+- [ ] CollegeHumor alerts: alertas en CollegeHumor
+- [ ] Funny or Die alerts: alertas en Funny or Die
+- [ ] The Onion alerts: alertas en The Onion
+- [ ] ClickHole alerts: alertas en ClickHole
+- [ ] The Hard Times alerts: alertas en The Hard Times
+- [ ] The Beaverton alerts: alertas en The Beaverton
+- [ ] The Betoota Advocate alerts: alertas en The Betoota Advocate
+- [ ] The Chaser alerts: alertas en The Chaser
+- [ ] The Dawn News alerts: alertas en The Dawn News
+- [ ] The Final Epoch alerts: alertas en The Final Epoch
+- [ ] The Foreigner alerts: alertas en The Foreigner
+- [ ] The Khaama Press alerts: alertas en The Khaama Press
+- [ ] The Punch Newspaper alerts: alertas en The Punch Newspaper
+- [ ] The Guardian alerts: alertas en The Guardian
+- [ ] The Daily Show alerts: alertas en The Daily Show
+- [ ] The Colbert Report alerts: alertas en The Colbert Report
+- [ ] Last Week Tonight alerts: alertas en Last Week Tonight
+- [ ] Full Frontal with Samantha Bee alerts: alertas en Full Frontal
+- [ ] The Late Show alerts: alertas en The Late Show
+- [ ] The Tonight Show alerts: alertas en The Tonight Show
+- [ ] Late Night with Seth Meyers alerts: alertas en Late Night
+- [ ] The Daily Beast alerts: alertas en The Daily Beast
+- [ ] The Huffington Post alerts: alertas en The Huffington Post
+- [ ] BuzzFeed alerts: alertas en BuzzFeed
+- [ ] Vice News alerts: alertas en Vice News
+- [ ] Vox alerts: alertas en Vox
+- [ ] Slate alerts: alertas en Slate
+- [ ] The Atlantic alerts: alertas en The Atlantic
+- [ ] The New Yorker alerts: alertas en The New Yorker
+- [ ] The Economist alerts: alertas en The Economist
+- [ ] The New York Times alerts: alertas en The New York Times
+- [ ] The Washington Post alerts: alertas en The Washington Post
+- [ ] The Wall Street Journal alerts: alertas en The Wall Street Journal
+- [ ] Financial Times alerts: alertas en Financial Times
+- [ ] Bloomberg alerts: alertas en Bloomberg
+- [ ] Reuters alerts: alertas en Reuters
+- [ ] Associated Press alerts: alertas en Associated Press
+- [ ] Agence France-Presse alerts: alertas en Agence France-Presse
+- [ ] EFE alerts: alertas en EFE
+- [ ] ANSA alerts: alertas en ANSA
+- [ ] DPA alerts: alertas en DPA
+- [ ] TASS alerts: alertas en TASS
+- [ ] Xinhua alerts: alertas en Xinhua
+- [ ] Kyodo News alerts: alertas en Kyodo News
+- [ ] Yonhap News Agency alerts: alertas en Yonhap
+- [ ] Press Trust of India alerts: alertas en Press Trust of India
+- [ ] Asia One alerts: alertas en Asia One
+- [ ] South China Morning Post alerts: alertas en SCMP
+- [ ] The Straits Times alerts: alertas en The Straits Times
+- [ ] Bangkok Post alerts: alertas en Bangkok Post
+- [ ] The Jakarta Post alerts: alertas en The Jakarta Post
+- [ ] Vietnam News alerts: alertas en Vietnam News
+- [ ] Philippine Daily Inquirer alerts: alertas en Philippine Daily Inquirer
+- [ ] The Star Malaysia alerts: alertas en The Star Malaysia
+- [ ] New Straits Times alerts: alertas en New Straits Times
+- [ ] The Nation Thailand alerts: alertas en The Nation Thailand
+- [ ] Khmer Times alerts: alertas en Khmer Times
+- [ ] Vientiane Times alerts: alertas en Vientiane Times
+- [ ] Myanmar Times alerts: alertas en Myanmar Times
+- [ ] The Sunday Times alerts: alertas en The Sunday Times
+- [ ] The Australian alerts: alertas en The Australian
+- [ ] The Sydney Morning Herald alerts: alertas en The Sydney Morning Herald
+- [ ] The Age alerts: alertas en The Age
+- [ ] The New Zealand Herald alerts: alertas en The New Zealand Herald
+- [ ] The Dominion Post alerts: alertas en The Dominion Post
+- [ ] The Press alerts: alertas en The Press
+- [ ] Otago Daily Times alerts: alertas en Otago Daily Times
+- [ ] The Fiji Times alerts: alertas en The Fiji Times
+- [ ] Samoa Observer alerts: alertas en Samoa Observer
+- [ ] Tonga Daily News alerts: alertas en Tonga Daily News
+- [ ] Papua New Guinea Post-Courier alerts: alertas en Post-Courier
+- [ ] The National (PNG) alerts: alertas en The National PNG
+- [ ] Solomon Star alerts: alertas en Solomon Star
+- [ ] Vanuatu Daily Post alerts: alertas en Vanuatu Daily Post
+- [ ] Nauru Bulletin alerts: alertas en Nauru Bulletin
+- [ ] Kiribati New Star alerts: alertas en Kiribati New Star
+- [ ] Tuvalu Echo alerts: alertas en Tuvalu Echo
+- [ ] Marshall Islands Journal alerts: alertas en Marshall Islands Journal
+- [ ] FSM Times alerts: alertas en FSM Times
+- [ ] Palau Horizon alerts: alertas en Palau Horizon
+- [ ] Guam Pacific Daily News alerts: alertas en Pacific Daily News
+- [ ] Saipan Tribune alerts: alertas en Saipan Tribune
+- [ ] Variety alerts: alertas en Variety
+- [ ] The Hollywood Reporter alerts: alertas en The Hollywood Reporter
+- [ ] Deadline alerts: alertas en Deadline
+- [ ] Entertainment Weekly alerts: alertas en Entertainment Weekly
+- [ ] People alerts: alertas en People
+- [ ] Us Weekly alerts: alertas en Us Weekly
+- [ ] In Touch alerts: alertas en In Touch
+- [ ] Life & Style alerts: alertas en Life & Style
+- [ ] OK! Magazine alerts: alertas en OK! Magazine
+- [ ] Hello! Magazine alerts: alertas en Hello! Magazine
+- [ ] Tatler alerts: alertas en Tatler
+- [ ] Town & Country alerts: alertas en Town & Country
+- [ ] Vanity Fair alerts: alertas en Vanity Fair
+- [ ] W Magazine alerts: alertas en W Magazine
+- [ ] Harper's Bazaar alerts: alertas en Harper's Bazaar
+- [ ] Vogue alerts: alertas en Vogue
+- [ ] Elle alerts: alertas en Elle
+- [ ] Cosmopolitan alerts: alertas en Cosmopolitan
+- [ ] Glamour alerts: alertas en Glamour
+- [ ] Marie Claire alerts: alertas en Marie Claire
+- [ ] Allure alerts: alertas en Allure
+- [ ] Self alerts: alertas en Self
+- [ ] Women's Health alerts: alertas en Women's Health
+- [ ] Shape alerts: alertas en Shape
+- [ ] Fitness alerts: alertas en Fitness
+- [ ] Men's Health alerts: alertas en Men's Health
+- [ ] GQ alerts: alertas en GQ
+- [ ] Esquire alerts: alertas en Esquire
+- [ ] Details alerts: alertas en Details
+- [ ] Maxim alerts: alertas en Maxim
+- [ ] FHM alerts: alertas en FHM
+- [ ] Stuff alerts: alertas en Stuff
+- [ ] Complex alerts: alertas en Complex
+- [ ] Hypebeast alerts: alertas en Hypebeast
+- [ ] Highsnobiety alerts: alertas en Highsnobiety
+- [ ] Kicks On Fire alerts: alertas en Kicks On Fire
+- [ ] Sole Collector alerts: alertas en Sole Collector
+- [ ] Nice Kicks alerts: alertas en Nice Kicks
+- [ ] J23 alerts: alertas en J23
+- [ ] Sneaker News alerts: alertas en Sneaker News
+- [ ] Sneaker Bar Detroit alerts: alertas en Sneaker Bar Detroit
+- [ ] Sole Retriever alerts: alertas en Sole Retriever
+- [ ] Kick Point alerts: alertas en Kick Point
+- [ ] WearTesters alerts: alertas en WearTesters
+- [ ] Weartesters alerts: alertas en Weartesters
+
+--- Code quality ---
+[ ] Type hints
+[ ] Docstrings
+[ ] Linting
+[ ] Formatting
+[ ] Pre-commit hooks
+[ ] CI/CD
+[ ] Coverage
+[ ] Error handling
+[ ] Logging estructurado
+[ ] Profiling
+
+--- Documentación ---
+[ ] Guía paso a paso
+[ ] Ejemplos reales
+[ ] Troubleshooting
+- [ ] Changelog
+[ ] Contributing guide
+[ ] Video tutorial
+[ ] Architecture diagram
+[ ] FAQ
+[ ] Known issues
+[ ] Roadmap
+
+--- Ideas locas ---
+[ ] AI highlights: crear highlights con IA
+[ ] Stream summary: resumen del stream con IA
+[ ] Chat summary: resumen del chat
+[ ] Clip of the day: clip del día automático
+[ ] Best plays: mejores jugadas del stream
+- [ ] Music recognition: reconocer música en el stream
+- [ ] Game stats: estadísticas del juego en tiempo real
+- [ ] Prediction betting: predecir resultado del stream
+- [ ] Viewer interaction: interactuar con viewers
+- [ ] Sound alerts personalizados: alertas de sonido personalizadas
+- [ ] Visual alerts personalizados: alertas visuales personalizadas
+- [ ] Stream overlay personalizado: overlay personalizado
+- [ ] Chat bot personalizado: bot de chat personalizado
+- [ ] Donation tracker personalizado: tracker de donaciones personalizado
+- [ ] Sub tracker personalizado: tracker de subs personalizado
+- [ ] Follow tracker personalizado: tracker de follows personalizado
+- [ ] Clip editor personalizado: editor de clips personalizado
+- [ ] Thumbnail generator personalizado: generador de miniaturas personalizado
+- [ ] Title tracker personalizado: tracker de títulos personalizado
+- [ ] Game tracker personalizado: tracker de juegos personalizado
+- [ ] Viewer count personalizado: contador de viewers personalizado
+- [ ] Stream health personalizado: salud del stream personalizada
+- [ ] Bandwidth usage personalizado: uso de ancho de banda personalizado
+- [ ] Storage forecast personalizado: pronóstico de almacenamiento personalizado
+- [ ] Auto-archive personalizado: archivado automático personalizado
+- [ ] Compression queue personalizado: cola de compresión personalizada
+- [ ] Quality selector personalizado: selector de calidad personalizado
+- [ ] Audio-only mode personalizado: modo solo audio personalizado
+- [ ] Clip editor personalizado: editor de clips personalizado
+- [ ] Thumbnail generator personalizado: generador de miniaturas personalizado
+- [ ] Title tracker personalizado: tracker de títulos personalizado
+- [ ] Game tracker personalizado: tracker de juegos personalizado
+- [ ] Viewer count personalizado: contador de viewers personalizado
+- [ ] Stream health personalizado: salud del stream personalizada
+- [ ] Bandwidth usage personalizado: uso de ancho de banda personalizado
+- [ ] Storage forecast personalizado: pronóstico de almacenamiento personalizado
+- [ ] Auto-archive personalizado: archivado automático personalizado
+- [ ] Compression queue personalizado: cola de compresión personalizada
+- [ ] Quality selector personalizado: selector de calidad personalizado
+- [ ] Audio-only mode personalizado: modo solo audio personalizado
+- [ ] Clip editor personalizado: editor de clips personalizado
+- [ ] Thumbnail generator personalizado: generador de miniaturas personalizado
+- [ ] Title tracker personalizado: tracker de títulos personalizado
+- [ ] Game tracker personalizado: tracker de juegos personalizado
+- [ ] Viewer count personalizado: contador de viewers personalizado
+- [ ] Stream health personalizado: salud del stream personalizada
+- [ ] Bandwidth usage personalizado: uso de ancho de banda personalizado
+- [ ] Storage forecast personalizado: pronóstico de almacenamiento personalizado
+- [ ] Auto-archive personalizado: archivado automático personalizado
+- [ ] Compression queue personalizado: cola de compresión personalizada
+- [ ] Quality selector personalizado: selector de calidad personalizado
+- [ ] Audio-only mode personalizado: modo solo audio personalizado
+
+================================================================================
+  PROYECTO 5: ffmpeg-yt-dlp (midu.sh)
+================================================================================
+
+--- Funcionalidad ---
+[ ] Cola de trabajos: encolar múltiples operaciones y ejecutar en serie
+[ ] Modo pipe: recibir URLs de stdin para procesar en lote
+[ ] Presets personalizables: que el usuario cree sus propios presets
+[ ] Historial: guardar últimas N operaciones para re-ejecutar
+[ ] Comparar antes/después: mostrar diferencia de tamaño tras convertir
+[ ] Preview before: mostrar preview del resultado antes de ejecutar
+[ ] Batch mode: procesar varios archivos con los mismos parámetros
+[ ] Watch mode: monitorear carpeta y procesar nuevos archivos
+[ ] Undo: deshacer la última conversión
+[ ] Bookmark: guardar operaciones frecuentes como favoritas
+[ ] Template: crear plantillas de conversión reutilizables
+[ ] Preset sharing: compartir presets con otros usuarios
+[ ] Export presets: exportar/importar presets a JSON
+[ ] Auto-naming: nombrar archivos de salida automáticamente
+[ ] Folder output: organizar salida por fecha/red social/tipo
+[ ] Subtitle burn: quemar subtítulos con estilo personalizado
+[ ] Subtitle style: personalizar fuente, tamaño, color de subtítulos
+[ ] Audio boost: amplificar audio de vídeos bajitos
+[ ] Audio normalize: normalizar audio a nivel estándar
+[ ] Video stabilize: estabilizar vídeo grabado a mano
+[ ] Video denoise: reducir ruido en vídeos viejos
+[ ] Video sharpen: enfocar vídeos borrosos
+[ ] Video color correct: corregir color automáticamente
+[ ] Video HDR to SDR: convertir HDR a SDR
+[ ] Video SDR to HDR: convertir SDR a HDR (fake)
+[ ] Video 60fps: convertir a 60fps con interpolación
+- [ ] Video slow motion: crear slow motion con interpolación
+- [ ] Video timelapse: crear timelapse desde vídeo normal
+- [ ] Video reverse: invertir vídeo
+- [ ] Video mirror: efecto espejo
+- [ ] Video zoom: efecto zoomKen Burns
+- [ ] Video pan: efecto paneo
+- [ ] Video vignette: añadir viñeta
+- [ ] Video border: añadir borde
+- [ ] Video rounded: vídeo con esquinas redondeadas
+- [ ] Video circle: vídeo circular (para perfiles)
+- [ ] Video square: vídeo cuadrado (para Instagram)
+- [ ] Video vertical: vídeo vertical 9:16 (para TikTok/Stories)
+- [ ] Video horizontal: vídeo horizontal 16:9
+- [ ] Video cinematic: efecto cinematográfico
+- [ ] Video vintage: efecto vintage/retro
+- [ ] Video black and white: blanco y negro
+- [ ] Video sepia: efecto sepia
+- [ ] Video sketch: efecto boceto
+- [ ] Video cartoon: efecto dibujos animados
+- [ ] Video oil painting: efecto pintura al óleo
+- [ ] Video watercolor: efecto acuarela
+- [ ] Video pixelate: efecto pixelado
+- [ ] Video glitch: efecto glitch
+- [ ] Video VHS: efecto VHS
+- [ ] Video film grain: efecto grano de película
+- [ ] Video lens flare: efecto lens flare
+- [ ] Video bokeh: efecto bokeh
+- [ ] Video tilt shift: efecto tilt-shift (miniatura)
+- [ ] Video fisheye: efecto ojo de pez
+- [ ] Video barrel distortion: distorsión de barril
+- [ ] Video pincushion distortion: distorsión de alfiler
+- [ ] Video chromatic aberration: aberración cromática
+- [ ] Video motion blur: efecto motion blur
+- [ ] Video radial blur: efecto radial blur
+- [ ] Video spin blur: efecto spin blur
+- [ ] Video zoom blur: efecto zoom blur
+- [ ] Video directional blur: efecto blur direccional
+- [ ] Video gaussian blur: efecto blur gaussiano
+- [ ] Video box blur: efecto blur de caja
+- [ ] Video smart blur: efecto smart blur
+- [ ] Video unsharp mask: efecto unsharp mask
+- [ ] Video highpass: filtro highpass
+- [ ] Video lowpass: filtro lowpass
+- [ ] Video bandpass: filtro bandpass
+- [ ] Video band reject: filtro band reject
+- [ ] Video equalizer: ecualizador de vídeo
+- [ ] Video color balance: balance de color
+- [ ] Video color wheel: rueda de color
+- [ ] Video curves: curvas de color
+- [ ] Video levels: niveles de color
+- [ ] Video curves adjustment: ajuste de curvas
+- [ ] Video hue: ajuste de tono
+- [ ] Video saturation: ajuste de saturación
+- [ ] Video brightness: ajuste de brillo
+- [ ] Video contrast: ajuste de contraste
+- [ ] Video gamma: ajuste de gamma
+- [ ] Video exposure: ajuste de exposición
+- [ ] Video temperature: ajuste de temperatura
+- [ ] Video tint: ajuste de matiz
+- [ ] Video vibrance: ajuste de vibración
+- [ ] Video clarity: ajuste de claridad
+- [ ] Video dehaze: ajuste de deshaze
+- [ ] Video grain: ajuste de grano
+- [ ] Video vignette: ajuste de viñeta
+- [ ] Video split toning: split toning
+- [ ] Video HSL: ajuste HSL
+- [ ] Video color grading: color grading
+- [ ] Video LUT: aplicar LUT
+- [ ] Video mask: máscara de vídeo
+- [ ] Video overlay: superponer vídeo
+- [ ] Video picture in picture: picture in picture
+- [ ] Video side by side: lado a lado
+- [ ] Video top and bottom: arriba y abajo
+- [ ] Video collage: collage de vídeos
+- [ ] Video grid: cuadrícula de vídeos
+- [ ] Video mosaic: mosaico de vídeos
+- [ ] Video transition: transiciones entre vídeos
+- [ ] Video fade transition: transición fade
+- [ ] Video wipe transition: transición wipe
+- [ ] Video slide transition: transición slide
+- [ ] Video zoom transition: transición zoom
+- [ ] Video spin transition: transición spin
+- [ ] Video flip transition: transición flip
+- [ ] Video 3D transition: transición 3D
+- [ ] Video morph transition: transición morph
+- [ ] Video dissolve transition: transición dissolve
+- [ ] Video pixelate transition: transición pixelate
+- [ ] Video glitch transition: transición glitch
+- [ ] Video VHS transition: transición VHS
+- [ ] Video film burn: efecto film burn
+- [ ] Video light leak: efecto light leak
+- [ ] Video bokeh overlay: overlay de bokeh
+- [ ] Video particle overlay: overlay de partículas
+- [ ] Video snow overlay: overlay de nieve
+- [ ] Video rain overlay: overlay de lluvia
+- [ ] Video fire overlay: overlay de fuego
+- [ ] Video smoke overlay: overlay de humo
+- [ ] Video fog overlay: overlay de niebla
+- [ ] Video dust overlay: overlay de polvo
+- [ ] Video scratch overlay: overlay de rayones
+- [ ] Video film overlay: overlay de película
+- [ ] Video old film: efecto película antigua
+- [ ] Video silent film: efecto cine mudo
+- [ ] Video news broadcast: efecto noticiero
+- [ ] Video documentary: efecto documental
+- [ ] Video movie trailer: efecto tráiler de película
+- [ ] Video music video: efecto videoclip
+- [ ] Video commercial: efecto anuncio
+- [ ] Video PSA: efecto anuncio de servicio público
+- [ ] Video tutorial: efecto tutorial
+- [ ] Video presentation: efecto presentación
+- [ ] Video webinar: efecto webinar
+- [ ] Video podcast: efecto podcast
+- [ ] Video vlog: efecto vlog
+- [ ] Video reaction: efecto reacción
+- [ ] Video gameplay: efecto gameplay
+- [ ] Video unboxing: efecto unboxing
+- [ ] Video review: efecto review
+- [ ] Video haul: efecto haul
+- [ ] Video try-on: efecto try-on
+- [ ] Video GRWM: efecto GRWM
+- [ ] Video OOTD: efecto OOTD
+- [ ] Video room tour: efecto room tour
+- [ ] Video house tour: efecto house tour
+- [ ] Video day in my life: efecto day in my life
+- [ ] Video what I eat in a day: efecto what I eat in a day
+- [ ] Video morning routine: efecto morning routine
+- [ ] Video night routine: efecto night routine
+- [ ] Video self care: efecto self care
+- [ ] Video wellness: efecto wellness
+- [ ] Video fitness: efecto fitness
+- [ ] Video workout: efecto workout
+- [ ] Video yoga: efecto yoga
+- [ ] Video meditation: efecto meditación
+- [ ] Video breathing: efecto breathing
+- [ ] Video journaling: efecto journaling
+- [ ] Video planning: efecto planning
+- [ ] Video productivity: efecto productividad
+- [ ] Video study with me: efecto study with me
+- [ ] Video work with me: efecto work with me
+- [ ] Video clean with me: efecto clean with me
+- [ ] Video cook with me: efecto cook with me
+- [ ] Video shop with me: efecto shop with me
+- [ ] Video travel with me: efecto travel with me
+- [ ] Video fly with me: efecto fly with me
+- [ ] Video drive with me: efecto drive with me
+- [ ] Video walk with me: efecto walk with me
+- [ ] Video hike with me: efecto hike with me
+- [ ] Video camp with me: efecto camp with me
+- [ ] Video beach day: efecto beach day
+- [ ] Video pool day: efecto pool day
+- [ ] Video lake day: efecto lake day
+- [ ] Video mountain day: efecto mountain day
+- [ ] Video city day: efecto city day
+- [ ] Video town day: efecto town day
+- [ ] Video village day: efecto village day
+- [ ] Video farm day: efecto farm day
+- [ ] Video garden day: efecto garden day
+- [ ] Video park day: efecto park day
+- [ ] Video zoo day: efecto zoo day
+- [ ] Video museum day: efecto museum day
+- [ ] Video library day: efecto library day
+- [ ] Video bookstore day: efecto bookstore day
+- [ ] Video cafe day: efecto cafe day
+- [ ] Video restaurant day: efecto restaurant day
+- [ ] Video bar day: efecto bar day
+- [ ] Video club day: efecto club day
+- [ ] Video concert day: efecto concert day
+- [ ] Video festival day: efecto festival day
+- [ ] Video party day: efecto party day
+- [ ] Video game night: efecto game night
+- [ ] Video movie night: efecto movie night
+- [ ] Video binge night: efecto binge night
+- [ ] Video spa day: efecto spa day
+- [ ] Video salon day: efecto salon day
+- [ ] Video shopping day: efecto shopping day
+- [ ] Video fashion day: efecto fashion day
+- [ ] Video beauty day: efecto beauty day
+- [ ] Video wellness day: efecto wellness day
+- [ ] Video self care day: efecto self care day
+- [ ] Video mental health day: efecto mental health day
+- [ ] Video rest day: efecto rest day
+- [ ] Video lazy day: efecto lazy day
+- [ ] Video cozy day: efecto cozy day
+- [ ] Video rainy day: efecto rainy day
+- [ ] Video snow day: efecto snow day
+- [ ] Video sunny day: efecto sunny day
+- [ ] Video windy day: efecto windy day
+- [ ] Video stormy day: efecto stormy day
+- [ ] Video foggy day: efecto foggy day
+- [ ] Video cloudy day: efecto cloudy day
+- [ ] Video clear day: efecto clear day
+- [ ] Video night sky: efecto night sky
+- [ ] Video starry night: efecto starry night
+- [ ] Video moonlit night: efecto moonlit night
+- [ ] Video sunset: efecto sunset
+- [ ] Video sunrise: efecto sunrise
+- [ ] Video golden hour: efecto golden hour
+- [ ] Video blue hour: efecto blue hour
+- [ ] Video magic hour: efecto magic hour
+- [ ] Video twilight: efecto twilight
+- [ ] Video dawn: efecto dawn
+- [ ] Video dusk: efecto dusk
+- [ ] Video midday: efecto midday
+- [ ] Video noon: efecto noon
+- [ ] Video afternoon: efecto afternoon
+- [ ] Video evening: efecto evening
+- [ ] Video night: efecto night
+- [ ] Video midnight: efecto midnight
+- [ ] Video late night: efecto late night
+- [ ] Video early morning: efecto early morning
+- [ ] Video crack of dawn: efecto crack of dawn
+- [ ] Video first light: efecto first light
+- [ ] Video last light: efecto last light
+- [ ] Video civil twilight: efecto civil twilight
+- [ ] Video nautical twilight: efecto nautical twilight
+- [ ] Video astronomical twilight: efecto astronomical twilight
+- [ ] Video solar noon: efecto solar noon
+- [ ] Video solar midnight: efecto solar midnight
+- [ ] Video equinox: efecto equinox
+- [ ] Video solstice: efecto solstice
+- [ ] Video eclipse: efecto eclipse
+- [ ] Video transit: efecto transit
+- [ ] Video conjunction: efecto conjunction
+- [ ] Video opposition: efecto opposition
+- [ ] Video quadrature: efecto quadrature
+- [ ] Video elongation: efecto elongation
+- [ ] Video phase: efecto phase
+- [ ] Video libration: efecto libration
+- [ ] Video nutation: efecto nutation
+- [ ] Video precession: efecto precession
+- [ ] Video aberration: efecto aberration
+- [ ] Video parallax: efecto parallax
+- [ ] Video refraction: efecto refraction
+- [ ] Video diffraction: efecto diffraction
+- [ ] Video interference: efecto interference
+- [ ] Video polarization: efecto polarization
+- [ ] Video dispersion: efecto dispersión
+- [ ] Video absorption: efecto absorción
+- [ ] Video emission: efecto emisión
+- [ ] Video reflection: efecto reflection
+- [ ] Video refraction: efecto refracción
+- [ ] Video transmission: efecto transmisión
+- [ ] Video conduction: efecto conduction
+- [ ] Video convection: efecto convection
+- [ ] Video radiation: efecto radiation
+- [ ] Video induction: efecto induction
+- [ ] Video magnetism: efecto magnetism
+- [ ] Video electricity: efecto electricity
+- [ ] Video static: efecto estática
+- [ ] Video lightning: efecto lightning
+- [ ] Video thunder: efecto thunder
+- [ ] Video tornado: efecto tornado
+- [ ] Video hurricane: efecto hurricane
+- [ ] Video cyclone: efecto cyclone
+- [ ] Video typhoon: efecto typhoon
+- [ ] Video monsoon: efecto monsoon
+- [ ] Video drought: efecto drought
+- [ ] Video flood: efecto flood
+- [ ] Video tsunami: efecto tsunami
+- [ ] Video earthquake: efecto earthquake
+- [ ] Video volcano: efecto volcano
+- [ ] Video landslide: efecto landslide
+- [ ] Video avalanche: efecto avalanche
+- [ ] Video mudslide: efecto mudslide
+- [ ] Video rockslide: efecto rockslide
+- [ ] Video sinkhole: efecto sinkhole
+- [ ] Video erosion: efecto erosion
+- [ ] Video weathering: efecto weathering
+- [ ] Video deposition: efecto deposition
+- [ ] Video precipitation: efecto precipitation
+- [ ] Video condensation: efecto condensation
+- [ ] Video evaporation: efecto evaporation
+- [ ] Video sublimation: efecto sublimation
+- [ ] Video deposition: efecto deposition
+- [ ] Video crystallization: efecto crystallization
+- [ ] Video solidification: efecto solidification
+- [ ] Video melting: efecto melting
+- [ ] Video boiling: efecto boiling
+- [ ] Video freezing: efecto freezing
+- [ ] Video thawing: efecto thawing
+- [ ] Video combustion: efecto combustion
+- [ ] Video oxidation: efecto oxidation
+- [ ] Video reduction: efecto reduction
+- [ ] Video synthesis: efecto synthesis
+- [ ] Video decomposition: efecto decomposition
+- [ ] Video fermentation: efecto fermentation
+- [ ] Video distillation: efecto distillation
+- [ ] Video filtration: efecto filtration
+- [ ] Video centrifugation: efecto centrifugation
+- [ ] Video chromatography: efecto chromatography
+- [ ] Video electrophoresis: efecto electrophoresis
+- [ ] Video spectroscopy: efecto spectroscopy
+- [ ] Video microscopy: efecto microscopy
+- [ ] Video telescoping: efecto telescoping
+- [ ] Video zooming: efecto zooming
+- [ ] Video panning: efecto panning
+- [ ] Video tilting: efecto tilting
+- [ ] Video tracking: efecto tracking
+- [ ] Video steadying: efecto steadying
+- [ ] Video stabilizing: efecto stabilizing
+- [ ] Video smoothing: efecto smoothing
+- [ ] Video sharpening: efecto sharpening
+- [ ] Video blurring: efecto blurring
+- [ ] Video pixelating: efecto pixelating
+- [ ] Video mosaic-ing: efecto mosaic-ing
+- [ ] Video collaging: efecto collaging
+- [ ] Video gridding: efecto gridding
+- [ ] Video tiling: efecto tiling
+- [ ] Video patterning: efecto patterning
+- [ ] Video texturing: efecto texturing
+- [ ] Video shading: efecto shading
+- [ ] Video lighting: efecto lighting
+- [ ] Video shadowing: efecto shadowing
+- [ ] Video highlighting: efecto highlighting
+- [ ] Video lowlighting: efecto lowlighting
+- [ ] Video backlighting: efecto backlighting
+- [ ] Video sidelighting: efecto sidelighting
+- [ ] Video frontlighting: efecto frontlighting
+- [ ] Video toplighting: efecto toplighting
+- [ ] Video bottomlighting: efecto bottomlighting
+- [ ] Video ambient lighting: efecto ambient lighting
+- [ ] Video directional lighting: efecto directional lighting
+- [ ] Video point lighting: efecto point lighting
+- [ ] Video spot lighting: efecto spot lighting
+- [ ] Video area lighting: efecto area lighting
+- [ ] Video linear lighting: efecto linear lighting
+- [ ] Video ring lighting: efecto ring lighting
+- [ ] Video panel lighting: efecto panel lighting
+- [ ] Video softbox lighting: efecto softbox lighting
+- [ ] Video umbrella lighting: efecto umbrella lighting
+- [ ] Video beauty dish lighting: efecto beauty dish lighting
+- [ ] Video ring light lighting: efecto ring light lighting
+- [ ] Video ring flash lighting: efecto ring flash lighting
+- [ ] Video macro lighting: efecto macro lighting
+- [ ] Video product lighting: efecto product lighting
+- [ ] Video food lighting: efecto food lighting
+- [ ] Video portrait lighting: efecto portrait lighting
+- [ ] Video landscape lighting: efecto landscape lighting
+- [ ] Video architectural lighting: efecto architectural lighting
+- [ ] Video interior lighting: efecto interior lighting
+- [ ] Video exterior lighting: efecto exterior lighting
+- [ ] Video stage lighting: efecto stage lighting
+- [ ] Video concert lighting: efecto concert lighting
+- [ ] Video club lighting: efecto club lighting
+- [ ] Video party lighting: efecto party lighting
+- [ ] Video event lighting: efecto event lighting
+- [ ] Video wedding lighting: efecto wedding lighting
+- [ ] Video theater lighting: efecto theater lighting
+- [ ] Video cinema lighting: efecto cinema lighting
+- [ ] Video studio lighting: efecto studio lighting
+- [ ] Video broadcast lighting: efecto broadcast lighting
+- [ ] Video news lighting: efecto news lighting
+- [ ] Video interview lighting: efecto interview lighting
+- [ ] Video podcast lighting: efecto podcast lighting
+- [ ] Video vlog lighting: efecto vlog lighting
+- [ ] Video YouTube lighting: efecto YouTube lighting
+- [ ] Video TikTok lighting: efecto TikTok lighting
+- [ ] Video Instagram lighting: efecto Instagram lighting
+- [ ] Video streaming lighting: efecto streaming lighting
+- [ ] Video gaming lighting: efecto gaming lighting
+- [ ] Video desk lighting: efecto desk lighting
+- [ ] Video office lighting: efecto office lighting
+- [ ] Video bedroom lighting: efecto bedroom lighting
+- [ ] Video living room lighting: efecto living room lighting
+- [ ] Video kitchen lighting: efecto kitchen lighting
+- [ ] Video bathroom lighting: efecto bathroom lighting
+- [ ] Video outdoor lighting: efecto outdoor lighting
+- [ ] Video garden lighting: efecto garden lighting
+- [ ] Video patio lighting: efecto patio lighting
+- [ ] Video deck lighting: efecto deck lighting
+- [ ] Video pool lighting: efecto pool lighting
+- [ ] Video garage lighting: efecto garage lighting
+- [ ] Video shed lighting: efecto shed lighting
+- [ ] Video barn lighting: efecto barn lighting
+- [ ] Video warehouse lighting: efecto warehouse lighting
+- [ ] Video factory lighting: efecto factory lighting
+- [ ] Video store lighting: efecto store lighting
+- [ ] Video restaurant lighting: efecto restaurant lighting
+- [ ] Video bar lighting: efecto bar lighting
+- [ ] Video cafe lighting: efecto cafe lighting
+- [ ] Video bakery lighting: efecto bakery lighting
+- [ ] Video deli lighting: efecto deli lighting
+- [ ] Video grocery lighting: efecto grocery lighting
+- [ ] Video pharmacy lighting: efecto pharmacy lighting
+- [ ] Video hospital lighting: efecto hospital lighting
+- [ ] Video clinic lighting: efecto clinic lighting
+- [ ] Video office building lighting: efecto office building lighting
+- [ ] Video skyscraper lighting: efecto skyscraper lighting
+- [ ] Video bridge lighting: efecto bridge lighting
+- [ ] Video tunnel lighting: efecto tunnel lighting
+- [ ] Video parking garage lighting: efecto parking garage lighting
+- [ ] Video airport lighting: efecto airport lighting
+- [ ] Video train station lighting: efecto train station lighting
+- [ ] Video bus station lighting: efecto bus station lighting
+- [ ] Video subway station lighting: efecto subway station lighting
+- [ ] Video ferry terminal lighting: efecto ferry terminal lighting
+- [ ] Video cruise ship lighting: efecto cruise ship lighting
+- [ ] Video yacht lighting: efecto yacht lighting
+- [ ] Video boat lighting: efecto boat lighting
+- [ ] Video ship lighting: efecto ship lighting
+- [ ] Video submarine lighting: efecto submarine lighting
+- [ ] Video lighthouse lighting: efecto lighthouse lighting
+- [ ] Video oil rig lighting: efecto oil rig lighting
+- [ ] Video wind turbine lighting: efecto wind turbine lighting
+- [ ] Video solar panel lighting: efecto solar panel lighting
+- [ ] Video power plant lighting: efecto power plant lighting
+- [ ] Video dam lighting: efecto dam lighting
+- [ ] Video reservoir lighting: efecto reservoir lighting
+- [ ] Video water treatment lighting: efecto water treatment lighting
+- [ ] Video sewage treatment lighting: efecto sewage treatment lighting
+- [ ] Video landfill lighting: efecto landfill lighting
+- [ ] Video recycling plant lighting: efecto recycling plant lighting
+- [ ] Video compost facility lighting: efecto compost facility lighting
+- [ ] Video greenhouse lighting: efecto greenhouse lighting
+- [ ] Video nursery lighting: efecto nursery lighting
+- [ ] Video botanical garden lighting: efecto botanical garden lighting
+- [ ] Video zoo lighting: efecto zoo lighting
+- [ ] Video aquarium lighting: efecto aquarium lighting
+- [ ] Video museum lighting: efecto museum lighting
+- [ ] Video gallery lighting: efecto gallery lighting
+- [ ] Video library lighting: efecto library lighting
+- [ ] Video bookstore lighting: efecto bookstore lighting
+- [ ] Video record store lighting: efecto record store lighting
+- [ ] Video video store lighting: efecto video store lighting
+- [ ] Video game store lighting: efecto game store lighting
+- [ ] Video toy store lighting: efecto toy store lighting
+- [ ] Video clothing store lighting: efecto clothing store lighting
+- [ ] Video shoe store lighting: efecto shoe store lighting
+- [ ] Video jewelry store lighting: efecto jewelry store lighting
+- [ ] Video furniture store lighting: efecto furniture store lighting
+- [ ] Video hardware store lighting: efecto hardware store lighting
+- [ ] Video garden center lighting: efecto garden center lighting
+- [ ] Video pet store lighting: efecto pet store lighting
+- [ ] Video craft store lighting: efecto craft store lighting
+- [ ] Video art supply store lighting: efecto art supply store lighting
+- [ ] Video office supply store lighting: efecto office supply store lighting
+- [ ] Video electronics store lighting: efecto electronics store lighting
+- [ ] Video appliance store lighting: efecto appliance store lighting
+- [ ] Video auto parts store lighting: efecto auto parts store lighting
+- [ ] Video tire store lighting: efecto tire store lighting
+- [ ] Video gas station lighting: efecto gas station lighting
+- [ ] Video car wash lighting: efecto car wash lighting
+- [ ] Video parking lot lighting: efecto parking lot lighting
+- [ ] Video drive-in lighting: efecto drive-in lighting
+- [ ] Video drive-thru lighting: efecto drive-thru lighting
+- [ ] Video walk-up window lighting: efecto walk-up window lighting
+- [ ] Video kiosk lighting: efecto kiosk lighting
+- [ ] Video vending machine lighting: efecto vending machine lighting
+- [ ] Video arcade lighting: efecto arcade lighting
+- [ ] Video bowling alley lighting: efecto bowling alley lighting
+- [ ] Video skating rink lighting: efecto skating rink lighting
+- [ ] Video roller coaster lighting: efecto roller coaster lighting
+- [ ] Video Ferris wheel lighting: efecto Ferris wheel lighting
+- [ ] Video carousel lighting: efecto carousel lighting
+- [ ] Video bumper car lighting: efecto bumper car lighting
+- [ ] Video haunted house lighting: efecto haunted house lighting
+- [ ] Video maze lighting: efecto maze lighting
+- [ ] Video corn maze lighting: efecto corn maze lighting
+- [ ] Video hedge maze lighting: efecto hedge maze lighting
+- [ ] Video puzzle room lighting: efecto puzzle room lighting
+- [ ] Video escape room lighting: efecto escape room lighting
+- [ ] Video trampoline park lighting: efecto trampoline park lighting
+- [ ] Video go-kart track lighting: efecto go-kart track lighting
+- [ ] Video paintball arena lighting: efecto paintball arena lighting
+- [ ] Video laser tag arena lighting: efecto laser tag arena lighting
+- [ ] Video archery range lighting: efecto archery range lighting
+- [ ] Video shooting range lighting: efecto shooting range lighting
+- [ ] Video axe throwing lighting: efecto axe throwing lighting
+- [ ] Video knife throwing lighting: efecto knife throwing lighting
+- [ ] Video rock climbing wall lighting: efecto rock climbing wall lighting
+- [ ] Video zip line lighting: efecto zip line lighting
+- [ ] Video bungee jumping lighting: efecto bungee jumping lighting
+- [ ] Video skydiving lighting: efecto skydiving lighting
+- [ ] Video paragliding lighting: efecto paragliding lighting
+- [ ] Video hang gliding lighting: efecto hang gliding lighting
+- [ ] Video scuba diving lighting: efecto scuba diving lighting
+- [ ] Video snorkeling lighting: efecto snorkeling lighting
+- [ ] Video surfing lighting: efecto surfing lighting
+- [ ] Video windsurfing lighting: efecto windsurfing lighting
+- [ ] Video kitesurfing lighting: efecto kitesurfing lighting
+- [ ] Video wakeboarding lighting: efecto wakeboarding lighting
+- [ ] Video water skiing lighting: efecto water skiing lighting
+- [ ] Video jet skiing lighting: efecto jet skiing lighting
+- [ ] Video paddleboarding lighting: efecto paddleboarding lighting
+- [ ] Video kayaking lighting: efecto kayaking lighting
+- [ ] Video canoeing lighting: efecto canoeing lighting
+- [ ] Video rafting lighting: efecto rafting lighting
+- [ ] Video sailing lighting: efecto sailing lighting
+- [ ] Video yachting lighting: efecto yachting lighting
+- [ ] Video fishing lighting: efecto fishing lighting
+- [ ] Video hunting lighting: efecto hunting lighting
+- [ ] Video camping lighting: efecto camping lighting
+- [ ] Video hiking lighting: efecto hiking lighting
+- [ ] Video backpacking lighting: efecto backpacking lighting
+- [ ] Video trekking lighting: efecto trekking lighting
+- [ ] Video mountaineering lighting: efecto mountaineering lighting
+- [ ] Video rock climbing lighting: efecto rock climbing lighting
+- [ ] Video ice climbing lighting: efecto ice climbing lighting
+- [ ] Video bouldering lighting: efecto bouldering lighting
+- [ ] Video caving lighting: efecto caving lighting
+- [ ] Video spelunking lighting: efecto spelunking lighting
+- [ ] Video canyoneering lighting: efecto canyoneering lighting
+- [ ] Video cliff jumping lighting: efecto cliff jumping lighting
+- [ ] Video base jumping lighting: efecto base jumping lighting
+- [ ] Video wingsuit flying lighting: efecto wingsuit flying lighting
+- [ ] Video parkour lighting: efecto parkour lighting
+- [ ] Video freerunning lighting: efecto freerunning lighting
+- [ ] Video skateboarding lighting: efecto skateboarding lighting
+- [ ] Video BMX lighting: efecto BMX lighting
+- [ ] Video snowboarding lighting: efecto snowboarding lighting
+- [ ] Video skiing lighting: efecto skiing lighting
+- [ ] Video ice skating lighting: efecto ice skating lighting
+- [ ] Video roller skating lighting: efecto roller skating lighting
+- [ ] Video inline skating lighting: efecto inline skating lighting
+- [ ] Video cycling lighting: efecto cycling lighting
+- [ ] Video mountain biking lighting: efecto mountain biking lighting
+- [ ] Video road biking lighting: efecto road biking lighting
+- [ ] Video track cycling lighting: efecto track cycling lighting
+- [ ] Video BMX racing lighting: efecto BMX racing lighting
+- [ ] Video motocross lighting: efecto motocross lighting
+- [ ] Video supercross lighting: efecto supercross lighting
+- [ ] Video enduro lighting: efecto enduro lighting
+- [ ] Video trials lighting: efecto trials lighting
+- [ ] Video freestyle lighting: efecto freestyle lighting
+- [ ] Video flatland lighting: efecto flatland lighting
+- [ ] Video dirt jumping lighting: efecto dirt jumping lighting
+- [ ] Video slopestyle lighting: efecto slopestyle lighting
+- [ ] Video big air lighting: efecto big air lighting
+- [ ] Video halfpipe lighting: efecto halfpipe lighting
+- [ ] Video quarterpipe lighting: efecto quarterpipe lighting
+- [ ] Video vert ramp lighting: efecto vert ramp lighting
+- [ ] Video mega ramp lighting: efecto mega ramp lighting
+- [ ] Video street skating lighting: efecto street skating lighting
+- [ ] Video park skating lighting: efecto park skating lighting
+- [ ] Video pool skating lighting: efecto pool skating lighting
+- [ ] Video bowl skating lighting: efecto bowl skating lighting
+- [ ] Video transition lighting: efecto transition lighting
+- [ ] Video manual lighting: efecto manual lighting
+- [ ] Video grind lighting: efecto grind lighting
+- [ ] Video slide lighting: efecto slide lighting
+- [ ] Video lip lighting: efecto lip lighting
+- [ ] Video air lighting: efecto air lighting
+- [ ] Video grab lighting: efecto grab lighting
+- [ ] Video flip lighting: efecto flip lighting
+- [ ] Video spin lighting: efecto spin lighting
+- [ ] Video rotation lighting: efecto rotation lighting
+- [ ] Video invert lighting: efecto invert lighting
+- [ ] Video mctwist lighting: efecto mctwist lighting
+- [ ] Video 900 lighting: efecto 900 lighting
+- [ ] Video 1080 lighting: efecto 1080 lighting
+- [ ] Video 1260 lighting: efecto 1260 lighting
+- [ ] Video 1440 lighting: efecto 1440 lighting
+- [ ] Video 1620 lighting: efecto 1620 lighting
+- [ ] Video 1800 lighting: efecto 1800 lighting
+- [ ] Video 1980 lighting: efecto 1980 lighting
+- [ ] Video 2160 lighting: efecto 2160 lighting
+- [ ] Video 2520 lighting: efecto 2520 lighting
+- [ ] Video 2880 lighting: efecto 2880 lighting
+- [ ] Video 3240 lighting: efecto 3240 lighting
+- [ ] Video 3600 lighting: efecto 3600 lighting
+- [ ] Video 4320 lighting: efecto 4320 lighting
+- [ ] Video 5400 lighting: efecto 5400 lighting
+- [ ] Video 7200 lighting: efecto 7200 lighting
+- [ ] Video 9000 lighting: efecto 9000 lighting
+- [ ] Video 10800 lighting: efecto 10800 lighting
+- [ ] Video 14400 lighting: efecto 14400 lighting
+- [ ] Video 18000 lighting: efecto 18000 lighting
+- [ ] Video 21600 lighting: efecto 21600 lighting
+- [ ] Video 28800 lighting: efecto 28800 lighting
+- [ ] Video 43200 lighting: efecto 43200 lighting
+- [ ] Video 86400 lighting: efecto 86400 lighting
+
+--- Seguridad ---
+[ ] Hash verification: verificar integridad de archivos procesados
+[ ] Sandbox: ejecutar ffmpeg en entorno aislado
+[ ] Rate limiting: no procesar más de X archivos por minuto
+[ ] Audit log: registrar cada operación
+[ ] Secure delete: borrar archivos temporales de forma segura
+[ ] Input validation: validar todas las entradas del usuario
+[ ] Path traversal protection: prevenir ataques de path traversal
+[ ] Command injection protection: prevenir inyección de comandos
+[ ] Buffer overflow protection: prevenir buffer overflows
+- [ ] Memory limit: limitar memoria máxima de ffmpeg
+- [ ] Time limit: limitar tiempo máximo de ejecución
+- [ ] File size limit: limitar tamaño máximo de archivo
+- [ ] Output validation: validar que el output es correcto
+- [ ] Temp file cleanup: limpiar archivos temporales automáticamente
+- [ ] Secure config: cifrar configuración sensible
+
+--- Tests ---
+[ ] Test de cada modo individually
+[ ] Test de descarga
+[ ] Test de corte
+[ ] Test de conversión
+[ ] Test de GIF
+[ ] Test de thumbnail
+[ ] Test de efectos
+[ ] Test de subtítulos
+[ ] Test de presets
+[ ] Test de flags
+[ ] Test de colisión
+[ ] Test de checkpoint/resume
+[ ] Test de notificaciones
+[ ] Test de GPU detection
+[ ] Test de rendimiento
+
+--- Docker ---
+[ ] Multi-stage build
+[ ] Health check
+[ ] GPU support (NVIDIA/CUDA)
+[ ] Volumen de entrada/salida persistente
+[ ] Variables de entorno para todo
+[ ] Imagen ARM
+[ ] Log rotation
+[ ] Resource limits
+[ ] Docker Scout: escaneo de vulnerabilidades
+[ ] Docker Slim: imagen ultraligera
+
+--- UX ---
+[ ] Progress bar real con ETA
+[ ] Colores adaptativos
+[ ] Soporte TTY/no-TTY
+[ ] Mensajes de error con sugerencias
+[ ] Atajos de teclado en menú
+[ ] Modo verbose/debug
+[ ] Confirmación antes de sobrescribir
+[ ] Resumen antes de ejecutar
+[ ] Tiempo estimado
+[ ] Sonido al terminar
+[ ] Drag and drop de archivos
+[ ] Búsqueda en el menú
+[ ] Historial de operaciones
+[ ] Favoritos
+[ ] Undo/Redo
+
+--- Rendimiento ---
+[ ] Procesamiento paralelo mejorado
+[ ] Cache de resultados
+[ ] Streaming de archivos grandes
+[ ] Compresión incremental
+[ ] Lazy loading
+[ ] Connection pooling
+[ ] Memory mapping
+[ ] Disk I/O optimization
+[ ] CPU affinity
+[ ] Nice/renice de procesos
+
+--- Integración ---
+[ ] ntfy.sh push
+[ ] Telegram bot
+[ ] Discord webhook
+[ ] Slack webhook
+- [ ] Email notification
+- [ ] Plex auto-add
+- [ ] Jellyfin auto-add
+- [ ] Emby auto-add
+- [ ] YouTube auto-upload
+- [ ] TikTok auto-upload
+
+--- Mantenimiento ---
+[ ] Auto-update
+[ ] Cleanup automático
+[ ] Log compression
+[ ] Disk monitor
+[ ] Config migration
+[ ] Deprecation warnings
+[ ] Version check
+[ ] Backup automático
+[ ] Restore
+[ ] Health check
+
+--- Documentación ---
+[ ] Guía paso a paso
+[ ] Ejemplos reales
+[ ] Troubleshooting
+[ ] API docs
+[ ] Changelog
+[ ] Contributing guide
+[ ] Video tutorial
+[ ] Architecture diagram
+[ ] FAQ
+[ ] Known issues
+[ ] Roadmap
+
+--- Code quality ---
+[ ] Type hints
+[ ] Docstrings
+[ ] Linting
+[ ] Formatting
+[ ] Pre-commit hooks
+[ ] CI/CD
+[ ] Coverage
+[ ] Error handling
+[ ] Logging estructurado
+[ ] Profiling
+
+--- Ideas locas ---
+[ ] AI video editor: editar vídeos con IA
+[ ] AI style transfer: aplicar estilo artístico con IA
+[ ] AI super resolution: mejorar resolución con IA
+[ ] AI frame interpolation: interpolar frames con IA
+- [ ] AI noise reduction: reducir ruido con IA
+- [ ] AI color grading: color grading automático con IA
+- [ ] AI subtitle generation: generar subtítulos con IA
+- [ ] AI music detection: detectar música con IA
+- [ ] AI face detection: detectar caras con IA
+- [ ] AI object detection: detectar objetos con IA
+- [ ] AI scene detection: detectar escenas con IA
+- [ ] AI motion detection: detectar movimiento con IA
+- [ ] AI audio transcription: transcribir audio con IA
+- [ ] AI voice cloning: clonar voces con IA
+- [ ] AI deepfake: crear deepfakes (solo para diversión)
+- [ ] AI video summarization: resumir vídeos con IA
+- [ ] AI highlight detection: detectar highlights con IA
+- [ ] AI meme generator: generar memes con IA
+- [ ] AI thumbnail generator: generar miniaturas con IA
+- [ ] AI title generator: generar títulos con IA
+- [ ] AI description generator: generar descripciones con IA
+- [ ] AI tag generator: generar tags con IA
+- [ ] AI SEO optimizer: optimizar SEO con IA
+- [ ] AI A/B testing: probar variantes con IA
+- [ ] AI analytics: analytics con IA
+- [ ] AI recommendations: recomendaciones con IA
+- [ ] AI predictions: predicciones con IA
+- [ ] AI automation: automatización con IA
+- [ ] AI personalization: personalización con IA
+- [ ] AI optimization: optimización con IA
+
+================================================================================
+  MEJORAS TRANSVERSALES (TODOS LOS PROYECTOS)
+================================================================================
+
+--- Testing ---
+[ ] Tests automatizados: pytest para Python, bats para bash
+[ ] CI/CD: GitHub Actions que ejecute tests y construya imágenes Docker
+[ ] Coverage report: cobertura mínima del 80%
+[ ] Integration tests: tests de integración entre proyectos
+[ ] E2E tests: tests end-to-end completos
+[ ] Load tests: tests de carga y estrés
+[ ] Security tests: tests de seguridad (SAST/DAST)
+[ ] Regression tests: tests de regresión
+[ ] Snapshot tests: tests de snapshot
+[ ] Mutation testing: tests de mutación
+
+--- DevOps ---
+[ ] GitHub Actions workflow completo
+[ ] Docker Hub auto-publish
+[ ] Versionado semántico automatizado
+[ ] Changelog automático desde commits
+[ ] Release notes automáticas
+[ ] Dependabot para dependencias
+[ ] CodeQL para análisis de código
+[ ] SonarCloud para calidad de código
+[ ] Snyk para vulnerabilidades
+[ ] Trivy para escaneo de imágenes Docker
+
+--- Documentación ---
+[ ] README mejorado con badges, screenshots, GIFs
+[ ] CONTRIBUTING.md con guía de contribución
+[ ] CODE_OF_CONDUCT.md
+[ ] SECURITY.md con política de seguridad
+[ ] LICENSE consistente en todos los proyectos
+[ ] CHANGELOG.md por proyecto
+[ ] API documentation con OpenAPI
+[ ] Arquitectura documentada con diagramas
+- [ ] Video tutorials en YouTube
+- [ ] Blog posts en la web
+- [ ] Discord/Telegram para la comunidad
+- [ ] FAQ interactivo
+- [ ] Troubleshooting guide
+- [ ] Migration guide entre versiones
+
+--- Monitoreo ---
+[ ] Health checks en todos los Docker
+[ ] Logging estructurado (JSON)
+[ ] Métricas con Prometheus
+[ ] Dashboards con Grafana
+[ ] Alertas con Alertmanager
+[ ] Uptime monitoring
+- [ ] Error tracking con Sentry
+- [ ] Performance monitoring
+- [ ] Resource monitoring
+- [ ] Cost monitoring
+
+--- Seguridad ---
+[ ] Secret scanning en CI
+[ ] Dependency scanning
+[ ] Container scanning
+[ ] SAST (Static Application Security Testing)
+[ ] DAST (Dynamic Application Security Testing)
+[ ] Penetration testing
+[ ] Security audit anual
+[ ] Bug bounty program
+[ ] Responsible disclosure policy
+- [ ] SOC 2 compliance
+- [ ] GDPR compliance
+- [ ] HIPAA compliance (si aplica)
+- [ ] ISO 27001 compliance
+
+--- Rendimiento ---
+[ ] Benchmarking automatizado
+[ ] Performance regression tests
+- [ ] Memory profiling
+- [ ] CPU profiling
+- [ ] Disk I/O profiling
+- [ ] Network profiling
+- [ ] Latency monitoring
+- [ ] Throughput monitoring
+- [ ] Error rate monitoring
+- [ ] Saturation monitoring
+
+--- Experiencia de usuario ---
+[ ] CLI con colores y formato
+[ ] Mensajes de error útiles
+[ ] Help contextual
+[ ] Auto-completado de shell
+[ ] Man pages
+[ ] Info pages
+[ ] Texinfo
+- [ ] Vídeos de demostración
+- [ ] Screenshots actualizados
+- [ ] GIFs animados
+- [ ] Quick start guide
+- [ ] Cheat sheet
+- [ ] cheatsheets.dev integration
+
+--- Comunidad ---
+[ ] Issue templates
+[ ] PR templates
+[ ] Discussion boards
+[ ] Stack Overflow tags
+[ ] Reddit posts
+[ ] Hacker News posts
+[ ] Dev.to posts
+[ ] Medium posts
+[ ] Twitter/X announcements
+[ ] Discord server
+
+--- Legal ---
+[ ] Licencia consistente (MIT/GPL/Apache)
+[ ] Terms of service
+[ ] Privacy policy
+[ ] Cookie policy
+[ ] DMCA policy
+[ ] Acceptable use policy
+[ ] Contributor license agreement
+[ ] Security policy
+[ ] Responsible disclosure
+[ ] Code of conduct
+
+--- Negocio ---
+[ ] Website del proyecto
+[ ] Landing page
+- [ ] Documentation site
+- [ ] Blog
+- [ ] Newsletter
+- [ ] Patreon/Sponsor
+- [ ] Merchandise
+- [ ] Consulting services
+- [ ] Enterprise edition
+- [ ] Cloud hosted version
+- [ ] API as a service
+
+--- Internacionalización ---
+[ ] Multiidioma: español, inglés, francés, alemán, portugués
+[ ] RTL support: árabe, hebreo
+[ ] Localización de fechas y números
+[ ] Localización de mensajes de error
+- [ ] Localización de documentación
+- [ ] Localización de interfaz
+- [ ] Localización de tests
+- [ ] Localización de logs
+- [ ] Localización de commits
+- [ ] Localización de releases
+
+--- Accesibilidad ---
+[ ] WCAG 2.1 compliance
+[ ] Screen reader support
+- [ ] Keyboard navigation
+- [ ] High contrast mode
+- [ ] Large text mode
+- [ ] Screen magnification
+- [ ] Voice control
+- [ ] Switch access
+- [ ] Eye tracking
+- [ ] Sip and puff
+
+--- Sostenibilidad ---
+[ ] Carbon footprint tracking
+- [ ] Green hosting
+- [ ] Renewable energy
+- [ ] Carbon offsetting
+- [ ] Sustainability report
+- [ ] Environmental policy
+- [ ] Green coding practices
+- [ ] Energy efficient algorithms
+- [ ] Minimal resource usage
+- [ ] Recycling of old hardware
+
+--- Innovación ---
+[ ] AI-powered features
+- [ ] Machine learning integration
+- [ ] Natural language processing
+- [ ] Computer vision
+- [ ] Speech recognition
+- [ ] Predictive analytics
+- [ ] Recommendation engines
+- [ ] Anomaly detection
+- [ ] Pattern recognition
+- [ ] Generative AI
+
+--- Colaboración ---
+[ ] Real-time collaboration
+- [ ] Conflict resolution
+- [ ] Version control integration
+- [ ] Code review tools
+- [ ] Pair programming support
+- [ ] Team management
+- [ ] Role-based access control
+- [ ] Audit logging
+- [ ] Compliance reporting
+- [ ] Governance
+
+--- escalabilidad ---
+[ ] Horizontal scaling
+- [ ] Vertical scaling
+- [ ] Load balancing
+- [ ] Caching layers
+- [ ] Database optimization
+- [ ] CDN integration
+- [ ] Microservices architecture
+- [ ] Event-driven architecture
+- [ ] Serverless functions
+- [ ] Edge computing
+
+--- fiabilidad ---
+[ ] High availability
+- [ ] Disaster recovery
+- [ ] Backup strategies
+- [ ] Failover mechanisms
+- [ ] Circuit breakers
+- [ ] Retry policies
+- [ ] Timeout handling
+- [ ] Graceful degradation
+- [ ] Chaos engineering
+- [ ] Game day exercises
+
+--- seguridad avanzada ---
+[ ] Zero trust architecture
+- [ ] Identity and access management
+- [ ] Multi-factor authentication
+- [ ] Single sign-on
+- [ ] API gateway
+- [ ] Web application firewall
+- [ ] DDoS protection
+- [ ] Intrusion detection
+- [ ] Security information and event management
+- [ ] Threat intelligence
+
+--- compliance ---
+[ ] SOC 2 Type II
+- [ ] ISO 27001
+- [ ] GDPR
+- [ ] CCPA
+- [ ] HIPAA
+- [ ] PCI DSS
+- [ ] FedRAMP
+- [ ] StateRAMP
+- [ ] CSF
+- [ ] NIST
+
+--- go-to-market ---
+[ ] Product Hunt launch
+- [ ] Hacker News launch
+- [ ] Reddit launch
+- [ ] Twitter/X launch
+- [ ] LinkedIn launch
+- [ ] YouTube launch
+- [ ] TikTok launch
+- [ ] Instagram launch
+- [ ] Facebook launch
+- [ ] Discord launch
+
+--- monetization ---
+[ ] Open core model
+- [ ] SaaS hosting
+- [ ] Enterprise licenses
+- [ ] Support contracts
+- [ ] Consulting services
+- [ ] Training courses
+- [ ] Certification programs
+- [ ] Marketplace
+- [ ] App store
+- [ ] API monetization
+
+--- community building ---
+[ ] Contributor programs
+- [ ] Ambassador programs
+- [ ] MVP programs
+- [ ] Champion programs
+- [ ] Expert programs
+- [ ] Partner programs
+- [ ] Integration partners
+- [ ] Technology partners
+- [ ] Channel partners
+- [ ] Reseller partners
+
+--- content strategy ---
+[ ] Blog posts
+- [ ] Video tutorials
+- [ ] Podcasts
+- [ ] Webinars
+- [ ] Case studies
+- [ ] White papers
+- [ ] E-books
+- [ ] Infographics
+- [ ] Cheat sheets
+- [ ] Templates
+
+--- developer experience ---
+[ ] CLI improvements
+- [ ] SDK/libraries
+- [ ] Client libraries
+- [ ] Code samples
+- [ ] Quickstarts
+- [ ] Tutorials
+- [ ] Guides
+- [ ] Reference docs
+- [ ] API explorer
+- [ ] Playground
+
+--- operational excellence ---
+[ ] Runbooks
+- [ ] Playbooks
+- [ ] Incident response
+- [ ] Post-mortems
+- [ ] Status pages
+- [ ] On-call rotations
+- [ ] Escalation policies
+- [ ] Communication plans
+- [ ] Business continuity
+- [ ] Disaster recovery
+
+--- data management ---
+[ ] Data classification
+- [ ] Data retention
+- [ ] Data disposal
+- [ ] Data encryption
+- [ ] Data masking
+- [ ] Data anonymization
+- [ ] Data governance
+- [ ] Data quality
+- [ ] Data lineage
+- [ ] Data catalog
+
+--- observability ---
+[ ] Logging
+- [ ] Metrics
+- [ ] Tracing
+- [ ] Profiling
+- [ ] Alerting
+- [ ] Dashboards
+- [ ] SLOs/SLIs
+- [ ] Error budgets
+- [ ] Chaos engineering
+- [ ] Litmus
+
+--- platform engineering ---
+[ ] Internal developer platform
+- [ ] Golden paths
+- [ ] Self-service
+- [ ] Developer portal
+- [ ] Service catalog
+- [ ] Scorecards
+- [ ] DORA metrics
+- [ ] Platform metrics
+- [ ] Developer productivity
+- [ ] Developer experience
+
+---Fin del TODO LIST===
+Total de items: ~1500+

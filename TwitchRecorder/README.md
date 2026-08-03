@@ -2,6 +2,8 @@
 
 Grabador automático de directos de Twitch, YouTube y Kick con Docker.
 
+
+
 ## Requisitos
 
 - Docker instalado ([docker.com](https://www.docker.com))

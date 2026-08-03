@@ -5,17 +5,49 @@ import time
 import re
 import json
 import random
+import subprocess
 import urllib.parse
 
 import requests
 
+def _ensure_deps():
+    for pkg, mod in [("rich", "rich"), ("DrissionPage", "DrissionPage")]:
+        try:
+            __import__(mod)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+
+_ensure_deps()
+
 from DrissionPage import ChromiumPage, ChromiumOptions
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
+
+BG = "blue"
+FG = "green"
+
+def styled_panel(content, title="", style=BG):
+    return Panel(content, title=title, border_style=style, expand=True)
+
+def log(msg):
+    if any(k in msg.upper() for k in ["OK", "LISTO", "COMPLETO", "EXITO"]):
+        console.print(f"  [bold green]✓[/bold green] {msg}", style=f"bold {FG}")
+    elif any(k in msg.upper() for k in ["ERR", "FALLO", "FALLIDO", "NO SE"]):
+        console.print(f"  [bold red]✗[/bold red] {msg}")
+    elif any(k in msg.upper() for k in ["WARN", "PENDIENTE"]):
+        console.print(f"  [bold yellow]⚠[/bold yellow] {msg}")
+    else:
+        console.print(f"  [bold blue]ℹ[/bold blue] {msg}")
 
 OUT_DIR = os.environ.get("HDFULL_OUT", "/app/downloads")
 HDFULL_USER = os.environ.get("HDFULL_USER", "").strip()
 HDFULL_PASS = os.environ.get("HDFULL_PASS", "").strip()
-TARGET_URL = sys.argv[1] if len(sys.argv) > 1 else os.environ.get(
-    "HDFULL_URL", "https://hdfull.sbs/pelicula/the-king-of-kings")
+TARGET_URL = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("HDFULL_URL", "").strip()
+if not TARGET_URL:
+    print("ERROR: No se ha proporcionado URL. Usa argv[1] o variable HDFULL_URL.")
+    sys.exit(1)
 CAPTCHA_TIMEOUT = int(os.environ.get("HDFULL_CAPTCHA_TIMEOUT", "900"))
 
 STEALTH = """
@@ -41,10 +73,6 @@ BLOB_HOOK = """
   };
 })();
 """
-
-
-def log(msg):
-    print(msg, flush=True)
 
 
 def launch():

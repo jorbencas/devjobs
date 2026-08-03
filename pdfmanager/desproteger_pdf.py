@@ -1,34 +1,30 @@
 import os
 import sys
 import subprocess
-# Poder usar scripts de python en linux: python3 -m venv .venv && source .venv/bin/activate
+
 def instalar_dependencias():
-    """Instala las librerías necesarias antes de importarlas."""
-    # (Nombre en PIP, Nombre al importar)
     libs = [
-        ("pymupdf", "fitz"), 
-        ("rich", "rich"), 
-        ("tqdm", "tqdm"), 
-        ("readchar", "readchar"), 
+        ("pymupdf", "fitz"),
+        ("rich", "rich"),
+        ("inquirerpy", "inquirerpy"),
+        ("tqdm", "tqdm"),
+        ("readchar", "readchar"),
         ("pikepdf", "pikepdf"),
         ("Pillow", "PIL")
     ]
-    
     for lib_pip, lib_import in libs:
         try:
             __import__(lib_import)
         except ImportError:
-            print(f"[*] Instalando dependencia faltante: {lib_pip}...")
+            print(f"[*] Instalando: {lib_pip}...")
             try:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", lib_pip])
             except Exception as e:
-                print(f"[!] Error crítico instalando {lib_pip}: {e}")
+                print(f"[!] Error instalando {lib_pip}: {e}")
                 sys.exit(1)
 
-# --- PRIMERO INSTALAMOS ---
 instalar_dependencias()
 
-# --- LUEGO IMPORTAMOS ---
 import fitz
 import pikepdf
 import readchar
@@ -39,8 +35,28 @@ from rich.panel import Panel
 from rich.live import Live
 from rich.table import Table
 from rich.prompt import Prompt, IntPrompt
+from inquirerpy import inquirer
+from inquirerpy.separator import Separator
 
 console = Console()
+
+BG = "blue"
+FG = "green"
+
+def styled_panel(content, title="", style=BG):
+    return Panel(content, title=title, border_style=style, expand=True)
+
+def styled_print(msg, style=f"bold {FG}"):
+    console.print(msg, style=style)
+
+def styled_error(msg):
+    console.print(f"  [bold red]✗[/bold red] {msg}")
+
+def styled_success(msg):
+    console.print(f"  [bold green]✓[/bold green] {msg}")
+
+def styled_info(msg):
+    console.print(f"  [bold blue]ℹ[/bold blue] {msg}")
 
 class PDFNinjaMaster:
     def __init__(self):
@@ -222,35 +238,49 @@ class PDFNinjaMaster:
 def menu():
     ninja = PDFNinjaMaster()
     while True:
-        #os.system('cls' if os.name == 'nt' else 'clear')         
-        console.print("\n" + "="*40)
-        console.print(Panel.fit(" 🥷  PDF NINJA - MASTER CODE ", style="bold green"))
-        console.print("1. Desbloqueo Limpio")
-        console.print("2. Desbloqueo + COMPRESIÓN")
-        console.print("3. Herramienta: UNIR PDFs")
-        console.print("4. Herramienta: DIVIDIR PDF")
-        console.print("5. Imágenes a PDF")
-        console.print("6. Salir")
-        
-        op = Prompt.ask("\n[bold yellow]Elige una misión[/bold yellow]", choices=["1", "2", "3", "4", "5", "6"])
-        
-        if op == "1": 
-            ninja.ejecutar_mision()
-        elif op == "2": 
-            ninja.ejecutar_mision(comprimir=True)
-        elif op == "3": 
-            ninja.unir_pdfs_interactivo()
-        elif op == "4": 
-            ninja.dividir_pdf()
-        elif op == "5": 
-            ninja.imagenes_a_pdf()
-        elif op == "6": 
-            console.print("[bold red]Saliendo del dojo... 👋[/bold red]")
+        console.clear()
+        console.print()
+        console.print(styled_panel(
+            "[bold white]Gestor definitivo de PDFs[/bold white]\n"
+            "[dim]Desbloquear · Unir · Dividir · Comprimir[/dim]",
+            title="🥷 PDF NINJA MASTER",
+            style=f"bold {FG}"
+        ))
+        console.print()
+
+        op = inquirer.select(
+            "Elige una misión:",
+            choices=[
+                {"name": "🔓  Desbloqueo Limpio", "value": "1"},
+                {"name": "📦  Desbloqueo + COMPRESIÓN", "value": "2"},
+                {"name": "🔗  UNIR PDFs", "value": "3"},
+                {"name": "✂️   DIVIDIR PDF", "value": "4"},
+                {"name": "🖼️   Imágenes a PDF", "value": "5"},
+                Separator(),
+                {"name": "🚪  Salir", "value": "6"},
+            ],
+            pointer="▸",
+            mandatory=False,
+            default="1",
+        ).execute()
+
+        if op is None or op == "6":
+            styled_print("\n  Saliendo del dojo... 👋\n", style="bold red")
             break
-        
-        # Añadimos una pausa para que el usuario pueda leer los resultados
-        console.print("\n[dim]Misión finalizada. Presiona ENTER para volver al menú...[/dim]")
-        input()
+
+        if op == "1":
+            ninja.ejecutar_mision()
+        elif op == "2":
+            ninja.ejecutar_mision(comprimir=True)
+        elif op == "3":
+            ninja.unir_pdfs_interactivo()
+        elif op == "4":
+            ninja.dividir_pdf()
+        elif op == "5":
+            ninja.imagenes_a_pdf()
+
+        console.print()
+        inquirer.text(message="Presiona ENTER para volver al menú...").execute()
 
 if __name__ == "__main__":
     menu()

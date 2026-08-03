@@ -1,17 +1,17 @@
 {
-  "inputDir": "./test",
+  "inputDir": ".",
   "outputDir": "./optimizados",
   "extensions": "avi,webm,mkv,mp4,flv",
   "verbose": true,
   "modes": {
     "convert": {
       "social": "",
-      "preset": "ultrafast",
+      "preset": "default",
       "videoCodec": "h264",
       "audioCodec": "aac",
       "audioBitrate": "128k",
-      "resolution": "1080",
-      "maxSize": "1.9"
+      "resolution": "720",
+      "maxSize": "1.5"
     }
   }
 }

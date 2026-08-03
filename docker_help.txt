@@ -1,0 +1,250 @@
+================================================================================
+  DOCKER CHEATSHEET - devjobs Ultimate Automation Suite
+  Ruta: /home/jorge/dev/devjobs/docker_help.txt
+================================================================================
+
+================================================================================
+  1. DOCKER GENERAL
+================================================================================
+
+--- Imágenes ---
+docker images                          # Listar imágenes
+docker rmi <image>                     # Eliminar imagen
+docker image prune                     # Limpiar imágenes sin usar
+docker image prune -a                  # Limpiar TODAS las imágenes sin usar
+
+--- Contenedores ---
+docker ps                              # Contenedores activos
+docker ps -a                           # Todos los contenedores (incluidos detenidos)
+docker stop <container>                # Parar contenedor
+docker rm <container>                  # Eliminar contenedor
+docker rm -f <container>               # Eliminar forzadamente
+docker container prune                 # Limpiar contenedores detenidos
+docker logs <container>                # Ver logs
+docker logs -f <container>             # Ver logs en tiempo real
+docker exec -it <container> bash       # Entrar al contenedor
+docker inspect <container>             # Info detallada
+
+--- Limpieza general ---
+docker system prune                    # Limpiar todo (contenedores, redes, imágenes)
+docker system prune -a                 # Limpieza agresiva
+docker volume prune                    # Limpiar volúmenes no usados
+
+--- Build ---
+docker build -t <name> .               # Construir imagen desde Dockerfile
+docker build --no-cache -t <name> .    # Construir sin caché
+
+--- Ejecución ---
+docker run --rm -it <image> bash       # Ejecutar y entrar interactivamente
+docker run -d <image>                  # Ejecutar en background (detached)
+docker run -p 8080:80 <image>          # Exponer puertos
+docker run -v /host:/container <image> # Montar volúmenes
+
+--- Redes ---
+docker network ls                      # Listar redes
+docker network inspect <network>       # Info de red
+
+================================================================================
+  2. DOCKER COMPOSE
+================================================================================
+
+--- Comandos básicos ---
+docker compose up                      # Arrancar servicios (foreground)
+docker compose up -d                   # Arrancar en background
+docker compose up --build              # Re-construir y arrancar
+docker compose down                    # Parar y eliminar contenedores
+docker compose down -v                 # Parar y eliminar contenedores + volúmenes
+docker compose ps                      # Estado de servicios
+docker compose logs                    # Ver logs
+docker compose logs -f                 # Logs en tiempo real
+docker compose logs -f <service>       # Logs de un servicio específico
+
+--- Build ---
+docker compose build                   # Construir imágenes
+docker compose build --no-cache        # Re-construir sin caché
+
+--- Ejecución ---
+docker compose run <service>           # Ejecutar servicio una vez
+docker compose run --rm <service>      # Ejecutar y eliminar al terminar
+docker compose run --rm --service-ports <service>  # Con puertos expuestos
+docker compose run -e VAR=value <service>  # Con variable de entorno
+
+--- Shell ---
+docker compose exec <service> bash     # Entrar al servicio corriendo
+
+--- Restart ---
+docker compose restart                 # Reiniciar servicios
+docker compose restart <service>       # Reiniciar un servicio
+
+--- Escalado ---
+docker compose up --scale <service>=3  # Escalar servicio
+
+================================================================================
+  3. PROYECTO: pdfmanager
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/pdfmanager
+
+--- Comandos Docker ---
+docker compose build                    # Construir imagen
+docker compose up                       # Ejecutar (interactivo)
+
+--- Directorios ---
+./pdfs_protegidos/    # Coloca PDFs aquí
+./pdfs_libres/        # Salen los resultados aquí
+
+================================================================================
+  4. PROYECTO: downloader_telegram
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/downloader_telegram
+
+--- Comandos Docker ---
+docker compose build                    # Construir imagen
+docker compose up                       # Ejecutar (interactivo)
+
+# Generador de sesiones portátiles
+docker compose run --rm telegram python test_string.py
+
+--- Seguridad ---
+# Las credenciales se cifran automáticamente en config.bin
+# La llave se guarda en secret.key
+# NUNCA commitees: config.bin, secret.key, .session
+
+================================================================================
+  5. PROYECTO: hdfull-downloader
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/hdfull-downloader
+
+--- Configuración ---
+# Crear archivo .env
+echo "HDFULL_USER=tu_usuario" > .env
+echo "HDFULL_PASS=tu_contraseña" >> .env
+
+--- Comandos Docker ---
+docker compose down                     # Eliminar contenedor antiguo
+docker compose build                    # Construir imagen
+
+# Ejecutar directamente
+docker compose run --rm --service-ports downloader
+
+# Con otra película (variable de entorno)
+docker compose run --rm --service-ports \
+  -e HDFULL_URL="https://hdfull.sbs/pelicula/otra-pelicula" downloader
+
+# Con otra película (argumento posicional)
+docker compose run --rm --service-ports downloader \
+  "https://hdfull.sbs/pelicula/otra-pelicula"
+
+# Ver logs
+docker compose logs -f
+
+--- Puertos ---
+6080 → noVNC (web): http://localhost:6080/vnc.html
+5900 → VNC cliente
+
+--- Variables de entorno ---
+HDFULL_USER            # Usuario (obligatorio)
+HDFULL_PASS            # Contraseña (obligatorio)
+HDFULL_URL             # URL de la película (obligatoria)
+HDFULL_CAPTCHA_TIMEOUT # Segundos esperando captcha (default: 900)
+HDFULL_OUT             # Directorio de salida (default: /app/downloads)
+
+================================================================================
+  6. PROYECTO: TwitchRecorder
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/TwitchRecorder
+
+--- Comandos Docker ---
+docker compose up -d                    # Ejecutar en background (producción)
+docker compose run --rm run             # Ejecutar una vez (test)
+docker compose run --rm run --dry-run   # Dry-run (sin grabar)
+docker compose down                     # Parar
+docker compose logs -f                  # Ver logs
+docker compose build                    # Reconstruir tras cambios
+
+# Ejecutar con config temporal
+docker run --rm \
+  -v ./config.json:/app/config.json:ro \
+  -v /home/jorge/test_videos:/recordings \
+  -e TZ=Europe/Madrid \
+  twitchrecorder-run
+
+--- Configuración (config.json) ---
+{
+    "channels": {
+        "sendosama": { "platform": "twitch" },
+        "MrBeast": { "platform": "youtube" },
+        "adin": { "platform": "kick" }
+    },
+    "record_path": "/recordings",
+    "days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+    "start_time": "21:30",
+    "check_every": 30,
+    "max_duration": "24:00:00",
+    "retry_interval": 60,
+    "copy_to_test": true
+}
+
+--- Formato legacy (solo Twitch) ---
+{ "channels": ["sendosama"] }
+
+--- Cambiar ruta de grabación ---
+# En docker-compose.yml, modificar volumes:
+volumes:
+  - ./config.json:/app/config.json:ro
+  - /ruta/local/en/tu/pc:/recordings
+
+--- Estructura de grabaciones ---
+grabaciones/
+├── 2026/07/
+│   ├── sendosama_2026-07-25_21-30-00.mp4
+│   └── MrBeast_2026-07-26_21-15-00.mp4
+└── test/
+    └── sendosama_2026-07-26_21-15-00.mp4
+
+================================================================================
+  7. PROYECTO: ffmpeg-yt-dlp
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/ffmpeg-yt-dlp
+
+--- Comandos Docker ---
+docker compose build                    # Construir imagen
+docker compose up                       # Ejecutar midu.sh (interactivo)
+
+--- Preview Watcher (ejecutar en WSL, host) ---
+bash preview_watcher.sh --daemon        # Segundo plano
+bash preview_watcher.sh --stop          # Detener
+bash preview_watcher.sh --status        # Verificar estado
+bash preview_watcher.sh --once          # Procesar una petición
+bash preview_watcher.sh                 # Debug en primer plano
+
+--- Variables del Watcher ---
+IDLE_TIMEOUT          # Segundos sin actividad (default: 600)
+MIDU_CONTAINER_NAME   # Nombre del contenedor (default: yt_ffmpeg_downloader)
+
+--- Variables de entorno ---
+NTFY_URL              # Webhook de ntfy.sh para notificaciones push
+
+--- Flujo ---
+docker compose build
+docker compose up
+bash preview_watcher.sh --daemon        # En otra terminal (WSL)
+
+================================================================================
+  ALIAS BASH
+================================================================================
+
+# Agregar a ~/.bashrc o ~/.zshrc:
+alias docker_help='cat /home/jorge/dev/devjobs/docker_help.txt'
+
+# Recargar shell:
+source ~/.bashrc
+
+# Uso:
+docker_help
+
+================================================================================

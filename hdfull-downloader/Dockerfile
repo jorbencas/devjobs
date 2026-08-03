@@ -17,6 +17,6 @@ RUN apk add --no-cache \
     tzdata \
     xauth \
  && python3 -m venv /venv \
- && /venv/bin/pip install --no-cache-dir drissionpage
+ && /venv/bin/pip install --no-cache-dir drissionpage rich
 
 WORKDIR /app

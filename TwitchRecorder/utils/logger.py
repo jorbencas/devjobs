@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
 
-
-class TimestampFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
-        return datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
+try:
+    from rich.logging import RichHandler
+    from rich.console import Console
+    HAS_RICH = True
+except ImportError:
+    HAS_RICH = False
 
 
 def setup_logger(name: str = "twitchrecorder") -> logging.Logger:
@@ -12,8 +14,19 @@ def setup_logger(name: str = "twitchrecorder") -> logging.Logger:
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(TimestampFormatter("%(asctime)s %(message)s"))
+        if HAS_RICH:
+            handler = RichHandler(
+                console=Console(),
+                show_path=False,
+                show_time=False,
+                rich_tracebacks=True,
+                markup=True,
+            )
+            handler.setFormatter(logging.Formatter("%(message)s"))
+        else:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+
         logger.addHandler(handler)
 
     return logger

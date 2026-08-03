@@ -13,37 +13,59 @@
 
 import os, sys, json, asyncio, subprocess, getpass, platform
 from datetime import datetime
-# --- INSTALADOR AUTOMÁTICO DE SISTEMA Y LIBRERÍAS ---
+
 def sistema_auto_setup():
-    print("[*] Verificando entorno y dependencias...")
-    
-    # Lista de librerías Python necesarias
-    libs = ["telethon", "mtranslate", "cryptography", "cryptg"]
-    
-    # 1. Intentar instalar dependencias de sistema si es Linux (Ubuntu)
+    libs = ["telethon", "mtranslate", "cryptography", "cryptg", "rich", "inquirerpy"]
+
     if platform.system().lower() == "linux":
         try:
-            # Verificamos si tenemos pip, si no, intentamos instalarlo
             subprocess.check_call(["python3", "-m", "pip", "--version"], stdout=subprocess.DEVNULL)
         except:
-            print("[!] Pip no detectado. Instalando dependencias de sistema...")
+            print("[!] Instalando pip...")
             subprocess.check_call(["sudo", "apt", "update", "-y"])
             subprocess.check_call(["sudo", "apt", "install", "-y", "python3-pip", "python3-venv"])
 
-    # 2. Instalar librerías de Python
     for lib in libs:
         try:
-            __import__(lib if lib != "cryptography" else "feather") # Verificación simple
+            __import__(lib if lib != "cryptography" else "feather")
         except ImportError:
-            print(f"[+] Instalando librería: {lib}...")
+            print(f"[+] Instalando: {lib}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
 
-# Ejecutar el instalador antes de cargar lo demás
 sistema_auto_setup()
 
 from telethon import TelegramClient, errors, events
 from mtranslate import translate
 from cryptography.fernet import Fernet
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.live import Live
+from inquirerpy import inquirer
+from inquirerpy.separator import Separator
+
+console = Console()
+
+BG = "blue"
+FG = "green"
+
+def styled_panel(content, title="", style=BG):
+    return Panel(content, title=title, border_style=style, expand=True)
+
+def styled_print(msg, style=f"bold {FG}"):
+    console.print(msg, style=style)
+
+def styled_error(msg):
+    console.print(f"  [bold red]✗[/bold red] {msg}")
+
+def styled_success(msg):
+    console.print(f"  [bold green]✓[/bold green] {msg}")
+
+def styled_info(msg):
+    console.print(f"  [bold blue]ℹ[/bold blue] {msg}")
+
+def styled_warn(msg):
+    console.print(f"  [bold yellow]⚠[/bold yellow] {msg}")
 
 # --- CONFIGURACIÓN GLOBAL ---
 CONFIG_FILE = 'config.bin'
@@ -64,11 +86,22 @@ def cargar_o_generar_llave():
             f.write(key)
         return key
 
-# --- SISTEMA DE LOGS EN TIEMPO REAL ---
+# --- SISTEMA DE LOGS ---
 def log(tipo, mensaje):
-    iconos = {"INFO": "ℹ️", "OK": "✅", "WARN": "⚠️", "ERR": "❌", "DB": "🚀", "SPAM": "🚫", "TRAD": "📝"}
+    icons = {"INFO": "ℹ", "OK": "✓", "WARN": "⚠", "ERR": "✗", "DB": "↓", "SPAM": "🚫", "TRAD": "📝"}
+    styles = {
+        "INFO": f"bold {BG}",
+        "OK": f"bold {FG}",
+        "WARN": "bold yellow",
+        "ERR": "bold red",
+        "DB": f"bold {BG}",
+        "SPAM": "bold red",
+        "TRAD": "bold cyan"
+    }
+    icon = icons.get(tipo, "·")
+    style = styles.get(tipo, "white")
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] {iconos.get(tipo, '🔹')} {mensaje}")
+    console.print(f"  [dim]{timestamp}[/dim] [{style}]{icon}[/{style}] {mensaje}")
 
 # --- MÓDULO DE INTELIGENCIA (FILTRO Y TRADUCCIÓN) ---
 def procesar_texto_inteligente(texto, activar_traduccion=False):
@@ -115,19 +148,33 @@ async def download_media_robust(client, message, folder):
 
 
 async def modulo_descarga_masiva(client):
-    log("INFO", "Iniciando Módulo de Descarga Masiva")
-    print("\na) Enlace Único\nb) Rango de IDs (Ej: 100-200)\nc) Procesar enlaces.txt")
-    sub_op = input("\nSelecciona: ").lower()
-    trad = input("¿Traducir textos detectados? (s/n): ").lower() == 's'
+    log("INFO", "Módulo de Descarga Masiva")
+    console.print()
+
+    sub_op = inquirer.select(
+        "Tipo de descarga:",
+        choices=[
+            {"name": "🔗  Enlace Único", "value": "a"},
+            {"name": "📊  Rango de IDs (enlaces.txt)", "value": "b"},
+            {"name": "📄  Procesar enlaces.txt", "value": "c"},
+        ],
+        pointer="▸",
+    ).execute()
+
+    trad = inquirer.confirm("¿Traducir textos detectados?", default=False).execute()
+
     enlaces = []
     if sub_op == 'a':
-        enlaces.append(input("Pega el enlace: ").strip())
-    elif sub_op == 'b':
+        link = inquirer.text(message="Pega el enlace:").execute()
+        if link:
+            enlaces.append(link.strip())
+    elif sub_op in ('b', 'c'):
         if os.path.exists('enlaces.txt'):
             with open('enlaces.txt', 'r') as f:
                 enlaces = [l.strip() for l in f if l.strip()]
+            styled_info(f"Cargados {len(enlaces)} enlaces desde enlaces.txt")
         else:
-            log("ERR", "No se encontró enlaces.txt")
+            styled_error("No se encontró enlaces.txt")
 
     folder = os.path.join(CARPETA_BASE, "Masivo")
     os.makedirs(folder, exist_ok=True)
@@ -159,11 +206,13 @@ async def modulo_descarga_masiva(client):
             log("ERR", f"Error en enlace {link}: {e}")
 
 async def modulo_clonacion(client):
-    origen = input("ID/Username del canal ORIGEN: ")
-    destino = input("ID/Username del canal DESTINO: ")
-    limite = int(input("¿Cuántos mensajes clonar?: "))
-    descargar = input("¿Descargar multimedia también? (s/n): ").lower() == 's'
-    trad = input("¿Traducir contenido al clonar? (s/n): ").lower() == 's'
+    console.print()
+    origen = inquirer.text(message="ID/Username del canal ORIGEN:").execute()
+    destino = inquirer.text(message="ID/Username del canal DESTINO:").execute()
+    limite_str = inquirer.text(message="¿Cuántos mensajes clonar?:").execute()
+    limite = int(limite_str) if limite_str else 100
+    descargar = inquirer.confirm("¿Descargar multimedia también?", default=False).execute()
+    trad = inquirer.confirm("¿Traducir contenido al clonar?", default=False).execute()
     
     cola_descarga = []
     log("INFO", f"Clonando {limite} mensajes...")
@@ -199,7 +248,12 @@ async def modulo_clonacion(client):
 
 async def modulo_filtro_vigilante(client):
     log("INFO", "Modo Vigilante Activo. Ctrl+C para salir.")
-    palabras = input("Palabras clave extra para alertas (separadas por coma): ").lower().split(',')
+    console.print()
+    palabras_str = inquirer.text(
+        message="Palabras clave extra (separadas por coma):",
+        default=""
+    ).execute()
+    palabras = [p.strip().lower() for p in palabras_str.split(',') if p.strip()]
     
     @client.on(events.NewMessage)
     async def handler(event):
@@ -226,9 +280,11 @@ async def main():
 
     config = load_config()
     if not config:
-        print("\n--- CONFIGURACIÓN INICIAL ---")
-        aid = input("API ID: ")
-        ahash = getpass.getpass("API HASH (no se verá lo que escribas): ")
+        console.print()
+        console.print(styled_panel("[bold white]Configuración inicial[/bold white]", title="⚙️ SETUP", style=BG))
+        console.print()
+        aid = inquirer.text(message="API ID:").execute()
+        ahash = inquirer.secret(message="API HASH (oculto):").execute()
         config = json.dumps({'api_id': aid, 'api_hash': ahash})
         contenido_cifrado = cipher.encrypt(config.encode())
         with open(CONFIG_FILE, 'wb') as f:
@@ -252,13 +308,33 @@ async def main():
         return
 
     while True:
-        print(f"\n{'='*45}\n   TELEGRAM ULTIMATE TOOLBOX CLI\n{'='*45}")
-        print("1. Descargas Masivas (Enlace/Rango/TXT)")
-        print("2. Clonación & Backup (Filtro + Traducción)")
-        print("3. Modo Vigilante (Alertas por palabras)")
-        print("4. Re-configurar / Salir")
-        
-        choice = input("\nOpción > ")
+        console.clear()
+        console.print()
+        console.print(styled_panel(
+            "[bold white]Descargador · Clonador · Vigilante[/bold white]\n"
+            "[dim]Telegram Ultimate Toolbox[/dim]",
+            title="📦 TELEGRAM TOOLBOX",
+            style=f"bold {FG}"
+        ))
+        console.print()
+
+        choice = inquirer.select(
+            "Selecciona módulo:",
+            choices=[
+                {"name": "📥  Descargas Masivas (Enlace/Rango/TXT)", "value": "1"},
+                {"name": "🔄  Clonación & Backup (Filtro + Traducción)", "value": "2"},
+                {"name": "👁️   Modo Vigilante (Alertas por palabras)", "value": "3"},
+                Separator(),
+                {"name": "🚪  Re-configurar / Salir", "value": "4"},
+            ],
+            pointer="▸",
+            mandatory=False,
+            default="1",
+        ).execute()
+
+        if choice is None or choice == '4':
+            styled_info("Cerrando sistema...")
+            break
 
         if choice == '1':
             await modulo_descarga_masiva(client)
@@ -268,10 +344,7 @@ async def main():
             try:
                 await modulo_filtro_vigilante(client)
             except KeyboardInterrupt:
-                log("INFO", "Modo Vigilante detenido.")
-        elif choice == '4':
-            log("INFO", "Cerrando sistema...")
-            break
+                styled_warn("Modo Vigilante detenido.")
 
     await client.disconnect()
 

@@ -1,0 +1,9 @@
+services:
+  pdfmanager:
+    build: .
+    container_name: pdfmanager
+    volumes:
+      - ./pdfs_protegidos:/app/pdfs_protegidos
+      - ./pdfs_libres:/app/pdfs_libres
+    stdin_open: true
+    tty: true

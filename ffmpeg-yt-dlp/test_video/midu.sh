@@ -338,8 +338,8 @@ cleanup() {
             wait "$pid" 2>/dev/null
         done
     fi
-    if [[ "${panel_lines:-0}" -gt 0 ]]; then
-        printf '\033[%dA\033[J' "$panel_lines" >&2
+    if [[ "${prev_panel_lines:-0}" -gt 0 ]]; then
+        printf '\033[%dA\033[J' "$prev_panel_lines" >&2
     fi
     rm -rf "$PROG_DIR" 2>/dev/null
     rm -f "$OUTPUT_DIR"/.tmp_* "$OUTPUT_DIR"/*.log "$OUTPUT_DIR"/*.progress 2>/dev/null
@@ -4662,13 +4662,14 @@ BATCH_START=$(date +%s)
 # ── Panel de progreso por archivo ──────────────────────────────────────
 PROG_DIR=$(mktemp -d /tmp/midu_prog_XXXXXX)
 panel_lines=0
+prev_panel_lines=0
 declare -A PID_IDX
 declare -A PID_FILE
 
 clear_panel() {
-    if [[ "${panel_lines:-0}" -gt 0 ]]; then
-        printf '\033[%dA\033[J' "$panel_lines" >&2
-        panel_lines=0
+    if [[ "${prev_panel_lines:-0}" -gt 0 ]]; then
+        printf '\033[%dA\033[J' "$prev_panel_lines" >&2
+        prev_panel_lines=0
     fi
 }
 
@@ -4692,6 +4693,7 @@ render_progress_panel() {
             ((lines++))
         done <<< "$sorted"
         panel_lines=$lines
+        prev_panel_lines=$lines
     else
         clear_panel
     fi
