@@ -60,3 +60,7 @@ Se instalan automáticamente en la imagen:
 - `tqdm` - Barras de progreso
 - `readchar` - Navegación con teclado
 - `Pillow` - Conversión de imágenes
+
+## Blog
+
+- [PDF Ninja Master: Gestor de PDFs con Docker](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master/)

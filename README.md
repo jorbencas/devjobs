@@ -42,3 +42,17 @@ cd ffmpeg-yt-dlp && docker compose build && docker compose up
 ```bash
 docker_help   # Muestra todos los comandos Docker y de cada proyecto
 ```
+
+## 📝 Blog
+
+Artículos técnicos publicados en [blog-jorbencas.vercel.app](https://blog-jorbencas.vercel.app):
+
+| Proyecto | Artículo |
+|----------|----------|
+| `ffmpeg-yt-dlp/` | [FFmpeg + yt-dlp Pipeline: 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/) |
+| `ffmpeg-yt-dlp/` | [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/) |
+| `ffmpeg-yt-dlp/` | [Docker: ffmpeg y yt-dlp en WSL](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/) |
+| `TwitchRecorder/` | [TwitchRecorder v2: Grabador Automático](https://blog-jorbencas.vercel.app/proyectos/twitchrecorder/) |
+| `downloader_telegram/` | [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/) |
+| `pdfmanager/` | [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master/) |
+| `hdfull-downloader/` | [HDFull Downloader con Docker + noVNC](https://blog-jorbencas.vercel.app/proyectos/hdfull-downloader/) |

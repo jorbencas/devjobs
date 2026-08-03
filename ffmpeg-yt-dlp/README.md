@@ -219,3 +219,9 @@ ffmpeg-yt-dlp/
 - **Checkpoint**: Guarda estado para reanudar si se interrumpe
 - **Colisión**: Opciones skip/rename/overwrite para archivos existentes
 - **Notificaciones**: Soporta notify-send (Linux) y ntfy.sh (push)
+
+## Blog
+
+- [FFmpeg + yt-dlp Pipeline: Conversor y Editor de Vídeo con 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/)
+- [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/)
+- [Docker: ffmpeg y yt-dlp en Windows (WSL) y Ubuntu](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/)

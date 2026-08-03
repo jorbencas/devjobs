@@ -73,3 +73,7 @@ Se instalan automáticamente en la imagen:
 - `cryptography` (Fernet) - Cifrado AES de credenciales
 - `mtranslate` - Traducción automática
 - `cryptg` - Aceleración de descargas
+
+## Blog
+
+- [Telegram Ultimate Toolbox: Descargador Masivo y Vigilante](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/)

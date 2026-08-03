@@ -142,3 +142,7 @@ volumes:
   - ./config.json:/app/config.json:ro
   - /ruta/local/en/tu/pc:/recordings
 ```
+
+## Blog
+
+- [TwitchRecorder v2: Grabador Automático de Twitch, YouTube y Kick](https://blog-jorbencas.vercel.app/proyectos/twitchrecorder/)

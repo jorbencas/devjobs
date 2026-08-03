@@ -179,3 +179,7 @@ Si una descarga falla, el script escribe `/app/diagnostics.txt` con:
 - `.env` contiene credenciales y está en el `.gitignore` raíz (`devjobs/.gitignore`). No lo commitees.
 - El contenedor expone VNC sin contraseña (`-nopw`); úsalo solo en local (puertos `localhost`).
 - No tocar el proyecto hermano `ffmpeg-yt-dlp`: todo el flujo vive en este directorio.
+
+## Blog
+
+- [HDFull Downloader: Descargador de Películas con Docker + noVNC](https://blog-jorbencas.vercel.app/proyectos/hdfull-downloader/)
