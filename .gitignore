@@ -34,3 +34,20 @@ pdfs_protegidos
 tituls AR
 test/
 optimizados/
+
+### Python ###
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+### Logs ###
+logs/
+
+### Agents / Skills ###
+.agents/
+skills-lock.json
+
+### Tests ###
+tests/
