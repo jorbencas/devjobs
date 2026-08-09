@@ -50,6 +50,81 @@ if not TARGET_URL:
     sys.exit(1)
 CAPTCHA_TIMEOUT = int(os.environ.get("HDFULL_CAPTCHA_TIMEOUT", "900"))
 
+# Dominios oficiales de hdfull (se obtienen de dominioshdfull.com)
+HDFULL_DOMAINS = []
+
+
+def fetch_hdfull_domains():
+    """Obtiene la lista de dominios desde dominioshdfull.com."""
+    global HDFULL_DOMAINS
+    try:
+        r = requests.get("https://dominioshdfull.com/", timeout=10,
+                         headers={"User-Agent": "Mozilla/5.0"})
+        # Extraer solo dominios hdfull.* del HTML
+        domains = re.findall(r'(?:https?://)?((?:www\d?\.)?hdfull\.[a-z]+)', r.text, re.I)
+        HDFULL_DOMAINS = list(dict.fromkeys(domains))  # uniq, preserve order
+        log(f"Dominios obtenidos: {len(HDFULL_DOMAINS)} ({', '.join(HDFULL_DOMAINS[:5])}...)")
+    except Exception as e:
+        log(f"No se pudieron obtener dominios: {e}")
+        HDFULL_DOMAINS = ["www3.hdfull.one", "hdfull.sbs", "hdfull.org"]
+
+
+def find_working_domain(url):
+    """Si el dominio de la URL no responde, prueba dominios alternativos."""
+    if not HDFULL_DOMAINS:
+        fetch_hdfull_domains()
+
+    parsed = urllib.parse.urlparse(url)
+    current_domain = parsed.netloc.lower().replace("www.", "")
+
+    # Primero probar el dominio actual
+    try:
+        r = requests.get(f"https://{parsed.netloc}/", timeout=8, allow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 404:
+            # Verificar que no sea solo Cloudflare (título "Just a moment...")
+            if "just a moment" not in r.text[:2000].lower():
+                log(f"Dominio actual {parsed.netloc} accesible (HTTP {r.status_code})")
+                return url
+            else:
+                log(f"Dominio {parsed.netloc} bloqueado por Cloudflare")
+    except Exception:
+        pass
+
+    log(f"Dominio {parsed.netloc} no accesible, buscando alternativo...")
+
+    # Probar dominios alternativos
+    for domain in HDFULL_DOMAINS:
+        if domain.lower().replace("www.", "") == current_domain:
+            continue
+        try:
+            r = requests.get(f"https://{domain}/", timeout=8, allow_redirects=True,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code != 404:
+                if "just a moment" not in r.text[:2000].lower():
+                    new_url = url.replace(parsed.netloc, domain)
+                    log(f"Dominio alternativo encontrado: {domain} (HTTP {r.status_code})")
+                    log(f"Nueva URL: {new_url}")
+                    return new_url
+        except Exception:
+            continue
+
+    log("No se encontró ningún dominio accesible, usando el primero de la lista")
+    # Si todos tienen Cloudflare, usar el primer dominio (el que Cloudflare no bloquea)
+    for domain in HDFULL_DOMAINS:
+        try:
+            r = requests.get(f"https://{domain}/", timeout=8, allow_redirects=True,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code != 404:
+                new_url = url.replace(parsed.netloc, domain)
+                log(f"Usando dominio con Cloudflare: {domain} (HTTP {r.status_code})")
+                log(f"Nueva URL: {new_url}")
+                return new_url
+        except Exception:
+            continue
+
+    return url
+
 STEALTH = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 Object.defineProperty(navigator, 'languages', {get: () => ['es-ES', 'es']});
@@ -98,13 +173,14 @@ def launch():
     return page
 
 
-def login(page):
+def login(page, domain):
     if not HDFULL_USER or not HDFULL_PASS:
         log("FALTAN credenciales (HDFULL_USER / HDFULL_PASS)")
         return False
+    login_url = f"https://{domain}/login"
     for attempt in range(4):
         try:
-            page.get("https://hdfull.sbs/login")
+            page.get(login_url)
             time.sleep(6)
             page.ele("css:#popup_login_form input[name=username]", timeout=8).input(HDFULL_USER)
             page.ele("css:#popup_login_form input[name=password]", timeout=5).input(HDFULL_PASS)
@@ -360,17 +436,47 @@ def save_meta(url, dest):
 
 
 def main():
+    global TARGET_URL
+    TARGET_URL = find_working_domain(TARGET_URL)
+    domain = urllib.parse.urlparse(TARGET_URL).netloc
     log(f"URL objetivo: {TARGET_URL}")
     os.makedirs(OUT_DIR, exist_ok=True)
     page = launch()
 
-    if not login(page):
+    if not login(page, domain):
         page.quit()
         sys.exit(1)
 
     page.get(TARGET_URL)
     time.sleep(8)
-    log(f"Página: {page.url[:100]} | {page.title[:70]}")
+
+    def get_title():
+        try:
+            return page.title or ""
+        except Exception:
+            return ""
+
+    title = get_title()
+    log(f"Página: {page.url[:100]} | {title[:70]}")
+
+    # Esperar a que se resuelva Cloudflare challenge si está presente
+    cf_wait = 0
+    cf_timeout = 120
+    title = get_title()
+    while "just a moment" in title.lower() and cf_wait < cf_timeout:
+        if cf_wait % 10 == 0:
+            log(f"PENDIENTE: Cloudflare challenge activo ({cf_wait}s / {cf_timeout}s) - resuélvelo en http://localhost:6080/vnc.html")
+        time.sleep(5)
+        cf_wait += 5
+        title = get_title()
+
+    title = get_title()
+    if "just a moment" in title.lower():
+        log("Cloudflare challenge no resuelto a tiempo")
+        page.quit()
+        sys.exit(1)
+
+    log(f"Página cargada: {title[:70]}")
 
     frame = find_player_frame(page)
     if not frame:

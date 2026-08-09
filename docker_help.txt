@@ -116,6 +116,7 @@ docker compose run --rm telegram python test_string.py
 ================================================================================
 
 Ruta: /home/jorge/dev/devjobs/hdfull-downloader
+Contenedor: hdfull-downloader
 
 --- Configuración ---
 # Crear archivo .env
@@ -124,35 +125,105 @@ echo "HDFULL_PASS=tu_contraseña" >> .env
 
 --- Comandos Docker ---
 docker compose down                     # Eliminar contenedor antiguo
-docker compose build                    # Construir imagen
+docker compose build --no-cache         # Construir imagen (IMPORTANTE: usar --no-cache)
 
-# Ejecutar directamente
-docker compose run --rm --service-ports downloader
+# Ejecutar (URL como argumento - recomendado)
+docker compose run --rm hdfull_downloader "https://hdfull.sbs/pelicula/swimming-pool"
 
-# Con otra película (variable de entorno)
-docker compose run --rm --service-ports \
-  -e HDFULL_URL="https://hdfull.sbs/pelicula/otra-pelicula" downloader
+# Ejecutar (URL como variable de entorno - fallback)
+docker compose run --rm -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader
 
-# Con otra película (argumento posicional)
-docker compose run --rm --service-ports downloader \
-  "https://hdfull.sbs/pelicula/otra-pelicula"
+# Borrar perfil del navegador y ejecutar (limpiar cookies/sesión)
+docker compose run --rm hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
+
+# Menú interactivo
+./menu.sh                              # Menú normal
+./menu.sh --clear-profile              # Menú con perfil limpio
 
 # Ver logs
 docker compose logs -f
 
---- Puertos ---
+--- Puertos (network_mode: host) ---
 6080 → noVNC (web): http://localhost:6080/vnc.html
 5900 → VNC cliente
 
 --- Variables de entorno ---
 HDFULL_USER            # Usuario (obligatorio)
 HDFULL_PASS            # Contraseña (obligatorio)
-HDFULL_URL             # URL de la película (obligatoria)
+HDFULL_URL             # URL de la película (fallback si no se pasa como argumento)
 HDFULL_CAPTCHA_TIMEOUT # Segundos esperando captcha (default: 900)
 HDFULL_OUT             # Directorio de salida (default: /app/downloads)
 
+--- Características ---
+- Detección automática de dominios desde dominioshdfull.com
+- Cloudflare challenge: espera manual en noVNC sin recargar la página
+- network_mode: host: puertos directos en localhost
+- Persistencia de sesión via volumen profile
+
+--- Archivos importantes ---
+.profile/              # Perfil de Chromium (persistente entre ejecuciones)
+downloads/             # MP4 descargados
+
 ================================================================================
-  6. PROYECTO: TwitchRecorder
+  6. PROYECTO: aula-downloader
+================================================================================
+
+Ruta: /home/jorge/dev/devjobs/aula-downloader
+Contenedor: aula-downloader
+
+--- Descripción ---
+Descargador de vídeos de aula.pmoposiciones.com (plataforma Moodle con Vimeo).
+No necesita navegador - usa requests + Python puro para extraer URLs HLS.
+Incluye logs mejorados con progreso, ETA y resumen final.
+
+--- Comandos Docker ---
+docker compose build                    # Construir imagen
+docker compose build --no-cache         # Reconstruir sin caché
+
+# Descargar una carpeta
+docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py \
+  "https://aula.pmoposiciones.com/mod/folder/view.php?id=4189"
+
+# Descargar múltiples carpetas
+docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py \
+  "https://aula.pmoposiciones.com/mod/folder/view.php?id=4189" \
+  "https://aula.pmoposiciones.com/mod/folder/view.php?id=4184" \
+  "https://aula.pmoposiciones.com/mod/folder/view.php?id=4194" \
+  "https://aula.pmoposiciones.com/mod/folder/view.php?id=4127"
+
+# Menú interactivo (sin argumentos)
+docker compose run --rm aula_downloader
+
+# Ver logs
+docker compose logs -f
+
+--- Variables de entorno ---
+AULA_USER            # Usuario de aula (default: REDACTED)
+AULA_PASS            # Contraseña de aula (default: REDACTED)
+
+--- Directorios ---
+./descargas/              # Salen los vídeos organizados por curso
+./descargas/CURSO/        # Cada curso tiene su propia carpeta
+
+--- Logs mejorados ---
+- Pre-escaneo de carpetas con conteo total de vídeos
+- Progreso por segmento con %, tiempo transcurrido y ETA
+- Resumen por vídeo: tamaño, tiempo, velocidad
+- Panel final: total vídeos, tamaño, tiempo, velocidad media
+- Lista de vídeos fallidos si los hay
+
+--- Cómo funciona ---
+1. Login con requests (sin navegador)
+2. Pre-escanea carpetas y cachea HTML (sin requests duplicados)
+3. Extrae iframes de Vimeo del HTML cacheado
+4. Para cada vídeo, obtiene el player HTML de Vimeo
+5. Extrae el playerConfig JSON del HTML
+6. Descarga segmentos HLS con Python (video + audio por separado)
+7. Concatena segmentos y mezcla con ffmpeg
+8. Guarda MP4 organizado por curso
+
+================================================================================
+  7. PROYECTO: TwitchRecorder
 ================================================================================
 
 Ruta: /home/jorge/dev/devjobs/TwitchRecorder

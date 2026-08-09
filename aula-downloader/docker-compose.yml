@@ -1,0 +1,10 @@
+services:
+  aula_downloader:
+    build: .
+    container_name: aula-downloader
+    volumes:
+      - ./descargas:/app/descargas
+    environment:
+      - AULA_USER=REDACTED
+      - AULA_PASS=REDACTED
+    restart: unless-stopped

@@ -13,6 +13,7 @@ Repositorio de herramientas avanzadas para la gestión de activos digitales, aut
 | 3 | `hdfull-downloader/` | Descargador de películas HDFull con Docker + noVNC | ✅ | [README](hdfull-downloader/README.md) |
 | 4 | `TwitchRecorder/` | Grabador automático de directos de Twitch/YouTube/Kick | ✅ | [README](TwitchRecorder/README.md) |
 | 5 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo con ffmpeg + yt-dlp | ✅ | [README](ffmpeg-yt-dlp/README.md) |
+| 6 | `aula-downloader/` | Descargador de vídeos de aula Moodle/Vimeo con Python puro | ✅ | [README](aula-downloader/README.md) |
 
 ---
 
@@ -35,6 +36,9 @@ cd TwitchRecorder && docker compose up -d
 
 # FFmpeg + yt-dlp
 cd ffmpeg-yt-dlp && docker compose build && docker compose up
+
+# AULA Downloader
+cd aula-downloader && docker compose build && docker compose run --rm aula_downloader
 ```
 
 ## 📋 Cheat Sheet
@@ -45,14 +49,12 @@ docker_help   # Muestra todos los comandos Docker y de cada proyecto
 
 ## 📝 Blog
 
-Artículos técnicos publicados en [blog-jorbencas.vercel.app](https://blog-jorbencas.vercel.app):
+Artículos técnicos en [blog-jorbencas.vercel.app](https://blog-jorbencas.vercel.app):
 
 | Proyecto | Artículo |
 |----------|----------|
 | `ffmpeg-yt-dlp/` | [FFmpeg + yt-dlp Pipeline: 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/) |
 | `ffmpeg-yt-dlp/` | [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/) |
 | `ffmpeg-yt-dlp/` | [Docker: ffmpeg y yt-dlp en WSL](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/) |
-| `TwitchRecorder/` | [TwitchRecorder v2: Grabador Automático](https://blog-jorbencas.vercel.app/proyectos/twitchrecorder/) |
 | `downloader_telegram/` | [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/) |
 | `pdfmanager/` | [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master/) |
-| `hdfull-downloader/` | [HDFull Downloader con Docker + noVNC](https://blog-jorbencas.vercel.app/proyectos/hdfull-downloader/) |

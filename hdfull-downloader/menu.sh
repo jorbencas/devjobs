@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # HDFull Downloader - menú interactivo
-# Ejecuta:  ./menu.sh
+# Ejecuta:  ./menu.sh [--clear-profile]
 
 set -u
 cd "$(dirname "$0")" || exit 1
 
 LOGDIR="logs"
 LOGFILE="$LOGDIR/ultimo_run.log"
-NAME_PATTERN="hdfull-downloader-downloader-run-"
+NAME_PATTERN="hdfull-downloader-"
 NOVNC_URL="http://localhost:6080/vnc.html"
+CLEAR_PROFILE=false
+
+# Procesar argumentos
+for arg in "$@"; do
+  case "$arg" in
+    --clear-profile) CLEAR_PROFILE=true ;;
+  esac
+done
 
 mkdir -p "$LOGDIR"
 
@@ -38,7 +46,7 @@ check_env() {
 build_if_needed() {
   if ! docker image inspect hdfull-downloader:latest >/dev/null 2>&1; then
     echo "Imagen no encontrada. Construyendo (puede tardar)..."
-    docker compose build || { echo "ERROR construyendo la imagen"; return 1; }
+    docker compose build --no-cache || { echo "ERROR construyendo la imagen"; return 1; }
   fi
 }
 
@@ -68,11 +76,18 @@ run_foreground() {
   build_if_needed || return 1
   cleanup_leftovers
   echo
+  if [ "$CLEAR_PROFILE" = true ]; then
+    echo ">>> Perfil del navegador se borrará antes de arrancar <<<"
+  fi
   echo "Descargando en PRIMER PLANO. Para resolver el captcha abre:"
   echo "  $NOVNC_URL"
   echo "Ctrl+C interrumpe la descarga y vuelve al menú."
   echo "------------------------------------------------------"
-  docker compose run --rm --service-ports -e HDFULL_URL="$url" downloader | tee "$LOGFILE"
+  local extra_args=""
+  if [ "$CLEAR_PROFILE" = true ]; then
+    extra_args="--clear-profile"
+  fi
+  docker compose run --rm hdfull_downloader $extra_args "$url" | tee "$LOGFILE"
   echo "------------------------------------------------------"
   echo "Descarga finalizada. MP4 en downloads/  (logs en $LOGFILE)"
 }

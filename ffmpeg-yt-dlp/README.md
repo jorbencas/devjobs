@@ -18,16 +18,25 @@ docker compose build
 docker compose up
 ```
 
-Al ejecutar, `midu.sh` arranca un menú interactivo con 27 modos.
+Al ejecutar, `midu.sh` arranca un menú interactivo con 31 modos.
 
 ### Ejecutar midu.sh (CLI)
 
 ```bash
 # Dentro del contenedor o con yt-dlp + ffmpeg instalados
 ./midu.sh -d "URL"                              # Descargar
+./midu.sh -d "URL" -dq 1080                     # Descargar a 1080p
+./midu.sh -d "URL" -df mkv                      # Descargar como MKV
+./midu.sh -d "URL" --playlist                   # Descargar playlist
 ./midu.sh --cut -ss 00:01:30 -e 00:03:45        # Cortar (lossless)
 ./midu.sh --convert -s telegram                  # Convertir para Telegram
 ./midu.sh --convert -p web -g 1.5               # Comprimir a 1.5GB
+./midu.sh --convert -vc hevc --container mkv     # H265 a MKV
+./midu.sh --remux --container mp4                # Cambiar contenedor sin re-encoding
+./midu.sh --tracks "v:0,a:1,s:0"                 # Reordenar pistas
+./midu.sh --concat-smart v1.mp4 v2.mp4           # Unir (auto-detecta compat)
+./midu.sh --concat-smart --crossfade 1 v1.mp4 v2.mp4  # Unir con crossfade
+./midu.sh --chain "cut=00:01:00:00:05:00" "convert=720"  # Pipeline encadenado
 ./midu.sh --gif                                  # Crear GIF
 ./midu.sh --thumbnail --thumbnail-time 00:01:30  # Captura de pantalla
 ./midu.sh --info                                 # Info del vídeo
@@ -45,7 +54,7 @@ bash preview_watcher.sh --once     # procesar una petición y salir
 bash preview_watcher.sh            # bucle en primer plano (debug)
 ```
 
-## Los 27 modos de midu.sh
+## Los 31 modos de midu.sh
 
 | # | Modo | Descripción | Ejemplo |
 |---|------|-------------|---------|
@@ -68,7 +77,7 @@ bash preview_watcher.sh            # bucle en primer plano (debug)
 | 17 | `audio-only` | Extraer solo audio | `-ao "URL"` |
 | 18 | `stabilize` | Quitar temblor (vidstab) | `--stabilize 5` |
 | 19 | `adjust` | Ajustar brillo, contraste, saturación, gamma | `--adjust brightness=0.5 contrast=1.2` |
-| 20 | `censur` | Pixelar regiones (caras, matrículas) | `--censor 100:50:200:150` |
+| 20 | `censor` | Pixelar regiones (caras, matrículas) | `--censor 100:50:200:150` |
 | 21 | `denoise` | Reducir ruido | `--denoise 50` |
 | 22 | `sharpen` | Enfocar vídeo borroso | `--sharpen 5` |
 | 23 | `reverse` | Invertir vídeo (al revés) | `--reverse` |
@@ -76,6 +85,23 @@ bash preview_watcher.sh            # bucle en primer plano (debug)
 | 25 | `keyframes` | Extraer todas las imágenes I-frame | `--keyframes` |
 | 26 | `aspect` | Cambiar ratio de aspecto | `--aspect 16:9` |
 | 27 | `metadata` | Editar título, autor, comentario | `--metadata title="Mi vídeo"` |
+| 28 | `remux` | Cambiar contenedor sin re-encoding, selección interactiva de audio | `--remux` |
+| 29 | `tracks` | Reordenar/renombrar pistas de vídeo, audio y subtítulos | `--tracks "v:0,a:1,s:0"` |
+| 30 | `concat-smart` | Unir con auto-detección de compatibilidad + crossfade | `--concat-smart v1.mp4 v2.mp4` |
+| 31 | `chain` | Pipeline encadenado: varios pasos en un solo comando | `--chain "cut=00:01:00:00:05:00" "convert=720"` |
+
+## Selección de audio interactivo
+
+Cuando un vídeo tiene varias pistas de audio (ej: español, inglés, commentary), los modos `remux`, `tracks` y `convert` muestran un menú interactivo:
+
+```
+Pistas de audio disponibles:
+     1) Pista 0 — spa (aac)
+     2) Pista 1 — eng (ac3)
+     3) Pista 2 — Commentary (mp3)
+     0) Primera pista (automático)
+  → Selecciona audio [0-3]: 1
+```
 
 ## Sub-modos de corte
 
@@ -123,9 +149,17 @@ bash preview_watcher.sh            # bucle en primer plano (debug)
 
 ## Aceleración por hardware
 
-- **NVENC** (NVIDIA): `nvidia-smi` disponible → usa `h264_nvenc`
-- **VAAPI** (Intel/AMD): `vainfo` disponible → usa `h264_vaapi`
+La GPU se detecta automáticamente y se aplica en **todos** los modos de edición:
+
+- **NVENC** (NVIDIA): `nvidia-smi` disponible → usa `h264_nvenc` / `hevc_nvenc`
+- **VAAPI** (Intel/AMD): `vainfo` disponible → usa `h264_vaapi` / `hevc_vaapi`
 - **CPU**: fallback con libx264/libx265
+
+| GPU | Speedup | Modos soportados |
+|-----|---------|------------------|
+| NVIDIA | 2-5x | Todos (stabilize, adjust, censor, denoise, sharpen, reverse, aspect, concat, convert) |
+| Intel/AMD | 1.5-3x | Todos |
+| CPU | 1x | Todos |
 
 ## Flags generales
 
@@ -141,9 +175,49 @@ bash preview_watcher.sh            # bucle en primer plano (debug)
 | `--notify` | Notificación al terminar (notify-send) |
 | `--write-subs` | Descargar subtítulos con yt-dlp |
 | `--sub-langs LANGS` | Idiomas de subtítulos (default: es,en) |
+| `--container FMT` | Formato de contenedor de salida: mp4\|mkv (default: mp4) |
+| `--audio-lang LANG` | Seleccionar pista de audio por idioma (spa, eng, und) |
+| `--recursive` | Buscar en todas las subcarpetas (no solo 2 niveles) |
 | `--checkpoint FILE` | Guardar progreso para resume |
 | `--resume [FILE]` | Continuar desde checkpoint |
 | `--retry` | Reintentar archivos fallidos al terminar |
+
+## Flags de descarga
+
+| Flag | Descripción |
+|------|-------------|
+| `-d, --download URL` | Descargar vídeo de URL |
+| `-dq, --dl-quality QUALITY` | Calidad: best, 4k, 1080, 720, 480, audio-only |
+| `-df, --dl-format FORMAT` | Formato: mp4, mkv, webm, best |
+| `--playlist` | Descargar playlist completa |
+| `--dl-subs-only` | Solo descargar subtítulos |
+| `-ds, --dl-start TIME` | Inicio de descarga parcial |
+| `-de, --dl-end TIME` | Fin de descarga parcial |
+
+## Flags de unión
+
+| Flag | Descripción |
+|------|-------------|
+| `--concat FILE1 FILE2...` | Unir vídeos (stream copy si compatible) |
+| `--concat-smart FILE1 FILE2...` | Unir con auto-detección + fallback re-encode |
+| `--crossfade DURATION` | Crossfade entre clips (segundos) |
+
+## Pipeline encadenado
+
+```bash
+# Formato: --chain "operación=arg1:arg2" "operación=arg2"
+./midu.sh --chain "cut=00:01:00:00:05:00" "convert=720" "fade=2"
+
+# Operaciones disponibles:
+#   cut=START:END        Cortar vídeo
+#   convert=RES          Convertir (720, 1080, 4k)
+#   rotate=GRADOS        Rotar (90, 180, 270)
+#   fade=SEGUNDOS        Fade in/out
+#   reverse              Invertir vídeo
+#   denoise=FUERZA       Reducir ruido (1-100)
+#   sharpen=FUERZA       Enfocar (1-10)
+#   normalize            Normalizar audio
+```
 
 ## Variables del Preview Watcher
 
@@ -191,7 +265,7 @@ ffmpeg-yt-dlp/
 ├── docker-compose.yml     # servicio Docker (Alpine + ffmpeg + yt-dlp)
 ├── preview_watcher.sh     # abre vídeos en WSL/Windows (host)
 └── test_video/
-    ├── midu.sh            # script principal (4797 líneas, 27 modos)
+    ├── midu.sh            # script principal (~5000 líneas, 29 modos)
     ├── optimizados/       # vídeos convertidos (por defecto)
     └── test/              # vídeos de entrada (por defecto)
 ```

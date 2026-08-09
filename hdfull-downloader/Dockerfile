@@ -20,3 +20,6 @@ RUN apk add --no-cache \
  && /venv/bin/pip install --no-cache-dir drissionpage rich
 
 WORKDIR /app
+
+ENTRYPOINT ["sh", "/app/start.sh"]
+CMD []

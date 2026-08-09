@@ -1,19 +1,16 @@
 services:
-  downloader:
+  hdfull_downloader:
     build: .
     image: hdfull-downloader:latest
-    container_name: hdfull_downloader
+    container_name: hdfull-downloader
+    network_mode: host
     volumes:
       - .:/app
       - profile:/profile
-    ports:
-      - "6080:6080"
-      - "5900:5900"
     environment:
       - HDFULL_USER=${HDFULL_USER}
       - HDFULL_PASS=${HDFULL_PASS}
       - TZ=Europe/Madrid
-    command: sh /app/start.sh
 
 volumes:
   profile:

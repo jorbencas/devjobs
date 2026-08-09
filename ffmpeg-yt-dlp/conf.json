@@ -9,9 +9,9 @@
       "preset": "default",
       "videoCodec": "h264",
       "audioCodec": "aac",
-      "audioBitrate": "128k",
-      "resolution": "720",
-      "maxSize": "1.5"
+      "audioBitrate": "192k",
+      "resolution": "original",
+      "maxSize": "1.7"
     }
   }
 }

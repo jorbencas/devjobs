@@ -1,6 +1,24 @@
 #!/bin/sh
 # Arranca el escritorio virtual, VNC/noVNC y el descargador de hdfull.
 
+CLEAR_PROFILE=false
+URL=""
+
+# Procesar argumentos
+for arg in "$@"; do
+  case "$arg" in
+    --clear-profile) CLEAR_PROFILE=true ;;
+    *) URL="$arg" ;;
+  esac
+done
+
+# Borrar perfil si se pide
+if [ "$CLEAR_PROFILE" = true ]; then
+    echo "Borrando perfil del navegador..."
+    rm -rf /profile/*
+    echo "Perfil borrado. Se creará uno nuevo."
+fi
+
 pkill -f "remote-debugging-port=9312" 2>/dev/null || true
 pkill -f "user-data-dir=/profile" 2>/dev/null || true
 rm -f /profile/SingletonLock /profile/SingletonSocket /profile/SingletonCookie || true
@@ -25,5 +43,18 @@ echo "  VNC:    localhost:5900"
 echo "======================================================"
 
 export DISPLAY=:99
-/venv/bin/python /app/hdfull_downloader.py "$@"
+# Fallback a variable de entorno si no hay argumento positional
+if [ -z "$URL" ] && [ -n "$HDFULL_URL" ]; then
+    URL="$HDFULL_URL"
+fi
+echo "URL: $URL"
+if [ "$CLEAR_PROFILE" = true ]; then
+    echo ">>> Perfil borrado <<<"
+fi
+if [ -n "$URL" ]; then
+    /venv/bin/python /app/hdfull_downloader.py "$URL"
+else
+    echo "ERROR: No se ha proporcionado URL"
+    /venv/bin/python /app/hdfull_downloader.py
+fi
 echo "=== descargador terminado ==="
