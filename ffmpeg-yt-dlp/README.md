@@ -18,7 +18,7 @@ docker compose build
 docker compose up
 ```
 
-Al ejecutar, `midu.sh` arranca un menú interactivo con 31 modos.
+Al ejecutar, `midu.sh` arranca un menú interactivo con 33 modos.
 
 ### Ejecutar midu.sh (CLI)
 
@@ -37,6 +37,8 @@ Al ejecutar, `midu.sh` arranca un menú interactivo con 31 modos.
 ./midu.sh --concat-smart v1.mp4 v2.mp4           # Unir (auto-detecta compat)
 ./midu.sh --concat-smart --crossfade 1 v1.mp4 v2.mp4  # Unir con crossfade
 ./midu.sh --chain "cut=00:01:00:00:05:00" "convert=720"  # Pipeline encadenado
+./midu.sh --compose                             # Compose:选 pistas personalizadas
+./midu.sh --hls                                 # HLS streaming (m3u8)
 ./midu.sh --gif                                  # Crear GIF
 ./midu.sh --thumbnail --thumbnail-time 00:01:30  # Captura de pantalla
 ./midu.sh --info                                 # Info del vídeo
@@ -54,7 +56,50 @@ bash preview_watcher.sh --once     # procesar una petición y salir
 bash preview_watcher.sh            # bucle en primer plano (debug)
 ```
 
-## Los 31 modos de midu.sh
+### Backup de canales de YouTube
+
+Script para backup automático con archive (no re-descarga):
+
+```bash
+# Backup de canales específicos
+bash scripts/backup_youtube.sh https://www.youtube.com/@Canal1 https://www.youtube.com/@Canal2
+
+# Backup con calidad y formato personalizados
+bash scripts/backup_youtube.sh -q 720 -f mkv https://www.youtube.com/@Canal1
+
+# Directorio de backup personalizado
+BACKUP_DIR=/mnt/backup bash scripts/backup_youtube.sh https://www.youtube.com/@Canal1
+```
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `BACKUP_DIR` | `~/Backups/YouTube` | Directorio de backup |
+| `MAX_QUALITY` | `1080` | Calidad máxima |
+| `MERGE_FORMAT` | `mp4` | Formato de salida |
+
+### Monitor de carpeta (compresión automática)
+
+Vigila una carpeta y comprime vídeos nuevos automáticamente:
+
+```bash
+# Monitor con configuración por defecto
+bash scripts/monitor_folder.sh ~/Downloads/videos
+
+# Personalizar CRF, preset y destino
+bash scripts/monitor_folder.sh -o /mnt/comp -c 23 -p medium ~/Videos/nuevos
+
+# Con intervalo de polling personalizado
+bash scripts/monitor_folder.sh --interval 60 ~/Videos/para_comprimir
+```
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `OUTPUT_DIR` | `~/Videos/comprimidos` | Directorio de salida |
+| `CRF` | `28` | Calidad (menor = mejor) |
+| `PRESET` | `fast` | Velocidad de encoding |
+| `POLL_INTERVAL` | `30` | Segundos entre comprobaciones |
+
+## Los 33 modos de midu.sh
 
 | # | Modo | Descripción | Ejemplo |
 |---|------|-------------|---------|
@@ -89,6 +134,8 @@ bash preview_watcher.sh            # bucle en primer plano (debug)
 | 29 | `tracks` | Reordenar/renombrar pistas de vídeo, audio y subtítulos | `--tracks "v:0,a:1,s:0"` |
 | 30 | `concat-smart` | Unir con auto-detección de compatibilidad + crossfade | `--concat-smart v1.mp4 v2.mp4` |
 | 31 | `chain` | Pipeline encadenado: varios pasos en un solo comando | `--chain "cut=00:01:00:00:05:00" "convert=720"` |
+| 32 | `compose` | Seleccionar vídeo + varias pistas de audio + subtítulos + codec por pista | `--compose` |
+| 33 | `hls` | Preparar vídeo para streaming HLS (m3u8) con múltiples calidades | `--hls` |
 
 ## Selección de audio interactivo
 
@@ -193,6 +240,13 @@ La GPU se detecta automáticamente y se aplica en **todos** los modos de edició
 | `--dl-subs-only` | Solo descargar subtítulos |
 | `-ds, --dl-start TIME` | Inicio de descarga parcial |
 | `-de, --dl-end TIME` | Fin de descarga parcial |
+| `--download-archive FILE` | Guardar historial (no re-descargar) |
+| `--dateafter DATE` | Solo vídeos posteriores a fecha (YYYYMMDD) |
+| `--datebefore DATE` | Solo vídeos anteriores a fecha (YYYYMMDD) |
+| `--playlist-items RANGE` | Seleccionar items (ej: 1-5, 1,3,5) |
+| `--flat-playlist` | Listar títulos sin descargar |
+| `--playlist-reverse` | Invertir orden de playlist |
+| `--playlist-random` | Orden aleatorio de playlist |
 
 ## Flags de unión
 
@@ -219,6 +273,34 @@ La GPU se detecta automáticamente y se aplica en **todos** los modos de edició
 #   normalize            Normalizar audio
 ```
 
+## Compose (selección de pistas)
+
+Selecciona qué pistas de vídeo, audio y subtítulos quieres en el archivo final:
+
+```bash
+./midu.sh --compose
+```
+
+Flujo:
+1. Seleccionar pista de vídeo (copy o elegir otra)
+2. Elegir varias pistas de audio (rango: 1-3 o selección múltiple 1,2,4)
+3. Asignar codec individual por cada pista de audio (aac, copy, opus, ac3, eac3, flac)
+4. Elegir subtítulos (opcional)
+5. Seleccionar contenedor de salida (mkv, mp4, ts)
+
+## HLS (streaming)
+
+Prepara vídeos para streaming con múltiples calidades:
+
+```bash
+./midu.sh --hls
+```
+
+Genera:
+- Múltiples calidades (360p a 4K)
+- Segmentos configurables (default 4s)
+- Playlist maestro adaptativo (master.m3u8)
+
 ## Variables del Preview Watcher
 
 | Variable | Default | Descripción |
@@ -233,39 +315,17 @@ La GPU se detecta automáticamente y se aplica en **todos** los modos de edició
 |----------|-------------|
 | `NTFY_URL` | URL del webhook de ntfy.sh para notificaciones push |
 
-## Configuración persistente (conf.json)
-
-```json
-{
-  "inputDir": ".",
-  "outputDir": "./optimizados",
-  "extensions": "avi,webm,mkv,mp4,flv",
-  "verbose": true,
-  "modes": {
-    "convert": {
-      "social": "",
-      "preset": "default",
-      "videoCodec": "h264",
-      "audioCodec": "aac",
-      "audioBitrate": "128k",
-      "resolution": "720",
-      "maxSize": "1.5"
-    }
-  }
-}
-```
-
-La configuración se guarda con `-c` y se carga automáticamente al iniciar.
-
 ## Estructura
 
 ```
 ffmpeg-yt-dlp/
-├── conf.json              # configuración de conversión
 ├── docker-compose.yml     # servicio Docker (Alpine + ffmpeg + yt-dlp)
 ├── preview_watcher.sh     # abre vídeos en WSL/Windows (host)
+├── scripts/
+│   ├── backup_youtube.sh  # backup automático de canales de YouTube
+│   └── monitor_folder.sh  # monitoreo y compresión automática
 └── test_video/
-    ├── midu.sh            # script principal (~5000 líneas, 29 modos)
+    ├── midu.sh            # script principal (~6000 líneas, 33 modos)
     ├── optimizados/       # vídeos convertidos (por defecto)
     └── test/              # vídeos de entrada (por defecto)
 ```
@@ -296,6 +356,6 @@ ffmpeg-yt-dlp/
 
 ## Blog
 
-- [FFmpeg + yt-dlp Pipeline: Conversor y Editor de Vídeo con 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/)
+- [FFmpeg + yt-dlp Pipeline: Conversor y Editor de Vídeo con 33 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/)
 - [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/)
 - [Docker: ffmpeg y yt-dlp en Windows (WSL) y Ubuntu](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/)

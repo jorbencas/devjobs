@@ -6,12 +6,12 @@
   "modes": {
     "convert": {
       "social": "",
-      "preset": "default",
+      "preset": "ultrafast",
       "videoCodec": "h264",
       "audioCodec": "aac",
-      "audioBitrate": "192k",
-      "resolution": "original",
-      "maxSize": "1.7"
+      "audioBitrate": "128k",
+      "resolution": "1080",
+      "maxSize": "2"
     }
   }
 }

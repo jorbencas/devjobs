@@ -2,320 +2,7 @@
 
 VERSION="5.0.0"
 
-# ── Configuración guardada ────────────────────────────────────────────
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || dirname "${BASH_SOURCE[0]}")"
-CONF_FILE="${SCRIPT_DIR}/../conf.json"
-
-load_config() {
-    local mode="${1:-}"
-    [[ ! -f "$CONF_FILE" ]] && return 1
-    command -v jq &>/dev/null || return 1
-    local cfg
-    cfg=$(jq -c '.' "$CONF_FILE" 2>/dev/null) || return 1
-
-    # Config global (siempre se carga)
-    INPUT_DIR=$(echo "$cfg"     | jq -r '.inputDir // empty')      || true
-    OUTPUT_DIR=$(echo "$cfg"    | jq -r '.outputDir // empty')     || true
-    EXTENSIONS=$(echo "$cfg"    | jq -r '.extensions // empty')    || true
-    VERBOSE=$(echo "$cfg"       | jq -r '.verbose // empty')       || true
-
-    # Config por modo
-    if [[ -n "$mode" ]] && echo "$cfg" | jq -e ".modes.\"$mode\"" &>/dev/null; then
-        local m
-        m=$(echo "$cfg" | jq -c ".modes.\"$mode\"")
-        case "$mode" in
-            convert)
-                PRESET=$(echo "$m"        | jq -r '.preset // empty')        || true
-                VIDEO_CODEC=$(echo "$m"   | jq -r '.videoCodec // empty')    || true
-                AUDIO_CODEC=$(echo "$m"   | jq -r '.audioCodec // empty')    || true
-                AUDIO_BITRATE=$(echo "$m" | jq -r '.audioBitrate // empty')  || true
-                RESOLUTION=$(echo "$m"    | jq -r '.resolution // empty')    || true
-                MAX_SIZE=$(echo "$m"      | jq -r '.maxSize // empty')       || true
-                SOCIAL=$(echo "$m"        | jq -r '.social // empty')        || true
-                ;;
-            cut)
-                START_TIME=$(echo "$m"    | jq -r '.startTime // empty')     || true
-                END_TIME=$(echo "$m"      | jq -r '.endTime // empty')       || true
-                CUT_MODE=$(echo "$m"      | jq -r '.cutMode // empty')       || true
-                CUT_CLIPS=()
-                if echo "$m" | jq -e '.cutClips | type == "array"' &>/dev/null; then
-                    while IFS= read -r clip; do CUT_CLIPS+=("$clip"); done < <(echo "$m" | jq -r '.cutClips[]')
-                fi
-                ;;
-            gif)
-                GIF_FPS=$(echo "$m"       | jq -r '.gifFps // empty')        || true
-                GIF_SCALE=$(echo "$m"     | jq -r '.gifScale // empty')      || true
-                ;;
-            thumbnail)
-                THUMBNAIL_TIME=$(echo "$m"| jq -r '.thumbnailTime // empty') || true
-                ;;
-            rotate)
-                ROTATE_DEGREES=$(echo "$m"| jq -r '.rotateDegrees // empty') || true
-                ;;
-            crop)
-                CROP_SIZE=$(echo "$m"     | jq -r '.cropSize // empty')      || true
-                ;;
-            fade)
-                FADE_SECONDS=$(echo "$m"  | jq -r '.fadeSeconds // empty')   || true
-                ;;
-            fps)
-                TARGET_FPS=$(echo "$m"    | jq -r '.targetFps // empty')     || true
-                ;;
-            speed)
-                SPEED=$(echo "$m"         | jq -r '.speed // empty')         || true
-                ;;
-            audio-only)
-                OUTPUT_FORMAT=$(echo "$m" | jq -r '.outputFormat // empty')  || true
-                ;;
-            watermark)
-                WATERMARK_FILE=$(echo "$m" | jq -r '.watermarkFile // empty') || true
-                ;;
-            stabilize)
-                STAB_SHAKINESS=$(echo "$m" | jq -r '.stabShakiness // empty') || true
-                ;;
-            adjust)
-                ADJUST_BRIGHTNESS=$(echo "$m" | jq -r '.brightness // empty') || true
-                ADJUST_CONTRAST=$(echo "$m"  | jq -r '.contrast // empty')   || true
-                ADJUST_SATURATION=$(echo "$m"| jq -r '.saturation // empty') || true
-                ADJUST_GAMMA=$(echo "$m"     | jq -r '.gamma // empty')      || true
-                ;;
-            censor)
-                CENSOR_REGIONS=()
-                if echo "$m" | jq -e '.regions | type == "array"' &>/dev/null; then
-                    while IFS= read -r region; do CENSOR_REGIONS+=("$region"); done < <(echo "$m" | jq -r '.regions[]')
-                fi
-                ;;
-            denoise)
-                DENOISE_STRENGTH=$(echo "$m" | jq -r '.denoiseStrength // empty') || true
-                ;;
-            sharpen)
-                SHARPEN_STRENGTH=$(echo "$m" | jq -r '.sharpenStrength // empty') || true
-                ;;
-            scenes)
-                SCENE_THRESHOLD=$(echo "$m" | jq -r '.sceneThreshold // empty') || true
-                ;;
-            keyframes)
-                KEYFRAME_DIR=$(echo "$m" | jq -r '.keyframeDir // empty') || true
-                ;;
-            aspect)
-                ASPECT_RATIO=$(echo "$m" | jq -r '.aspectRatio // empty') || true
-                ;;
-            metadata)
-                METADATA_TITLE=$(echo "$m"  | jq -r '.title // empty')   || true
-                METADATA_ARTIST=$(echo "$m" | jq -r '.artist // empty')  || true
-                METADATA_COMMENT=$(echo "$m"| jq -r '.comment // empty') || true
-                ;;
-            download)
-                DOWNLOAD_START=$(echo "$m" | jq -r '.dlStart // empty') || true
-                DOWNLOAD_END=$(echo "$m"   | jq -r '.dlEnd // empty')   || true
-                ;;
-            subtitles)
-                SUBTITLE_SOFT=$(echo "$m" | jq -r '.subtitleSoft // empty') || true
-                SUBTITLE_HARD=$(echo "$m" | jq -r '.subtitleHard // empty') || true
-                ;;
-            concat)
-                CONCAT_FILES=()
-                if echo "$m" | jq -e '.files | type == "array"' &>/dev/null; then
-                    while IFS= read -r f; do CONCAT_FILES+=("$f"); done < <(echo "$m" | jq -r '.files[]')
-                fi
-                ;;
-        esac
-    fi
-}
-
-save_config() {
-    local mode="${1:-}"
-    local tmp="$CONF_FILE.tmp"
-
-    if ! command -v jq &>/dev/null; then
-        echo -e "${RED}ERROR: jq no está instalado. No se pudo guardar la configuración.${NC}"
-        echo -e "  ${DIM}Alpine: apk add jq   |   Ubuntu/Debian: sudo apt install jq${NC}"
-        return 1
-    fi
-
-    # ── Config global: solo campos no vacíos (no pisa valores guardados) ──
-    local global_json="{}"
-    [[ -n "$INPUT_DIR" ]]   && global_json=$(echo "$global_json" | jq --arg v "$INPUT_DIR"   '. + {inputDir: $v}')
-    [[ -n "$OUTPUT_DIR" ]]  && global_json=$(echo "$global_json" | jq --arg v "$OUTPUT_DIR"  '. + {outputDir: $v}')
-    [[ -n "$EXTENSIONS" ]]  && global_json=$(echo "$global_json" | jq --arg v "$EXTENSIONS"  '. + {extensions: $v}')
-    if [[ "$VERBOSE" == "true" ]]; then
-        global_json=$(echo "$global_json" | jq '. + {verbose: true}')
-    else
-        global_json=$(echo "$global_json" | jq '. + {verbose: false}')
-    fi
-
-    # ── Config del modo ──
-    local mode_json="{}"
-    local arr_json="[]"
-    case "$mode" in
-        convert)
-            mode_json=$(jq -n \
-                --arg social "$SOCIAL" \
-                --arg preset "$PRESET" \
-                --arg codec "$VIDEO_CODEC" \
-                --arg audio "$AUDIO_CODEC" \
-                --arg bitrate "$AUDIO_BITRATE" \
-                --arg res "$RESOLUTION" \
-                --arg max "$MAX_SIZE" \
-                '{social: $social, preset: $preset, videoCodec: $codec, audioCodec: $audio, audioBitrate: $bitrate, resolution: $res, maxSize: $max}')
-            ;;
-        cut)
-            arr_json="[]"
-            [[ ${#CUT_CLIPS[@]} -gt 0 ]] && arr_json=$(printf '%s\n' "${CUT_CLIPS[@]}" | jq -R . | jq -s .)
-            mode_json=$(jq -n \
-                --arg start "$START_TIME" \
-                --arg end "$END_TIME" \
-                --arg cut_mode "${CUT_MODE:-normal}" \
-                --argjson clips "$arr_json" \
-                '{startTime: $start, endTime: $end, cutMode: $cut_mode, cutClips: $clips}')
-            ;;
-        gif)
-            mode_json=$(jq -n \
-                --arg fps "$GIF_FPS" \
-                --arg scale "$GIF_SCALE" \
-                '{gifFps: $fps, gifScale: $scale}')
-            ;;
-        thumbnail)
-            mode_json=$(jq -n \
-                --arg time "$THUMBNAIL_TIME" \
-                '{thumbnailTime: $time}')
-            ;;
-        rotate)
-            mode_json=$(jq -n \
-                --arg degrees "$ROTATE_DEGREES" \
-                '{rotateDegrees: $degrees}')
-            ;;
-        crop)
-            mode_json=$(jq -n \
-                --arg size "$CROP_SIZE" \
-                '{cropSize: $size}')
-            ;;
-        fade)
-            mode_json=$(jq -n \
-                --arg seconds "$FADE_SECONDS" \
-                '{fadeSeconds: $seconds}')
-            ;;
-        fps)
-            mode_json=$(jq -n \
-                --arg fps "$TARGET_FPS" \
-                '{targetFps: $fps}')
-            ;;
-        speed)
-            mode_json=$(jq -n \
-                --arg speed "$SPEED" \
-                '{speed: $speed}')
-            ;;
-        audio-only)
-            mode_json=$(jq -n \
-                --arg format "$OUTPUT_FORMAT" \
-                '{outputFormat: $format}')
-            ;;
-        watermark)
-            mode_json=$(jq -n \
-                --arg file "$WATERMARK_FILE" \
-                '{watermarkFile: $file}')
-            ;;
-        stabilize)
-            mode_json=$(jq -n \
-                --arg strength "$STAB_SHAKINESS" \
-                '{stabShakiness: $strength}')
-            ;;
-        adjust)
-            mode_json=$(jq -n \
-                --arg brightness "$ADJUST_BRIGHTNESS" \
-                --arg contrast "$ADJUST_CONTRAST" \
-                --arg saturation "$ADJUST_SATURATION" \
-                --arg gamma "$ADJUST_GAMMA" \
-                '{brightness: $brightness, contrast: $contrast, saturation: $saturation, gamma: $gamma}')
-            ;;
-        censor)
-            arr_json="[]"
-            [[ ${#CENSOR_REGIONS[@]} -gt 0 ]] && arr_json=$(printf '%s\n' "${CENSOR_REGIONS[@]}" | jq -R . | jq -s .)
-            mode_json=$(jq -n --argjson regions "$arr_json" '{regions: $regions}')
-            ;;
-        denoise)
-            mode_json=$(jq -n \
-                --arg strength "$DENOISE_STRENGTH" \
-                '{denoiseStrength: $strength}')
-            ;;
-        sharpen)
-            mode_json=$(jq -n \
-                --arg strength "$SHARPEN_STRENGTH" \
-                '{sharpenStrength: $strength}')
-            ;;
-        scenes)
-            mode_json=$(jq -n \
-                --arg threshold "$SCENE_THRESHOLD" \
-                '{sceneThreshold: $threshold}')
-            ;;
-        keyframes)
-            mode_json=$(jq -n \
-                --arg dir "$KEYFRAME_DIR" \
-                '{keyframeDir: $dir}')
-            ;;
-        aspect)
-            mode_json=$(jq -n \
-                --arg ratio "$ASPECT_RATIO" \
-                '{aspectRatio: $ratio}')
-            ;;
-        metadata)
-            mode_json=$(jq -n \
-                --arg title "$METADATA_TITLE" \
-                --arg artist "$METADATA_ARTIST" \
-                --arg comment "$METADATA_COMMENT" \
-                '{title: $title, artist: $artist, comment: $comment}')
-            ;;
-        download)
-            mode_json=$(jq -n \
-                --arg start "$DOWNLOAD_START" \
-                --arg end "$DOWNLOAD_END" \
-                '{dlStart: $start, dlEnd: $end}')
-            ;;
-        subtitles)
-            mode_json=$(jq -n \
-                --arg soft "$SUBTITLE_SOFT" \
-                --arg hard "$SUBTITLE_HARD" \
-                '{subtitleSoft: $soft, subtitleHard: $hard}')
-            ;;
-        concat)
-            arr_json="[]"
-            [[ ${#CONCAT_FILES[@]} -gt 0 ]] && arr_json=$(printf '%s\n' "${CONCAT_FILES[@]}" | jq -R . | jq -s .)
-            mode_json=$(jq -n --argjson files "$arr_json" '{files: $files}')
-            ;;
-        merge-audio)
-            mode_json=$(jq -n \
-                --arg audio "$AUDIO_INPUT" \
-                --arg format "$OUTPUT_FORMAT" \
-                '{audioInput: $audio, outputFormat: $format}')
-            ;;
-    esac
-
-    # ── Base: leer config existente o partir de vacío ──
-    local base="{}"
-    if [[ -f "$CONF_FILE" ]] && jq -e '.' "$CONF_FILE" &>/dev/null; then
-        base=$(jq -c '.' "$CONF_FILE")
-    fi
-
-    # ── Mezclar global + modo ──
-    local new_cfg
-    new_cfg=$(echo "$base" | jq -c \
-        --argjson g "$global_json" \
-        --argjson m "$mode_json" \
-        --arg mode "$mode" \
-        '. + $g |
-         if $mode != "" and ($m | length) > 0 then .modes[$mode] = $m else . end')
-    new_cfg=$(echo "$new_cfg" | jq -c 'if has("modes") then . else . + {modes: {}} end')
-
-    # ── Escribir ──
-    mkdir -p "$(dirname "$CONF_FILE")"
-    if echo "$new_cfg" | jq . > "$tmp" && mv "$tmp" "$CONF_FILE"; then
-        echo -e "${GREEN}Configuración guardada${NC}"
-    else
-        echo -e "${RED}ERROR: No se pudo escribir la configuración${NC}"
-        return 1
-    fi
-}
 
 # ── Colores ───────────────────────────────────────────────────────────
 
@@ -331,7 +18,7 @@ NC='\033[0m'
 
 cleanup() {
     echo ""
-    echo -e "${RED}Interrumpido. Limpiando...${NC}"
+    echo -e "${RED}✗${NC} Interrumpido. Limpiando..."
     if [[ -n "${active_threads[*]}" ]]; then
         for pid in "${active_threads[@]}"; do
             kill "$pid" 2>/dev/null
@@ -344,7 +31,7 @@ cleanup() {
     rm -rf "$PROG_DIR" 2>/dev/null
     rm -f "$OUTPUT_DIR"/.tmp_* "$OUTPUT_DIR"/*.log "$OUTPUT_DIR"/*.progress 2>/dev/null
     rm -f "$SCRIPT_DIR/.midu_preview_req" 2>/dev/null
-    echo -e "${GREEN}Limpieza completada.${NC}"
+    echo -e "${GREEN}✓${NC} Limpieza completada."
     exit 130
 }
 trap cleanup SIGINT SIGTERM SIGHUP
@@ -506,7 +193,7 @@ METADATA:
 
 GENERAL:
   -n, --non-interactive  Sin prompts, usa valores por defecto
-  -c, --save-config      Guarda la configuración actual en conf.json
+
   -v, --verbose          Muestra progreso línea por línea (default: resumen)
   --two-pass             Two-pass encoding (mejor calidad con --max-gb)
   --hw-accel             Usar aceleración por hardware para decodificar
@@ -515,6 +202,13 @@ GENERAL:
   --notify               Notificación al terminar (notify-send)
   --write-subs           Descargar subtítulos automáticamente con yt-dlp
   --sub-langs LANGS      Idiomas de subtítulos (default: es,en)
+  --download-archive FILE  Guardar historial de descargas (no re-descargar)
+  --dateafter DATE       Solo descargar vídeos posteriores a fecha (YYYYMMDD)
+  --datebefore DATE      Solo descargar vídeos anteriores a fecha (YYYYMMDD)
+  --playlist-items RANGE Seleccionar items de playlist (ej: 1-5, 1,3,5)
+  --flat-playlist        Listar títulos sin descargar
+  --playlist-reverse     Invertir orden de playlist
+  --playlist-random      Orden aleatorio de playlist
   --checkpoint FILE      Guardar progreso para resume
   --resume [FILE]        Continuar desde checkpoint
   --retry                Reintentar archivos fallidos al terminar
@@ -625,7 +319,7 @@ SUBS_LANGS="es,en"             # Idiomas de subtítulos a descargar
 
 # ── Parse flags ───────────────────────────────────────────────────────
 
-SAVE_CONFIG=false
+
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -652,6 +346,8 @@ while [[ $# -gt 0 ]]; do
         --concat-smart)    MODE="concat-smart"; shift; CONCAT_FILES=(); while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do CONCAT_FILES+=("$1"); shift; done ;;
         --crossfade)       CROSSFADE_DURATION="$2"; shift 2 ;;
         --chain)           MODE="chain"; shift; CHAIN_OPS=(); while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do CHAIN_OPS+=("$1"); shift; done ;;
+        --compose)         MODE="compose"; shift ;;
+        --hls)             MODE="hls"; shift ;;
         --cut)             MODE="cut"; shift
                             # Check for sub-modes
                             case "${1:-}" in
@@ -717,6 +413,13 @@ while [[ $# -gt 0 ]]; do
         --retry)           RETRY_FAILED=true; shift ;;
         --write-subs)      SUBS_DOWNLOAD=true; shift ;;
         --sub-langs)       SUBS_LANGS="$2"; shift 2 ;;
+        --download-archive) YTDLP_ARCHIVE="$2"; shift 2 ;;
+        --dateafter)       YTDLP_DATEAFTER="$2"; shift 2 ;;
+        --datebefore)      YTDLP_DATEBEFORE="$2"; shift 2 ;;
+        --playlist-items)  YTDLP_PLAYLIST_ITEMS="$2"; shift 2 ;;
+        --flat-playlist)   YTDLP_FLAT_PLAYLIST=true; shift ;;
+        --playlist-reverse) YTDLP_PLAYLIST_REVERSE=true; shift ;;
+        --playlist-random) YTDLP_PLAYLIST_RANDOM=true; shift ;;
         --container)       CONTAINER="$2"; shift 2 ;;
         --audio-lang)      AUDIO_LANG="$2"; shift 2 ;;
         --remux)           MODE="remux"; shift ;;
@@ -727,11 +430,11 @@ while [[ $# -gt 0 ]]; do
         -i|--input)        INPUT_DIR="$2"; shift 2 ;;
         -o|--output)     OUTPUT_DIR="$2"; shift 2 ;;
         -n|--non-interactive) INTERACTIVE=false; shift ;;
-        -c|--save-config)     SAVE_CONFIG=true; shift ;;
+
         -v|--verbose)         VERBOSE=true; shift ;;
         -V|--version)         echo "midu.sh v${VERSION}"; exit 0 ;;
         -h|--help)            show_help; exit 0 ;;
-        -*)                   echo -e "${RED}Opción desconocida: $1${NC}"; show_help; exit 1 ;;
+        -*)                   echo -e "${RED}✗${NC} Opción desconocida: $1"; show_help; exit 1 ;;
         *)                    INPUT_DIR="$1"; shift ;;
     esac
 done
@@ -804,7 +507,7 @@ apply_social_preset() {
             PRESET="default"
             ;;
         *)
-            echo -e "${RED}Red social desconocida: $platform${NC}"
+            echo -e "${RED}✗${NC} Red social desconocida: $platform"
             echo "  Disponibles: whatsapp|telegram|instagram|tiktok|youtube|twitter|facebook"
             exit 1
             ;;
@@ -822,14 +525,14 @@ MAX_SIZE_MB=""
 if [[ -n "$MAX_SIZE" ]]; then
     # Validar que sea un número
     if ! [[ "$MAX_SIZE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-        echo -e "${RED}ERROR: Tamaño máximo no válido: $MAX_SIZE${NC}"
+        echo -e "${RED}✗${NC} Tamaño máximo no válido: $MAX_SIZE"
         exit 1
     fi
     # Si tiene punto, es decimal (ej: 0.5GB = 512MB)
     if [[ "$MAX_SIZE" == *.* ]]; then
         MAX_SIZE_MB=$(echo "$MAX_SIZE * 1024" | bc 2>/dev/null)
         if [[ -z "$MAX_SIZE_MB" ]]; then
-            echo -e "${RED}ERROR: No se pudo calcular el tamaño (instala 'bc')${NC}"
+            echo -e "${RED}✗${NC} No se pudo calcular el tamaño (instala 'bc')"
             exit 1
         fi
     else
@@ -854,26 +557,26 @@ GPU=$(detect_gpu)
 # ── Verificar dependencias ────────────────────────────────────────────
 
 if ! command -v ffmpeg &>/dev/null; then
-    echo -e "${RED}ERROR: ffmpeg no está instalado${NC}"
+    echo -e "${RED}✗${NC} ffmpeg no está instalado"
     echo "  Alpine: apk add ffmpeg"
     echo "  Ubuntu: sudo apt install ffmpeg"
     exit 1
 fi
 
 if ! command -v ffprobe &>/dev/null; then
-    echo -e "${RED}ERROR: ffprobe no está instalado${NC}"
+    echo -e "${RED}✗${NC} ffprobe no está instalado"
     exit 1
 fi
 
 if [[ "$MODE" == "download" || "$MODE" == "audio-only" ]] && ! command -v yt-dlp &>/dev/null; then
-    echo -e "${RED}ERROR: yt-dlp no está instalado${NC}"
+    echo -e "${RED}✗${NC} yt-dlp no está instalado"
     echo "  pip install yt-dlp"
     echo "  https://github.com/yt-dlp/yt-dlp"
     exit 1
 fi
 
 if ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -q "libx264"; then
-    echo -e "${YELLOW}ADVERTENCIA: ffmpeg no tiene soporte libx264${NC}"
+    echo -e "${YELLOW}⚠${NC} ffmpeg no tiene soporte libx264"
 fi
 
 # ── Funciones auxiliares ──────────────────────────────────────────────
@@ -910,7 +613,7 @@ get_resolution_filter() {
         720)       echo "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" ;;
         480)       echo "scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2" ;;
         360)       echo "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2" ;;
-        *)         echo -e "${RED}Resolución desconocida: $1${NC}"; exit 1 ;;
+        *)         echo -e "${RED}✗${NC} Resolución desconocida: $1"; exit 1 ;;
     esac
 }
 
@@ -928,7 +631,7 @@ get_audio_args() {
         eac3)    echo "-c:a eac3 -b:a $bitrate" ;;
         pcm_s16le) echo "-c:a pcm_s16le" ;;
         pcm_s24le) echo "-c:a pcm_s24le" ;;
-        *)       echo -e "${RED}Códec desconocido: $codec${NC}"; exit 1 ;;
+        *)       echo -e "${RED}✗${NC} Códec desconocido: $codec"; exit 1 ;;
     esac
 }
 
@@ -991,7 +694,7 @@ cut_video() {
     local duration
     duration=$(get_duration "$file")
     if [[ -z "$duration" || ! "$duration" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}ERROR: No se pudo obtener la duración del vídeo${NC}"
+        echo -e "${RED}✗${NC} No se pudo obtener la duración del vídeo"
         return 1
     fi
 
@@ -999,7 +702,7 @@ cut_video() {
     if [[ -n "$START_TIME" ]]; then
         local start_secs=$(time_to_seconds "$START_TIME")
         if [[ "$start_secs" -ge "$duration" ]]; then
-            echo -e "${RED}ERROR: Tiempo de inicio ($START_TIME) es mayor o igual a la duración ($(format_time "$duration"))${NC}"
+            echo -e "${RED}✗${NC} Tiempo de inicio ($START_TIME) es mayor o igual a la duración ($(format_time "$duration"))${NC}"
             return 1
         fi
     fi
@@ -1007,14 +710,14 @@ cut_video() {
     if [[ -n "$END_TIME" ]]; then
         local end_secs=$(time_to_seconds "$END_TIME")
         if [[ "$end_secs" -gt "$duration" ]]; then
-            echo -e "${YELLOW}AVISO: Tiempo de fin ($END_TIME) es mayor que la duración ($(format_time "$duration"))${NC}"
+            echo -e "${YELLOW}⚠${NC} Tiempo de fin ($END_TIME) es mayor que la duración ($(format_time "$duration"))${NC}"
             echo -e "  ${DIM}Se cortará hasta el final del vídeo${NC}"
             END_TIME=""
         fi
         if [[ -n "$START_TIME" ]]; then
             local start_secs=$(time_to_seconds "$START_TIME")
             if [[ "$end_secs" -le "$start_secs" ]]; then
-                echo -e "${RED}ERROR: Tiempo de fin ($END_TIME) debe ser mayor que el inicio ($START_TIME)${NC}"
+                echo -e "${RED}✗${NC} Tiempo de fin ($END_TIME) debe ser mayor que el inicio ($START_TIME)${NC}"
                 return 1
             fi
         fi
@@ -1043,15 +746,15 @@ cut_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Cortando:${NC} $file → $output_file"
+    echo -e "${BOLD}► Cortando:${NC} $file → $output_file"
 
     if ffmpeg "${ffmpeg_args[@]}" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Corte completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Corte completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al cortar${NC}"
+        echo -e "${RED}✗${NC} Error al cortar"
         rm -f "$output_file"
         return 1
     fi
@@ -1072,7 +775,7 @@ remove_clips() {
     local duration
     duration=$(get_duration "$file")
     if [[ -z "$duration" || ! "$duration" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}ERROR: No se pudo obtener la duración del vídeo${NC}"
+        echo -e "${RED}✗${NC} No se pudo obtener la duración del vídeo"
         return 1
     fi
 
@@ -1087,11 +790,11 @@ remove_clips() {
         local end_s=$(time_to_seconds "$end")
 
         if [[ "$start_s" -ge "$end_s" ]]; then
-            echo -e "${RED}ERROR: Clip inválido ($start ≥ $end)${NC}"
+            echo -e "${RED}✗${NC} Clip inválido ($start ≥ $end)"
             return 1
         fi
         if [[ "$end_s" -gt "$duration" ]]; then
-            echo -e "${YELLOW}AVISO: Clip $clip excede la duración, se recorta${NC}"
+            echo -e "${YELLOW}⚠${NC} Clip $clip excede la duración, se recorta"
             end_s=$duration
         fi
         clip_secs+=("$start_s $end_s")
@@ -1116,11 +819,11 @@ remove_clips() {
     fi
 
     if [[ ${#keep_segments[@]} -eq 0 ]]; then
-        echo -e "${RED}ERROR: No quedan segmentos tras eliminar las secciones${NC}"
+        echo -e "${RED}✗${NC} No quedan segmentos tras eliminar las secciones"
         return 1
     fi
 
-    echo -e "${BOLD}Eliminando secciones:${NC} $file"
+    echo -e "${BOLD}► Eliminando secciones:${NC} $file"
     echo -e "  ${DIM}Duración original: $(format_time "$duration")${NC}"
     for clip in "${sorted[@]}"; do
         local c_start="${clip%% *}"
@@ -1193,9 +896,9 @@ remove_clips() {
         local out_mb=$((out_size / 1024 / 1024))
         local new_duration
         new_duration=$(get_duration "$output_file")
-        echo -e "${GREEN}Secciones eliminadas:${NC} $output_file (${out_mb}MB, $(format_time "$new_duration"))"
+        echo -e "${GREEN}✓${NC} Secciones eliminadas: $output_file (${out_mb}MB, $(format_time "$new_duration"))"
     else
-        echo -e "${RED}Error al eliminar secciones${NC}"
+        echo -e "${RED}✗${NC} Error al eliminar secciones"
         rm -f "$output_file"
         return 1
     fi
@@ -1216,11 +919,11 @@ extract_clips() {
     local duration
     duration=$(get_duration "$file")
     if [[ -z "$duration" || ! "$duration" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}ERROR: No se pudo obtener la duración del vídeo${NC}"
+        echo -e "${RED}✗${NC} No se pudo obtener la duración del vídeo"
         return 1
     fi
 
-    echo -e "${BOLD}Extrayendo clips:${NC} $file"
+    echo -e "${BOLD}► Extrayendo clips:${NC} $file"
 
     # Extraer cada clip individualmente
     local clip_files=()
@@ -1233,11 +936,11 @@ extract_clips() {
         local end_s=$(time_to_seconds "$end")
 
         if [[ "$start_s" -ge "$end_s" ]]; then
-            echo -e "${RED}ERROR: Clip inválido ($start ≥ $end)${NC}"
+            echo -e "${RED}✗${NC} Clip inválido ($start ≥ $end)"
             return 1
         fi
         if [[ "$end_s" -gt "$duration" ]]; then
-            echo -e "${YELLOW}AVISO: Clip $clip excede la duración, se recorta${NC}"
+            echo -e "${YELLOW}⚠${NC} Clip $clip excede la duración, se recorta"
             end_s=$duration
         fi
 
@@ -1247,7 +950,7 @@ extract_clips() {
         echo -e "  ${DIM}Clip $idx: $(format_time "$start_s") → $(format_time "$end_s") (${clip_len}s)${NC}"
 
         if ! ffmpeg -y -ss "$start_s" -i "$file" -t "$clip_len" -c copy "$clip_file" 2>/dev/null; then
-            echo -e "${RED}Error al extraer clip $idx${NC}"
+            echo -e "${RED}✗${NC} Error al extraer clip $idx"
             rm -f /tmp/clip_${filename}_*.mp4
             return 1
         fi
@@ -1269,9 +972,9 @@ extract_clips() {
         local out_mb=$((out_size / 1024 / 1024))
         local new_duration
         new_duration=$(get_duration "$output_file")
-        echo -e "${GREEN}Clips extraídos:${NC} $output_file (${out_mb}MB, $(format_time "$new_duration"))"
+        echo -e "${GREEN}✓${NC} Clips extraídos: $output_file (${out_mb}MB, $(format_time "$new_duration"))"
     else
-        echo -e "${RED}Error al unir clips${NC}"
+        echo -e "${RED}✗${NC} Error al unir clips"
         rm -f "$output_file"
     fi
 
@@ -1295,12 +998,12 @@ stabilize_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Estabilizando:${NC} $file (shakiness: $shakiness)"
+    echo -e "${BOLD}► Estabilizando:${NC} $file (shakiness: $shakiness)"
 
     # Paso 1: Detectar movimientos
     echo -e "  ${DIM}Paso 1/2: Analizando movimientos...${NC}"
     if ! ffmpeg -y -i "$file" -vf "vidstabdetect=shakiness=$shakiness:input=$transforms" -f null - 2>/dev/null; then
-        echo -e "${RED}Error en la detección de estabilización${NC}"
+        echo -e "${RED}✗${NC} Error en la detección de estabilización"
         rm -f "$transforms"
         return 1
     fi
@@ -1313,9 +1016,9 @@ stabilize_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Estabilización completada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Estabilización completada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al estabilizar${NC}"
+        echo -e "${RED}✗${NC} Error al estabilizar"
         rm -f "$output_file"
         rm -f "$transforms"
         return 1
@@ -1343,7 +1046,7 @@ adjust_video() {
     [[ -n "$ADJUST_GAMMA" ]] && eq_parts+=("gamma=$ADJUST_GAMMA")
 
     if [[ ${#eq_parts[@]} -eq 0 ]]; then
-        echo -e "${RED}ERROR: Indica al menos un ajuste (brightness, contrast, saturation, gamma)${NC}"
+        echo -e "${RED}✗${NC} Indica al menos un ajuste (brightness, contrast, saturation, gamma)${NC}"
         return 1
     fi
 
@@ -1351,7 +1054,7 @@ adjust_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Ajustando:${NC} $file"
+    echo -e "${BOLD}► Ajustando:${NC} $file"
     echo -e "  ${DIM}Filtros: $eq_filter${NC}"
 
     local enc_args
@@ -1360,9 +1063,9 @@ adjust_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Ajuste completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Ajuste completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al ajustar${NC}"
+        echo -e "${RED}✗${NC} Error al ajustar"
         rm -f "$output_file"
         return 1
     fi
@@ -1381,13 +1084,13 @@ censor_video() {
     local output_file="$output_dir/${filename}_censored.$ext"
 
     if [[ ${#CENSOR_REGIONS[@]} -eq 0 ]]; then
-        echo -e "${RED}ERROR: Indica las regiones a censurar (x:y:w:h)${NC}"
+        echo -e "${RED}✗${NC} Indica las regiones a censurar (x:y:w:h)${NC}"
         return 1
     fi
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Censurando:${NC} $file"
+    echo -e "${BOLD}► Censurando:${NC} $file"
 
     # Construir filtro de blur para cada región
     local vf_parts=()
@@ -1411,9 +1114,9 @@ censor_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Censura completada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Censura completada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al censurar${NC}"
+        echo -e "${RED}✗${NC} Error al censurar"
         rm -f "$output_file"
         return 1
     fi
@@ -1434,7 +1137,7 @@ denoise_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Reduciendo ruido:${NC} $file (fuerza: $strength)"
+    echo -e "${BOLD}► Reduciendo ruido:${NC} $file (fuerza: $strength)"
 
     # nlmeans: s=sigma (1-30 recomendado, mayor = más denoise)
     local sigma=$((strength / 5))
@@ -1447,9 +1150,9 @@ denoise_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Denoise completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Denoise completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al reducir ruido${NC}"
+        echo -e "${RED}✗${NC} Error al reducir ruido"
         rm -f "$output_file"
         return 1
     fi
@@ -1470,7 +1173,7 @@ sharpen_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Enfocando:${NC} $file (fuerza: $strength)"
+    echo -e "${BOLD}► Enfocando:${NC} $file (fuerza: $strength)"
 
     # unsharp: 5:5:strength:5:5:0
     local enc_args
@@ -1479,9 +1182,9 @@ sharpen_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Sharpen completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Sharpen completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al enfocar${NC}"
+        echo -e "${RED}✗${NC} Error al enfocar"
         rm -f "$output_file"
         return 1
     fi
@@ -1501,7 +1204,7 @@ reverse_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Invirtiendo:${NC} $file"
+    echo -e "${BOLD}► Invirtiendo:${NC} $file"
 
     local enc_args
     enc_args=$(get_video_encoder_args "fast")
@@ -1509,9 +1212,9 @@ reverse_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Reverse completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Reverse completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al invertir${NC}"
+        echo -e "${RED}✗${NC} Error al invertir"
         rm -f "$output_file"
         return 1
     fi
@@ -1531,14 +1234,14 @@ scenes_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Detectando escenas:${NC} $file (umbral: $threshold)"
+    echo -e "${BOLD}► Detectando escenas:${NC} $file (umbral: $threshold)"
 
     # Detectar timestamps de escenas
     local timestamps
     timestamps=$(ffmpeg -i "$file" -vf "select='gt(scene,$threshold)',showinfo" -vsync vfr -f null - 2>&1 | grep 'pts_time' | sed 's/.*pts_time:\([0-9.]*\).*/\1/' | sort -n)
 
     if [[ -z "$timestamps" ]]; then
-        echo -e "${YELLOW}No se detectaron cambios de escena${NC}"
+        echo -e "${YELLOW}⚠${NC} No se detectaron cambios de escena"
         return 0
     fi
 
@@ -1582,7 +1285,7 @@ scenes_video() {
         echo -e "  ${GREEN}Escena $clip_idx:${NC} $clip_file"
     fi
 
-    echo -e "${GREEN}Cortado en $clip_idx escenas${NC}"
+    echo -e "${GREEN}✓${NC} Cortado en $clip_idx escenas${NC}"
 }
 
 # ── Extraer keyframes como imágenes ──────────────────────────────────
@@ -1598,7 +1301,7 @@ keyframes_video() {
     filename=$(basename "$file")
     filename="${filename%.*}"
 
-    echo -e "${BOLD}Extrayendo keyframes:${NC} $file → $keyframe_dir"
+    echo -e "${BOLD}► Extrayendo keyframes:${NC} $file → $keyframe_dir"
 
     local count
     count=$(ffmpeg -i "$file" -vf "select=eq(pict_type\,I)" -vsync vfr "$keyframe_dir/${filename}_keyframe_%04d.png" 2>&1 | grep 'Output file' | wc -l)
@@ -1607,7 +1310,7 @@ keyframes_video() {
     local n_files
     n_files=$(find "$keyframe_dir" -name "${filename}_keyframe_*.png" 2>/dev/null | wc -l)
 
-    echo -e "${GREEN}Extraídos $n_files keyframes${NC} en $keyframe_dir"
+    echo -e "${GREEN}✓${NC} Extraídos $n_files keyframes${NC} en $keyframe_dir"
 }
 
 # ── Cambiar aspect ratio ─────────────────────────────────────────────
@@ -1617,7 +1320,7 @@ aspect_video() {
     local output_dir="$2"
 
     if [[ -z "$ASPECT_RATIO" ]]; then
-        echo -e "${RED}ERROR: Indica el ratio de aspecto (ej: 16:9, 4:3, 21:9)${NC}"
+        echo -e "${RED}✗${NC} Indica el ratio de aspecto (ej: 16:9, 4:3, 21:9)${NC}"
         return 1
     fi
 
@@ -1629,7 +1332,7 @@ aspect_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Cambiando aspect ratio:${NC} $file → $ASPECT_RATIO"
+    echo -e "${BOLD}► Cambiando aspect ratio:${NC} $file → $ASPECT_RATIO"
 
     # Convertir ratio a decimal
     local ratio_w="${ASPECT_RATIO%%:*}"
@@ -1661,9 +1364,9 @@ aspect_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Aspect ratio cambiado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Aspect ratio cambiado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al cambiar aspect ratio${NC}"
+        echo -e "${RED}✗${NC} Error al cambiar aspect ratio"
         rm -f "$output_file"
         return 1
     fi
@@ -1683,7 +1386,7 @@ metadata_video() {
 
     mkdir -p "$output_dir"
 
-    echo -e "${BOLD}Editando metadata:${NC} $file"
+    echo -e "${BOLD}► Editando metadata:${NC} $file"
 
     local meta_args=()
     [[ -n "$METADATA_TITLE" ]] && meta_args+=(-metadata "title=$METADATA_TITLE")
@@ -1691,14 +1394,14 @@ metadata_video() {
     [[ -n "$METADATA_COMMENT" ]] && meta_args+=(-metadata "comment=$METADATA_COMMENT")
 
     if [[ ${#meta_args[@]} -eq 0 ]]; then
-        echo -e "${RED}ERROR: Indica al menos un campo de metadata (title, artist, comment)${NC}"
+        echo -e "${RED}✗${NC} Indica al menos un campo de metadata (title, artist, comment)${NC}"
         return 1
     fi
 
     if ffmpeg -y -i "$file" -c copy "${meta_args[@]}" -movflags +faststart "$output_file" 2>/dev/null; then
-        echo -e "${GREEN}Metadata actualizada:${NC} $output_file"
+        echo -e "${GREEN}✓${NC} Metadata actualizada: $output_file"
     else
-        echo -e "${RED}Error al editar metadata${NC}"
+        echo -e "${RED}✗${NC} Error al editar metadata"
         rm -f "$output_file"
         return 1
     fi
@@ -1743,33 +1446,147 @@ select_audio_track() {
         return 0
     fi
 
-    echo -e "${CYAN}Pistas de audio disponibles:${NC}"
+    # Obtener info de cada pista en formato key=value (más fiable que CSV)
+    local audio_raw
+    audio_raw=$(ffprobe -v error -select_streams a \
+        -show_entries stream=index,codec_name,channels,sample_rate \
+        -show_entries stream_tags=language,title,handler_name,description \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null)
+
+    # Obtener pista por defecto
+    local default_track_idx
+    default_track_idx=$(ffprobe -v error -select_streams a \
+        -show_entries stream=index \
+        -show_entries stream_disposition=default \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null | \
+        awk -F'=' '/^index=/{idx=$2} /DISPOSITION:default=1/{print idx; exit}')
+
+    # Parsear salida key=value (sin [STREAM] markers)
+    local audio_info=""
+    local current_idx="" current_lang="" current_title="" current_handler="" current_desc=""
+    local current_codec="" current_channels="" current_sr=""
+
+    flush_stream() {
+        if [[ -n "$current_idx" ]]; then
+            audio_info+="${current_idx},${current_lang},${current_title},${current_handler},${current_desc},${current_codec},${current_channels},${current_sr}"$'\n'
+        fi
+    }
+
+    while IFS= read -r line; do
+        case "$line" in
+            index=*)
+                flush_stream
+                current_idx="${line#index=}"
+                current_lang=""; current_title=""; current_handler=""
+                current_desc=""; current_codec=""; current_channels=""; current_sr=""
+                ;;
+            TAG:language=*)    current_lang="${line#TAG:language=}" ;;
+            TAG:title=*)       current_title="${line#TAG:title=}" ;;
+            TAG:handler_name=*) current_handler="${line#TAG:handler_name=}" ;;
+            TAG:description=*) current_desc="${line#TAG:description=}" ;;
+            codec_name=*)      current_codec="${line#codec_name=}" ;;
+            channels=*)        current_channels="${line#channels=}" ;;
+            sample_rate=*)     current_sr="${line#sample_rate=}" ;;
+        esac
+    done <<< "$audio_raw"
+    flush_stream
+
+    # ── Auto-selección por idioma ────────────────────────────────────
+    local auto_lang="${AUDIO_LANG:-spa}"
+    local auto_idx=-1
+    local line_num=0
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local lang
+        lang=$(echo "$line" | cut -d',' -f2)
+        local lang_lower="${lang,,}"
+        if [[ -n "$AUDIO_LANG" ]]; then
+            if [[ "$lang_lower" == "${AUDIO_LANG,,}" ]]; then
+                auto_idx=$line_num
+                break
+            fi
+        else
+            if [[ "$lang_lower" == "spa" || "$lang_lower" == "es" || \
+                  "$lang_lower" == "español" || "$lang_lower" == "castellano" || \
+                  "$lang_lower" == "spanish" ]]; then
+                auto_idx=$line_num
+                break
+            fi
+        fi
+        ((line_num++))
+    done <<< "$audio_info"
+
+    # Auto-selección
+    if [[ "$auto_idx" -ge 0 ]]; then
+        AUDIO_SELECTED_IDX=$auto_idx
+        local chosen_line
+        chosen_line=$(echo "$audio_info" | sed -n "$((auto_idx+1))p")
+        local chosen_lang chosen_title chosen_handler
+        chosen_lang=$(echo "$chosen_line" | cut -d',' -f2)
+        chosen_title=$(echo "$chosen_line" | cut -d',' -f3)
+        chosen_handler=$(echo "$chosen_line" | cut -d',' -f4)
+        local chosen_name
+        chosen_name=$(lang_code_to_name "$chosen_lang")
+        if [[ -n "$chosen_title" ]]; then
+            chosen_name="${chosen_name:+$chosen_name — }$chosen_title"
+        elif [[ -n "$chosen_handler" && "$chosen_handler" != "Sound Handler" && "$chosen_handler" != "Audio" ]]; then
+            chosen_name="${chosen_name:+$chosen_name — }$chosen_handler"
+        fi
+        [[ -z "$chosen_name" ]] && chosen_name="pista $((auto_idx+1))"
+        echo -e "  ${GREEN}→${NC} Audio seleccionado automáticamente: ${BOLD}$chosen_name${NC}"
+        return 0
+    fi
+
+    # ── No se encontró el idioma → selector interactivo ──────────────
+    echo -e "${CYAN}►${NC} Pistas de audio disponibles:"
     echo ""
     local i=1
     while IFS= read -r line; do
-        local idx lang title codec channels sample_rate
+        local idx lang title handler_name description codec channels sample_rate
         idx=$(echo "$line" | cut -d',' -f1)
         lang=$(echo "$line" | cut -d',' -f2)
         title=$(echo "$line" | cut -d',' -f3)
-        codec=$(echo "$line" | cut -d',' -f4)
-        channels=$(echo "$line" | cut -d',' -f5)
-        sample_rate=$(echo "$line" | cut -d',' -f6)
+        handler_name=$(echo "$line" | cut -d',' -f4)
+        description=$(echo "$line" | cut -d',' -f5)
+        codec=$(echo "$line" | cut -d',' -f6)
+        channels=$(echo "$line" | cut -d',' -f7)
+        sample_rate=$(echo "$line" | cut -d',' -f8)
 
         # Nombre legible del idioma
         local lang_name
         lang_name=$(lang_code_to_name "$lang")
 
-        # Construir etiqueta
+        # Construir etiqueta: intentar title → handler_name → description → idioma
         local label=""
-        if [[ -n "$lang_name" ]]; then
-            label="$lang_name"
-        elif [[ -n "$lang" && "$lang" != "und" ]]; then
-            label="$lang"
-        fi
         if [[ -n "$title" ]]; then
-            label="${label:+$label — }$title"
+            label="$title"
+        elif [[ -n "$handler_name" && "$handler_name" != "Sound Handler" && "$handler_name" != "Audio" ]]; then
+            label="$handler_name"
+        elif [[ -n "$description" ]]; then
+            label="$description"
         fi
-        [[ -z "$label" ]] && label="Desconocido"
+
+        # Preceder con el idioma si está disponible
+        if [[ -n "$lang_name" ]]; then
+            if [[ -n "$label" ]]; then
+                label="$lang_name — $label"
+            else
+                label="$lang_name"
+            fi
+        elif [[ -n "$lang" && "$lang" != "und" ]]; then
+            if [[ -n "$label" ]]; then
+                label="$lang — $label"
+            else
+                label="$lang"
+            fi
+        fi
+        [[ -z "$label" ]] && label="Sin nombre"
+
+        # Marcar pista por defecto
+        local default_tag=""
+        if [[ "$idx" == "$default_track_idx" ]]; then
+            default_tag=" ${YELLOW}[predeterminada]${NC}"
+        fi
 
         # Info técnica
         local info=""
@@ -1788,11 +1605,9 @@ select_audio_track() {
             info="${info:+$info, }${sr_khz}kHz"
         fi
 
-        printf "    ${GREEN}%2d)${NC} %s ${DIM}(%s)${NC}\n" "$i" "$label" "$info"
+        printf "    ${GREEN}%2d)${NC} %s ${DIM}(%s)${NC}%b\n" "$i" "$label" "$info" "$default_tag"
         ((i++))
-    done < <(ffprobe -v error -select_streams a \
-        -show_entries stream=index:stream_tags=language:stream_tags=title:stream_codec_name:stream_channels:stream_sample_rate \
-        -of csv=p=0 "$input" 2>/dev/null)
+    done <<< "$audio_info"
     echo ""
     echo -e "    ${GREEN} 0)${NC} Primera pista (automático)"
     echo ""
@@ -1823,7 +1638,7 @@ remux_video() {
 
     local output_file="$output_dir/${name}.${out_ext}"
 
-    echo -e "${BOLD}Remux:${NC} $input → $output_file"
+    echo -e "${BOLD}► Remux:${NC} $input → $output_file"
 
     mkdir -p "$output_dir"
 
@@ -1840,11 +1655,9 @@ remux_video() {
     elif [[ "$audio_count" -eq 1 ]]; then
         ffmpeg_args+=(-map 0:v:0 -map 0:a:0 -map 0:s?)
     else
-        local selected_idx
-        selected_idx=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$input" 2>/dev/null | sed -n "$((AUDIO_SELECTED_IDX + 1))p")
-        if [[ -n "$selected_idx" ]]; then
-            ffmpeg_args+=(-map 0:v:0 -map "0:a:${selected_idx}" -map 0:s?)
-            echo -e "  ${DIM}Audio seleccionado: pista $selected_idx${NC}"
+        if [[ "$AUDIO_SELECTED_IDX" -gt 0 ]]; then
+            ffmpeg_args+=(-map 0:v:0 -map "0:a:${AUDIO_SELECTED_IDX}" -map 0:s?)
+            echo -e "  ${DIM}Audio seleccionado: pista $((AUDIO_SELECTED_IDX + 1))${NC}"
         else
             ffmpeg_args+=(-map 0:v:0 -map 0:a:0 -map 0:s?)
         fi
@@ -1861,9 +1674,9 @@ remux_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Remux completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Remux completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error en remux${NC}"
+        echo -e "${RED}✗${NC} Error en remux"
         rm -f "$output_file"
         return 1
     fi
@@ -1883,12 +1696,12 @@ tracks_video() {
 
     local output_file="$output_dir/${name}_tracks.${out_ext}"
 
-    echo -e "${BOLD}Reordenar pistas:${NC} $input → $output_file"
+    echo -e "${BOLD}► Reordenar pistas:${NC} $input → $output_file"
 
     mkdir -p "$output_dir"
 
     # Mostrar pistas actuales
-    echo -e "${CYAN}Pistas actuales:${NC}"
+    echo -e "${CYAN}►${NC} Pistas actuales:"
     ffprobe -v error -show_entries stream=index,codec_type,codec_name:stream_tags=language,title \
         -of csv=p=0 "$input" 2>/dev/null | while IFS= read -r line; do
         echo -e "  $line"
@@ -1908,7 +1721,7 @@ tracks_video() {
                 v) ffmpeg_args+=(-map "0:v:${sidx}") ;;
                 a) ffmpeg_args+=(-map "0:a:${sidx}") ;;
                 s) ffmpeg_args+=(-map "0:s:${sidx}") ;;
-                *) echo -e "${RED}Tipo de pista desconocido: $stype (usa v, a, s)${NC}"; return 1 ;;
+                *) echo -e "${RED}✗${NC} Tipo de pista desconocido: $stype (usa v, a, s)${NC}"; return 1 ;;
             esac
         done
         echo -e "  ${DIM}Orden: $TRACKS_REORDER${NC}"
@@ -1927,16 +1740,16 @@ tracks_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Pistas reordenadas:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Pistas reordenadas: $output_file (${out_mb}MB)"
 
         # Mostrar pistas resultantes
-        echo -e "${CYAN}Pistas resultantes:${NC}"
+        echo -e "${CYAN}►${NC} Pistas resultantes:"
         ffprobe -v error -show_entries stream=index,codec_type,codec_name:stream_tags=language,title \
             -of csv=p=0 "$output_file" 2>/dev/null | while IFS= read -r line; do
             echo -e "  $line"
         done
     else
-        echo -e "${RED}Error reordenando pistas${NC}"
+        echo -e "${RED}✗${NC} Error reordenando pistas"
         rm -f "$output_file"
         return 1
     fi
@@ -1953,7 +1766,7 @@ check_disk_space() {
     if [[ -n "$available_kb" ]]; then
         local available_mb=$((available_kb / 1024))
         if [[ "$available_mb" -lt "$min_mb" ]]; then
-            echo -e "${RED}AVISO: Poco espacio en disco (${available_mb}MB disponibles, mínimo ${min_mb}MB)${NC}"
+            echo -e "${RED}✗${NC} Poco espacio en disco (${available_mb}MB disponibles, mínimo ${min_mb}MB)${NC}"
             return 1
         fi
     fi
@@ -1971,7 +1784,7 @@ check_collision() {
 
     case "$COLLISION" in
         skip)
-            echo -e "${YELLOW}Omitido (ya existe): $(basename "$file")${NC}"
+            echo -e "${YELLOW}⚠${NC} Omitido (ya existe): $(basename "$file")"
             return 1
             ;;
         rename)
@@ -2010,7 +1823,7 @@ load_checkpoint() {
         return 1
     fi
 
-    echo -e "${BOLD}Checkpoint encontrado:${NC} $CHECKPOINT_FILE"
+    echo -e "${BOLD}► Checkpoint encontrado:${NC} $CHECKPOINT_FILE"
     local total_done=$(grep '|done|' "$CHECKPOINT_FILE" 2>/dev/null | wc -l)
     local total_failed=$(grep '|failed|' "$CHECKPOINT_FILE" 2>/dev/null | wc -l)
     echo -e "  ${GREEN}Completados: $total_done${NC}"
@@ -2055,7 +1868,7 @@ send_notification() {
 
 show_dry_run() {
     local cmd="$1"
-    echo -e "${YELLOW}[DRY-RUN]${NC} $cmd"
+    echo -e "${YELLOW}⚠${NC} [DRY-RUN] $cmd"
 }
 
 run_or_dry() {
@@ -2167,7 +1980,7 @@ host_open_video() {
             cmd.exe /c start "" "$winpath" >/dev/null 2>&1 &
             return 0
         fi
-        echo -e "${YELLOW}No se encontró VLC. Instálalo o abre el vídeo manualmente.${NC}"
+        echo -e "${YELLOW}⚠${NC} No se encontró VLC. Instálalo o abre el vídeo manualmente."
         return 1
     fi
     if command -v xdg-open &>/dev/null; then
@@ -2179,7 +1992,7 @@ host_open_video() {
         echo -e "  ${DIM}Petición de previsualización enviada al host.${NC}"
         return 0
     fi
-    echo -e "${YELLOW}No se puede abrir el vídeo desde este entorno.${NC}"
+    echo -e "${YELLOW}⚠${NC} No se puede abrir el vídeo desde este entorno."
     return 1
 }
 
@@ -2191,7 +2004,7 @@ ask_preview() {
     case "$val" in
         ""|[Ss]) ;;
         [Nn]) return 1 ;;
-        *) echo -e "${RED}Respuesta no válida${NC}"; return 1 ;;
+        *) echo -e "${RED}✗${NC} Respuesta no válida"; return 1 ;;
     esac
     if ! host_open_video "$file"; then
         return 1
@@ -2220,7 +2033,7 @@ retry_failed_files() {
     fi
 
     echo ""
-    echo -e "${BOLD}Archivos fallidos:${NC} ${#failed_files[@]}"
+    echo -e "${BOLD}► Archivos fallidos:${NC} ${#failed_files[@]}"
     read -rp "  ¿Reintentar? [S/n]: " val
     if [[ "$val" =~ ^[Nn] ]]; then
         return 0
@@ -2228,7 +2041,7 @@ retry_failed_files() {
 
     for file in "${failed_files[@]}"; do
         if [[ -f "$file" ]]; then
-            echo -e "${BOLD}Reintentando:${NC} $file"
+            echo -e "${BOLD}► Reintentando:${NC} $file"
             convertir_archivo "$file" "$output_dir"
         fi
     done
@@ -2240,7 +2053,7 @@ download_video() {
     local url="$1"
     local output_dir="$2"
 
-    echo -e "${BOLD}Descargando:${NC} $url"
+    echo -e "${BOLD}► Descargando:${NC} $url"
     mkdir -p "$output_dir"
 
     local ytdlp_args=()
@@ -2296,6 +2109,27 @@ download_video() {
         ytdlp_args+=(--write-subs --write-auto-subs --sub-langs "$SUBS_LANGS" --sub-format srt)
     fi
 
+    # ── Historial de descargas ──
+    if [[ -n "$YTDLP_ARCHIVE" ]]; then
+        ytdlp_args+=(--download-archive "$YTDLP_ARCHIVE")
+    fi
+
+    # ── Filtros de fecha ──
+    [[ -n "$YTDLP_DATEAFTER" ]] && ytdlp_args+=(--dateafter "$YTDLP_DATEAFTER")
+    [[ -n "$YTDLP_DATEBEFORE" ]] && ytdlp_args+=(--datebefore "$YTDLP_DATEBEFORE")
+
+    # ── Filtros de playlist ──
+    if [[ -n "$YTDLP_PLAYLIST_ITEMS" ]]; then
+        ytdlp_args+=(--playlist-items "$YTDLP_PLAYLIST_ITEMS")
+    fi
+    [[ "$YTDLP_PLAYLIST_REVERSE" == true ]] && ytdlp_args+=(--playlist-reverse)
+    [[ "$YTDLP_PLAYLIST_RANDOM" == true ]] && ytdlp_args+=(--playlist-random)
+
+    # ── Flat playlist (listar sin descargar) ──
+    if [[ "$YTDLP_FLAT_PLAYLIST" == true ]]; then
+        ytdlp_args+=(--flat-playlist --print "%(playlist_index)s. %(title)s [%(id)s]")
+    fi
+
     # ── Template de salida ──
     local out_template="$output_dir/%(title)s [%(id)s].%(ext)s"
     [[ "$DOWNLOAD_PLAYLIST" == true ]] && out_template="$output_dir/%(playlist_title)s/%(title)s [%(id)s].%(ext)s"
@@ -2310,9 +2144,9 @@ download_video() {
     fi
 
     if [[ $ytdlp_exit -eq 0 ]]; then
-        echo -e "${GREEN}Descarga completada${NC}"
+        echo -e "${GREEN}✓${NC} Descarga completada"
     else
-        echo -e "${RED}Error en la descarga (código: $ytdlp_exit)${NC}"
+        echo -e "${RED}✗${NC} Error en la descarga (código: $ytdlp_exit)"
         return 1
     fi
 }
@@ -2329,7 +2163,7 @@ extract_audio() {
     filename="${filename%.*}"
     local output_file="$output_dir/$filename.$out_fmt"
 
-    echo -e "${BOLD}Extrayendo audio:${NC} $input → $output_file"
+    echo -e "${BOLD}► Extrayendo audio:${NC} $input → $output_file"
 
     mkdir -p "$output_dir"
 
@@ -2364,9 +2198,9 @@ extract_audio() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Audio extraído:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Audio extraído: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error extrayendo audio${NC}"
+        echo -e "${RED}✗${NC} Error extrayendo audio"
         return 1
     fi
 }
@@ -2386,7 +2220,7 @@ merge_audio() {
     audio_name="${audio_name%.*}"
     local output_file="$output_dir/${video_name}_${audio_name}.mp4"
 
-    echo -e "${BOLD}Mezclando:${NC} $video + $audio → $output_file"
+    echo -e "${BOLD}► Mezclando:${NC} $video + $audio → $output_file"
 
     mkdir -p "$output_dir"
 
@@ -2412,9 +2246,9 @@ merge_audio() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Mezcla completada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Mezcla completada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error mezclando audio y vídeo${NC}"
+        echo -e "${RED}✗${NC} Error mezclando audio y vídeo"
         return 1
     fi
 }
@@ -2447,13 +2281,13 @@ concat_videos() {
     local files=("$@")
 
     if [[ ${#files[@]} -lt 2 ]]; then
-        echo -e "${RED}ERROR: Se necesitan al menos 2 archivos para concatenar${NC}"
+        echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos para concatenar"
         return 1
     fi
 
     for f in "${files[@]}"; do
         if [[ ! -f "$f" ]]; then
-            echo -e "${RED}ERROR: Archivo no encontrado: $f${NC}"
+            echo -e "${RED}✗${NC} Archivo no encontrado: $f"
             return 1
         fi
     done
@@ -2464,7 +2298,7 @@ concat_videos() {
     local out_ext="${CONTAINER:-mp4}"
     local output_file="$output_dir/${basename}_concat.$out_ext"
 
-    echo -e "${BOLD}Concatenando:${NC} ${#files[@]} archivos → $output_file"
+    echo -e "${BOLD}► Concatenando:${NC} ${#files[@]} archivos → $output_file"
     mkdir -p "$output_dir"
 
     # ── Paso 1: Intentar stream copy (rápido) ──
@@ -2483,11 +2317,11 @@ concat_videos() {
             local out_size
             out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
             local out_mb=$((out_size / 1024 / 1024))
-            echo -e "${GREEN}Concatenación completada:${NC} $output_file (${out_mb}MB)"
+            echo -e "${GREEN}✓${NC} Concatenación completada: $output_file (${out_mb}MB)"
             rm -f "$list_file"
             return 0
         fi
-        echo -e "${YELLOW}Stream copy falló, re-codificando...${NC}"
+        echo -e "${YELLOW}⚠${NC} Stream copy falló, re-codificando..."
         rm -f "$list_file"
     else
         echo -e "  ${DIM}Archivos incompatibles, re-codificando...${NC}"
@@ -2531,9 +2365,9 @@ concat_videos() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Concatenación completada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Concatenación completada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error en la concatenación${NC}"
+        echo -e "${RED}✗${NC} Error en la concatenación"
         rm -f "$output_file"
         return 1
     fi
@@ -2548,7 +2382,7 @@ crossfade_videos() {
     local files=("$@")
 
     if [[ ${#files[@]} -lt 2 ]]; then
-        echo -e "${RED}ERROR: Se necesitan al menos 2 archivos para crossfade${NC}"
+        echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos para crossfade"
         return 1
     fi
 
@@ -2564,7 +2398,7 @@ crossfade_videos() {
         local out_ext="${CONTAINER:-mp4}"
         local tmp_output="$output_dir/${name1}_xf_${name2}.${out_ext}"
 
-        echo -e "${BOLD}Crossfade:${NC} $(basename "$current_file") + $(basename "$next_file") (${fade_duration}s)"
+        echo -e "${BOLD}► Crossfade:${NC} $(basename "$current_file") + $(basename "$next_file") (${fade_duration}s)"
 
         local dur1
         dur1=$(get_duration "$current_file")
@@ -2581,10 +2415,10 @@ crossfade_videos() {
             -movflags +faststart "$tmp_output")
 
         if ffmpeg "${ffmpeg_args[@]}" 2>/dev/null; then
-            echo -e "${GREEN}Crossfade completado:${NC} $(basename "$tmp_output")"
+            echo -e "${GREEN}✓${NC} Crossfade completado: $(basename "$tmp_output")"
             current_file="$tmp_output"
         else
-            echo -e "${RED}Error en crossfade${NC}"
+            echo -e "${RED}✗${NC} Error en crossfade"
             rm -f "$tmp_output"
             return 1
         fi
@@ -2596,7 +2430,99 @@ crossfade_videos() {
     if [[ "$current_file" != "$output_dir/$final_name" ]]; then
         mv "$current_file" "$output_dir/$final_name"
     fi
-    echo -e "${GREEN}Crossfade final:${NC} $output_dir/$final_name"
+    echo -e "${GREEN}✓${NC} Crossfade final: $output_dir/$final_name"
+}
+
+# ── Convertir a HLS (streaming) ──────────────────────────────────────
+
+convert_to_hls() {
+    local file="$1"
+    local output_dir="$2"
+    local filename
+    filename=$(basename "$file")
+    filename="${filename%.*}"
+    local hls_dir="$output_dir/${filename}_hls"
+    local segment_time="${HLS_SEGMENT_TIME:-4}"
+
+    mkdir -p "$hls_dir"
+
+    echo -e "${BOLD}► Convirtiendo a HLS:${NC} $file → $hls_dir"
+
+    # Parsear calidades seleccionadas
+    local qualities=()
+    IFS=',' read -ra quality_nums <<< "${hls_qualities:-3,4}"
+    for q in "${quality_nums[@]}"; do
+        case "$q" in
+            1) qualities+=("360") ;;
+            2) qualities+=("480") ;;
+            3) qualities+=("720") ;;
+            4) qualities+=("1080") ;;
+            5) qualities+=("2160") ;;
+        esac
+    done
+    [[ ${#qualities[@]} -eq 0 ]] && qualities=("720" "1080")
+
+    # Generar cada calidad
+    local playlist_files=()
+    for res in "${qualities[@]}"; do
+        local stream_dir="$hls_dir/${res}p"
+        mkdir -p "$stream_dir"
+
+        echo -e "  ${CYAN}Generando ${res}p...${NC}"
+
+        local bitrate
+        case "$res" in
+            360)  bitrate="800k" ;;
+            480)  bitrate="1400k" ;;
+            720)  bitrate="2800k" ;;
+            1080) bitrate="5000k" ;;
+            2160) bitrate="15000k" ;;
+            *)    bitrate="2800k" ;;
+        esac
+
+        local ffmpeg_args=(-y -i "$file")
+        ffmpeg_args+=(-vf "scale=-2:${res}")
+        ffmpeg_args+=(-c:v libx264 -b:v "$bitrate" -preset fast)
+        ffmpeg_args+=(-c:a aac -b:a 128k)
+        ffmpeg_args+=(-f hls -hls_time "$segment_time")
+        ffmpeg_args+=(-hls_playlist_type vod)
+        ffmpeg_args+=(-hls_segment_filename "$stream_dir/segment_%03d.ts")
+        ffmpeg_args+=("$stream_dir/playlist.m3u8")
+
+        if ffmpeg "${ffmpeg_args[@]}" 2>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} ${res}p completado"
+            playlist_files+=("$stream_dir/playlist.m3u8")
+        else
+            echo -e "  ${RED}✗${NC} Error en ${res}p"
+        fi
+    done
+
+    # Generar playlist maestro si hay múltiples calidades
+    if [[ "$HLS_MASTER" == true && ${#playlist_files[@]} -gt 1 ]]; then
+        echo -e "${BOLD}► Generando playlist maestro...${NC}"
+        local master_playlist="$hls_dir/master.m3u8"
+        echo "#EXTM3U" > "$master_playlist"
+
+        for res in "${qualities[@]}"; do
+            local bandwidth
+            case "$res" in
+                360)  bandwidth="800000" ;;
+                480)  bandwidth="1400000" ;;
+                720)  bandwidth="2800000" ;;
+                1080) bandwidth="5000000" ;;
+                2160) bandwidth="15000000" ;;
+                *)    bandwidth="2800000" ;;
+            esac
+            echo "#EXT-X-STREAM-INF:BANDWIDTH=$bandwidth,RESOLUTION=${res}p" >> "$master_playlist"
+            echo "${res}p/playlist.m3u8" >> "$master_playlist"
+        done
+
+        echo -e "${GREEN}✓${NC} Playlist maestro: $master_playlist"
+    fi
+
+    echo -e "${GREEN}✓${NC} HLS completado: $hls_dir"
+    echo -e "  ${DIM}Para reproducir: ffplay $hls_dir/master.m3u8${NC}"
+    echo -e "  ${DIM}Para servir: copiar $hls_dir a un servidor web${NC}"
 }
 
 # ── Convertir a GIF animado ─────────────────────────────────────────
@@ -2612,7 +2538,7 @@ gif_video() {
     local scale_val="${GIF_SCALE:-480:-1}"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Convirtiendo a GIF:${NC} $file → $output_file"
+    echo -e "${BOLD}► Convirtiendo a GIF:${NC} $file → $output_file"
 
     local vf="fps=$fps_val,scale=$scale_val:flags=lanczos"
     local ffmpeg_args=(-y -i "$file" -vf "$vf" -loop 0 "$output_file")
@@ -2622,9 +2548,9 @@ gif_video() {
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
         local out_kb=$((out_size / 1024))
-        echo -e "${GREEN}GIF creado:${NC} $output_file (${out_kb}KB)"
+        echo -e "${GREEN}✓${NC} GIF creado: $output_file (${out_kb}KB)"
     else
-        echo -e "${RED}Error al crear GIF${NC}"
+        echo -e "${RED}✗${NC} Error al crear GIF"
         rm -f "$output_file"
         return 1
     fi
@@ -2642,12 +2568,12 @@ thumbnail_video() {
     local output_file="$output_dir/${filename}_thumb.png"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Extrayendo thumbnail:${NC} $file @ $timestamp"
+    echo -e "${BOLD}► Extrayendo thumbnail:${NC} $file @ $timestamp"
 
     if ffmpeg -y -ss "$timestamp" -i "$file" -vframes 1 -q:v 2 "$output_file" 2>/dev/null; then
-        echo -e "${GREEN}Thumbnail creado:${NC} $output_file"
+        echo -e "${GREEN}✓${NC} Thumbnail creado: $output_file"
     else
-        echo -e "${RED}Error al extraer thumbnail${NC}"
+        echo -e "${RED}✗${NC} Error al extraer thumbnail"
         rm -f "$output_file"
         return 1
     fi
@@ -2658,7 +2584,7 @@ thumbnail_video() {
 info_video() {
     local file="$1"
     echo -e "${BOLD}═══════════════════════════════════════${NC}"
-    echo -e "${BOLD} Info: $(basename "$file")${NC}"
+    echo -e "${BOLD}► Info: $(basename "$file")${NC}"
     echo -e "${BOLD}═══════════════════════════════════════${NC}"
 
     local size
@@ -2723,23 +2649,23 @@ rotate_video() {
     local output_file="$output_dir/${filename}_rot${ROTATE_DEGREES}.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Rotando ${ROTATE_DEGREES}°:${NC} $file → $output_file"
+    echo -e "${BOLD}► Rotando ${ROTATE_DEGREES}°:${NC} $file → $output_file"
 
     local transpose_val
     case "$ROTATE_DEGREES" in
         90)  transpose_val=1 ;;
         180) transpose_val=2 ;;
         270) transpose_val=3 ;;
-        *)   echo -e "${RED}Grados no válidos: $ROTATE_DEGREES (usa 90, 180 o 270)${NC}"; return 1 ;;
+        *)   echo -e "${RED}✗${NC} Grados no válidos: $ROTATE_DEGREES (usa 90, 180 o 270)${NC}"; return 1 ;;
     esac
 
     if ffmpeg -y -i "$file" -vf "transpose=$transpose_val" -c:a copy "$output_file" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Rotación completada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Rotación completada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al rotar${NC}"
+        echo -e "${RED}✗${NC} Error al rotar"
         rm -f "$output_file"
         return 1
     fi
@@ -2757,7 +2683,7 @@ crop_video() {
     local output_file="$output_dir/${filename}_cropped.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Recortando ${CROP_SIZE}:${NC} $file → $output_file"
+    echo -e "${BOLD}► Recortando ${CROP_SIZE}:${NC} $file → $output_file"
 
     local w h
     w=$(echo "$CROP_SIZE" | cut -d: -f1)
@@ -2767,9 +2693,9 @@ crop_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Crop completado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Crop completado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al recortar${NC}"
+        echo -e "${RED}✗${NC} Error al recortar"
         rm -f "$output_file"
         return 1
     fi
@@ -2788,12 +2714,12 @@ fade_video() {
     local fade_dur="${FADE_SECONDS:-1}"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Aplicando fade (${fade_dur}s):${NC} $file → $output_file"
+    echo -e "${BOLD}► Aplicando fade (${fade_dur}s):${NC} $file → $output_file"
 
     local duration
     duration=$(get_duration "$file")
     if [[ -z "$duration" || ! "$duration" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}No se pudo obtener la duración del vídeo${NC}"
+        echo -e "${RED}✗${NC} No se pudo obtener la duración del vídeo"
         return 1
     fi
 
@@ -2807,9 +2733,9 @@ fade_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Fade aplicado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Fade aplicado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al aplicar fade${NC}"
+        echo -e "${RED}✗${NC} Error al aplicar fade"
         rm -f "$output_file"
         return 1
     fi
@@ -2827,7 +2753,7 @@ normalize_video() {
     local output_file="$output_dir/${filename}_norm.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Normalizando audio:${NC} $file → $output_file"
+    echo -e "${BOLD}► Normalizando audio:${NC} $file → $output_file"
 
     if ffmpeg -y -i "$file" \
         -af "loudnorm=I=-16:TP=-1.5:LRA=11" \
@@ -2835,9 +2761,9 @@ normalize_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Audio normalizado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Audio normalizado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al normalizar${NC}"
+        echo -e "${RED}✗${NC} Error al normalizar"
         rm -f "$output_file"
         return 1
     fi
@@ -2855,7 +2781,7 @@ watermark_video() {
     local output_file="$output_dir/${filename}_watermarked.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Añadiendo marca de agua:${NC} $file + $WATERMARK_FILE → $output_file"
+    echo -e "${BOLD}► Añadiendo marca de agua:${NC} $file + $WATERMARK_FILE → $output_file"
 
     if ffmpeg -y -i "$file" -i "$WATERMARK_FILE" \
         -filter_complex "overlay=W-w-10:H-h-10" \
@@ -2863,9 +2789,9 @@ watermark_video() {
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Marca de agua aplicada:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Marca de agua aplicada: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al añadir marca de agua${NC}"
+        echo -e "${RED}✗${NC} Error al añadir marca de agua"
         rm -f "$output_file"
         return 1
     fi
@@ -2883,16 +2809,16 @@ deinterlace_video() {
     local output_file="$output_dir/${filename}_deint.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Desentrelazando:${NC} $file → $output_file"
+    echo -e "${BOLD}► Desentrelazando:${NC} $file → $output_file"
 
     if ffmpeg -y -i "$file" \
         -vf "yadif" -c:a copy "$output_file" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}Desentrelazado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} Desentrelazado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al desentrelazar${NC}"
+        echo -e "${RED}✗${NC} Error al desentrelazar"
         rm -f "$output_file"
         return 1
     fi
@@ -2910,16 +2836,16 @@ fps_video() {
     local output_file="$output_dir/${filename}_${TARGET_FPS}fps.$ext"
 
     mkdir -p "$output_dir"
-    echo -e "${BOLD}Cambiando a ${TARGET_FPS}fps:${NC} $file → $output_file"
+    echo -e "${BOLD}► Cambiando a ${TARGET_FPS}fps:${NC} $file → $output_file"
 
     if ffmpeg -y -i "$file" \
         -vf "fps=$TARGET_FPS" -c:a copy "$output_file" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
-        echo -e "${GREEN}FPS cambiado:${NC} $output_file (${out_mb}MB)"
+        echo -e "${GREEN}✓${NC} FPS cambiado: $output_file (${out_mb}MB)"
     else
-        echo -e "${RED}Error al cambiar FPS${NC}"
+        echo -e "${RED}✗${NC} Error al cambiar FPS"
         rm -f "$output_file"
         return 1
     fi
@@ -2931,7 +2857,7 @@ run_watch_mode() {
     local input_dir="$1"
     local output_dir="$2"
 
-    echo -e "${BOLD}Modo watch activado:${NC} $input_dir → $output_dir"
+    echo -e "${BOLD}► Modo watch activado:${NC} $input_dir → $output_dir"
     echo -e "${DIM}Presiona Ctrl+C para salir${NC}"
     echo ""
 
@@ -2943,19 +2869,19 @@ run_watch_mode() {
     # Procesar archivos existentes
     buscar_archivos
     if [[ $total -gt 0 ]]; then
-        echo -e "${CYAN}Procesando $total archivos existentes...${NC}"
+        echo -e "${CYAN}►${NC} Procesando $total archivos existentes..."
         for file in "${archivos[@]}"; do
             convertir_archivo "$file" "$OUTPUT_DIR"
         done
     fi
 
-    echo -e "${CYAN}Esperando nuevos archivos...${NC}"
+    echo -e "${CYAN}►${NC} Esperando nuevos archivos..."
 
     if command -v inotifywait &>/dev/null; then
         inotifywait -m -e close_write --format '%w%f' "$input_dir" | while read -r file; do
             case "$file" in
                 *.avi|*.webm|*.mkv|*.mp4|*.flv)
-                    echo -e "${CYAN}Nuevo archivo detectado:${NC} $file"
+                    echo -e "${CYAN}►${NC} Nuevo archivo detectado: $file"
                     convertir_archivo "$file" "$OUTPUT_DIR"
                     ;;
             esac
@@ -2964,7 +2890,7 @@ run_watch_mode() {
         while true; do
             sleep 5
             while IFS= read -r -d $'\0' file; do
-                echo -e "${CYAN}Nuevo archivo detectado:${NC} $file"
+                echo -e "${CYAN}►${NC} Nuevo archivo detectado: $file"
                 convertir_archivo "$file" "$OUTPUT_DIR"
             done < <(find "$input_dir" -maxdepth1 -type f \( -iname "*.avi" -o -iname "*.webm" -o -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.flv" \) -newer "$marker" -print0)
             touch "$marker"
@@ -3038,7 +2964,7 @@ select_video_file() {
         return 1
     fi
 
-    echo -e "${BOLD}  Vídeos disponibles:${NC}"
+    echo -e "${BOLD}  ► Vídeos disponibles:${NC}"
     echo ""
     local i=1
     for f in "${all_files[@]}"; do
@@ -3062,7 +2988,7 @@ select_video_file() {
 
     read -rp "  → Selecciona [1-${#all_files[@]}]: " choice
     if [[ -z "$choice" || ! "$choice" =~ ^[0-9]+$ || "$choice" -lt 1 || "$choice" -gt ${#all_files[@]} ]]; then
-        echo -e "${RED}Selección no válida${NC}"
+        echo -e "${RED}✗${NC} Selección no válida"
         return 1
     fi
 
@@ -3091,7 +3017,7 @@ select_video_files() {
         return 1
     fi
 
-    echo -e "${BOLD}  Vídeos disponibles:${NC}"
+    echo -e "${BOLD}  ► Vídeos disponibles:${NC}"
     echo ""
     local i=1
     for f in "${all_files[@]}"; do
@@ -3130,7 +3056,7 @@ select_video_files() {
                 SELECTED_FILES+=("${all_files[$j]}")
             done
         else
-            echo -e "${RED}Rango no válido${NC}"
+            echo -e "${RED}✗${NC} Rango no válido"
             return 1
         fi
     elif [[ "$choice" =~ ^[0-9,]+$ ]]; then
@@ -3141,7 +3067,7 @@ select_video_files() {
             if [[ "$idx" -ge 1 && "$idx" -le ${#all_files[@]} ]]; then
                 SELECTED_FILES+=("${all_files[$((idx - 1))]}")
             else
-                echo -e "${RED}Índice $idx fuera de rango${NC}"
+                echo -e "${RED}✗${NC} Índice $idx fuera de rango"
                 return 1
             fi
         done
@@ -3150,7 +3076,7 @@ select_video_files() {
         if [[ "$choice" -ge 1 && "$choice" -le ${#all_files[@]} ]]; then
             SELECTED_FILES=("${all_files[$((choice - 1))]}")
         else
-            echo -e "${RED}Selección no válida${NC}"
+            echo -e "${RED}✗${NC} Selección no válida"
             return 1
         fi
     fi
@@ -3169,7 +3095,7 @@ ask_output_name() {
     local default_name="$1"
     local ext="$2"
 
-    echo -e "${BOLD}  Nombre de salida${NC} ${DIM}(Enter = ${default_name}.${ext})${NC}"
+    echo -e "${BOLD}  ► Nombre de salida${NC} ${DIM}(Enter = ${default_name}.${ext})${NC}"
     read -rp "  → $default_name : " custom_name
     if [[ -n "$custom_name" ]]; then
         # Quitar extensión si la puso
@@ -3190,32 +3116,6 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "${BOLD}═══════════════════════════════════════${NC}"
     echo ""
 
-    # ── ¿Usar config guardada? ────────────────────────────────────────
-    if [[ -f "$CONF_FILE" ]] && command -v jq &>/dev/null; then
-        echo -e "  ${YELLOW}Configuración guardada encontrada${NC}"
-        echo -e "  ${DIM}Archivo: $CONF_FILE${NC}"
-        echo ""
-        echo -e "  ${BOLD}Contenido:${NC}"
-        echo -e "    $(jq -r '"Entrada:     " + (.inputDir // "")' "$CONF_FILE" 2>/dev/null)"
-        echo -e "    $(jq -r '"Salida:      " + (.outputDir // "")' "$CONF_FILE" 2>/dev/null)"
-        echo -e "    $(jq -r '"Extensiones: " + (.extensions // "")' "$CONF_FILE" 2>/dev/null)"
-        echo -e "    $(jq -r '"Progreso:    " + if .verbose == true then "detallado" else "resumen" end' "$CONF_FILE" 2>/dev/null)"
-        saved_modes=$(jq -r '.modes | keys | join(", ")' "$CONF_FILE" 2>/dev/null)
-        [[ -n "$saved_modes" ]] && echo -e "  ${BOLD}Modos guardados:${NC} ${CYAN}$saved_modes${NC}"
-        echo ""
-        read -rp "  ¿Usarla? [S/n]: " val
-        if [[ ! "$val" =~ ^[Nn] ]]; then
-            load_config
-            echo -e "  ${GREEN}Configuración global cargada${NC}"
-            echo ""
-        fi
-    fi
-
-    # ══════════════════════════════════════════════════════════════════
-    #  PASO 1: Seleccionar modo
-    # ══════════════════════════════════════════════════════════════════
-    echo -e "${BOLD}  ¿Qué quieres hacer?${NC}"
-    echo ""
     echo -e "    ${GREEN} 1)${NC} Descargar vídeo       ${DIM}— YouTube, Twitch, Kick, TikTok, +1000${NC}"
     echo -e "    ${GREEN} 2)${NC} Cortar vídeo          ${DIM}— Sin perder calidad${NC}"
     echo -e "    ${GREEN} 3)${NC} Convertir/comprimir   ${DIM}— Ajustar tamaño y calidad${NC}"
@@ -3247,8 +3147,10 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}29)${NC} Reordenar pistas      ${DIM}— Cambiar orden de vídeo/audio/subtítulos${NC}"
     echo -e "    ${GREEN}30)${NC} Unir inteligente      ${DIM}— Auto-detectar compatibilidad + crossfade${NC}"
     echo -e "    ${GREEN}31)${NC} Pipeline encadenado   ${DIM}— Varios pasos en uno: cortar+convertir+...${NC}"
+    echo -e "    ${GREEN}32)${NC} Compose               ${DIM}— Seleccionar vídeo + varias pistas de audio + subtítulos${NC}"
+    echo -e "    ${GREEN}33)${NC} HLS                   ${DIM}— Preparar vídeo para streaming (m3u8)${NC}"
     echo ""
-    read -rp "  → Selecciona [1-31]: " mode_val
+    read -rp "  → Selecciona [1-33]: " mode_val
     echo ""
 
     case "$mode_val" in
@@ -3283,15 +3185,10 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         29) MODE="tracks" ;;
         30) MODE="concat-smart" ;;
         31) MODE="chain" ;;
-        *)  echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+        32) MODE="compose" ;;
+        33) MODE="hls" ;;
+        *)  echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
     esac
-
-    # ── Cargar config del modo seleccionado ─────────────────────────────
-    if [[ -f "$CONF_FILE" ]] && command -v jq &>/dev/null; then
-        load_config "$MODE"
-        echo -e "  ${DIM}Configuración de $MODE cargada${NC}"
-        echo ""
-    fi
 
     # ══════════════════════════════════════════════════════════════════
     #  PASO 2: Directorio de entrada y selección de archivo
@@ -3300,23 +3197,23 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     case "$MODE" in
         # -- Descarga: solo pide URL --
         download)
-            echo -e "${BOLD}  URL a descargar${NC}"
+            echo -e "${BOLD}  ► URL a descargar${NC}"
             echo -e "  ${DIM}Soporta: YouTube, Twitch, Kick, TikTok, Instagram, Twitter/X,"
             echo -e "  Facebook, Vimeo, Dailymotion, Reddit, SoundCloud, y 1000+ sitios${NC}"
             read -rp "  → URL: " URL
-            [[ -z "$URL" ]] && { echo -e "${RED}Se requiere URL${NC}"; exit 1; }
+            [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
 
             # Validar que la URL esté soportada
             echo -e "  ${DIM}Comprobando URL...${NC}"
             if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-                echo -e "${RED}ERROR: URL no soportada o no válida${NC}"
+                echo -e "${RED}✗${NC} URL no soportada o no válida"
                 echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
                 echo -e "  ${DIM}Lista de sitios soportados: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
                 exit 1
             fi
-            echo -e "  ${GREEN}URL válida${NC}"
+            echo -e "  ${GREEN}✓${NC} URL válida"
             echo ""
-            echo -e "${BOLD}  Calidad de descarga${NC}"
+            echo -e "${BOLD}  ► Calidad de descarga${NC}"
             echo -e "  ${DIM}1) Mejor calidad  2) 1080p  3) 720p  4) 480p  5) Solo audio${NC}"
             read -rp "  → Calidad [1-5, default=1]: " quality_val
             case "${quality_val:-1}" in
@@ -3327,7 +3224,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 *) DOWNLOAD_QUALITY="best" ;;
             esac
             echo ""
-            echo -e "${BOLD}  Formato de salida${NC}"
+            echo -e "${BOLD}  ► Formato de salida${NC}"
             echo -e "  ${DIM}1) MP4 (default)  2) MKV  3) WebM  4) Mejor disponible${NC}"
             read -rp "  → Formato [1-4, default=1]: " format_val
             case "${format_val:-1}" in
@@ -3337,35 +3234,48 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 *) DOWNLOAD_FORMAT="mp4" ;;
             esac
             echo ""
-            echo -e "${BOLD}  ¿Descargar playlist completa?${NC}"
+            echo -e "${BOLD}  ► ¿Descargar playlist completa?${NC}"
             read -rp "  → [S/n]: " playlist_val
             [[ ! "$playlist_val" =~ ^[Nn] ]] && DOWNLOAD_PLAYLIST=true
             echo ""
-            echo -e "${BOLD}  Descarga parcial (opcional)${NC}"
+            echo -e "${BOLD}  ► Descarga parcial (opcional)${NC}"
             echo -e "  ${DIM}Deja vacío para descargar todo${NC}"
             read -rp "  → Inicio (ej: 00:05:00): " DOWNLOAD_START
             read -rp "  → Fin (ej: 00:10:00):    " DOWNLOAD_END
+            echo ""
+            echo -e "${BOLD}  ► Filtros de playlist (opcional)${NC}"
+            echo -e "  ${DIM}Deja vacío para saltar${NC}"
+            read -rp "  → Items de playlist (ej: 1-5, 1,3,5): " YTDLP_PLAYLIST_ITEMS
+            echo ""
+            echo -e "${BOLD}  ► ¿Guardar historial de descargas?${NC}"
+            echo -e "  ${DIM}Evita re-descargar vídeos ya descargados${NC}"
+            read -rp "  → Archivo de historial [vacío=no guardar]: " YTDLP_ARCHIVE
+            echo ""
+            echo -e "${BOLD}  ► Filtros de fecha (opcional)${NC}"
+            echo -e "  ${DIM}Formato: YYYYMMDD. Deja vacío para saltar${NC}"
+            read -rp "  → Fecha mínima (desde): " YTDLP_DATEAFTER
+            read -rp "  → Fecha máxima (hasta): " YTDLP_DATEBEFORE
             echo ""
             ;;
 
         # -- Concat: pide lista de archivos --
         concat)
-            echo -e "${BOLD}  Archivos a unir${NC}"
+            echo -e "${BOLD}  ► Archivos a unir${NC}"
             echo -e "  ${DIM}Escribe las rutas separadas por espacio${NC}"
             echo -e "  ${DIM}Ejemplo: /videos/a.mkv /videos/b.mkv /videos/c.mkv${NC}"
             read -rp "  → Archivos: " -a CONCAT_FILES
-            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}Se necesitan al menos 2 archivos${NC}"; exit 1; }
+            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"; exit 1; }
             echo ""
             ;;
 
         # -- Concat smart: pide archivos + crossfade --
         concat-smart)
-            echo -e "${BOLD}  Archivos a unir (inteligente)${NC}"
+            echo -e "${BOLD}  ► Archivos a unir (inteligente)${NC}"
             echo -e "  ${DIM}Auto-detecta compatibilidad. Si son distintos, re-codifica automáticamente${NC}"
             read -rp "  → Archivos: " -a CONCAT_FILES
-            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}Se necesitan al menos 2 archivos${NC}"; exit 1; }
+            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"; exit 1; }
             echo ""
-            echo -e "${BOLD}  ¿Crossfade entre clips?${NC}"
+            echo -e "${BOLD}  ► ¿Crossfade entre clips?${NC}"
             echo -e "  ${DIM}Transición suave (fade) al unir. Deja vacío para saltar${NC}"
             read -rp "  → Duración en segundos (ej: 1): " CROSSFADE_DURATION
             echo ""
@@ -3373,7 +3283,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
 
         # -- Chain: pide operaciones --
         chain)
-            echo -e "${BOLD}  Pipeline encadenado${NC}"
+            echo -e "${BOLD}  ► Pipeline encadenado${NC}"
             echo -e "  ${DIM}Encadena varios pasos en uno solo${NC}"
             echo -e "  ${DIM}Operaciones disponibles:${NC}"
             echo -e "  ${DIM}  cut=START:END       Cortar vídeo${NC}"
@@ -3390,13 +3300,134 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             for op in "${CHAIN_OPS_RAW[@]}"; do
                 CHAIN_OPS+=("$op")
             done
-            [[ ${#CHAIN_OPS[@]} -eq 0 ]] && { echo -e "${RED}Se requiere al menos una operación${NC}"; exit 1; }
+            [[ ${#CHAIN_OPS[@]} -eq 0 ]] && { echo -e "${RED}✗${NC} Se requiere al menos una operación"; exit 1; }
+            echo ""
+            ;;
+
+        # -- Compose: elegir pistas personalizadas --
+        compose)
+            echo -e "${BOLD}  ► Compose — Vídeo personalizado${NC}"
+            echo -e "  ${DIM}Selecciona pistas de vídeo, audio y subtítulos${NC}"
+            echo ""
+            echo -e "${BOLD}  ► Directorio de entrada${NC}"
+            echo -e "  ${DIM}¿Dónde están los vídeos?${NC}"
+            read -rp "  → $INPUT_DIR : " val
+            [[ -n "$val" ]] && INPUT_DIR="$val"
+            if [[ ! -d "$INPUT_DIR" ]]; then
+                echo -e "${RED}✗${NC} Directorio no válido: $INPUT_DIR"
+                exit 1
+            fi
+            echo -e "${GREEN}✓${NC} Directorio: $INPUT_DIR"
+            echo ""
+
+            echo -e "${BOLD}  ► Tipo de búsqueda${NC}"
+            echo -e "    ${GREEN}1)${NC} Un solo archivo"
+            echo -e "    ${GREEN}2)${NC} Todos los vídeos del directorio"
+            echo ""
+            read -rp "  → Tipo [1]: " search_type
+            echo ""
+
+            case "${search_type:-1}" in
+                2)
+                    mapfile -t FOUND_FILES < <(find "$INPUT_DIR" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.ts" -o -iname "*.webm" -o -iname "*.flv" -o -iname "*.m4v" -o -iname "*.mpg" -o -iname "*.mpeg" \) | sort)
+                    if [[ ${#FOUND_FILES[@]} -eq 0 ]]; then
+                        echo -e "${RED}✗${NC} No se encontraron vídeos en: $INPUT_DIR"
+                        exit 1
+                    fi
+                    echo -e "${GREEN}✓${NC} Encontrados ${#FOUND_FILES[@]} vídeos${NC}"
+                    ;;
+                *)
+                    echo -e "${BOLD}  ► Archivos de vídeo en:${NC} $INPUT_DIR"
+                    echo ""
+                    local video_extensions=("mp4" "mkv" "avi" "mov" "ts" "webm" "flv" "m4v" "mpg" "mpeg")
+                    local find_args=()
+                    for ext in "${video_extensions[@]}"; do
+                        find_args+=(-iname "*.$ext" -o)
+                    done
+                    unset 'find_args[${#find_args[@]}-1]'
+                    mapfile -t FOUND_FILES < <(find "$INPUT_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | sort)
+                    if [[ ${#FOUND_FILES[@]} -eq 0 ]]; then
+                        echo -e "${RED}✗${NC} No se encontraron archivos de vídeo en: $INPUT_DIR"
+                        exit 1
+                    fi
+                    local i=1
+                    for file in "${FOUND_FILES[@]}"; do
+                        local filename
+                        filename=$(basename "$file")
+                        printf "    ${GREEN}%2d)${NC} %s\n" "$i" "$filename"
+                        ((i++))
+                    done
+                    echo ""
+                    read -rp "  → Archivo [1]: " file_num
+                    if [[ -z "$file_num" || ! "$file_num" =~ ^[0-9]+$ || "$file_num" -lt 1 || "$file_num" -gt ${#FOUND_FILES[@]} ]]; then
+                        file_num=1
+                    fi
+                    SELECTED_FILE="${FOUND_FILES[$((file_num-1))]}"
+                    FOUND_FILES=("$SELECTED_FILE")
+                    ;;
+            esac
+
+            for current_file in "${FOUND_FILES[@]}"; do
+                local base_name
+                base_name=$(basename "$current_file")
+                echo ""
+                echo -e "${BOLD}═══ ${CYAN}${base_name}${NC}${BOLD} ═══${NC}"
+                echo ""
+
+                select_video_stream "$current_file"
+                select_multiple_audio_tracks "$current_file"
+                select_subtitle_tracks "$current_file"
+                assign_codecs_per_track "$current_file"
+                select_output_format
+                build_compose_command "$current_file" "$base_name" "$OUTPUT_DIR"
+            done
+            ;;
+
+        # -- HLS: preparar para streaming --
+        hls)
+            echo -e "${BOLD}  ► HLS — Streaming${NC}"
+            echo -e "  ${DIM}Preparar vídeo para streaming con múltiples calidades${NC}"
+            echo ""
+            echo -e "${BOLD}  ► Directorio de entrada${NC}"
+            echo -e "  ${DIM}¿Dónde están los vídeos?${NC}"
+            read -rp "  → $INPUT_DIR : " val
+            [[ -n "$val" ]] && INPUT_DIR="$val"
+            if [[ ! -d "$INPUT_DIR" ]]; then
+                echo -e "${RED}✗${NC} Directorio no válido: $INPUT_DIR"
+                exit 1
+            fi
+            echo -e "${GREEN}✓${NC} Directorio: $INPUT_DIR"
+            echo ""
+
+            echo -e "${BOLD}  ► Selecciona el vídeo${NC}"
+            if ! select_video_file "$INPUT_DIR" "hls"; then
+                exit 1
+            fi
+            echo ""
+
+            echo -e "${BOLD}  ► Calidades HLS${NC}"
+            echo -e "  ${DIM}Selecciona las calidades a generar (separadas por coma)${NC}"
+            echo -e "  ${DIM}1) 360p   2) 480p   3) 720p   4) 1080p   5) 4K${NC}"
+            read -rp "  → Calidades [3,4]: " hls_qualities
+            [[ -z "$hls_qualities" ]] && hls_qualities="3,4"
+            echo ""
+
+            echo -e "${BOLD}  ► Segmentos${NC}"
+            echo -e "  ${DIM}Duración de cada fragmento en segundos${NC}"
+            read -rp "  → Duración [4]: " HLS_SEGMENT_TIME
+            HLS_SEGMENT_TIME="${HLS_SEGMENT_TIME:-4}"
+            echo ""
+
+            echo -e "${BOLD}  ► ¿Streaming adaptativo?${NC}"
+            echo -e "  ${DIM}Genera playlist maestro con todas las calidades${NC}"
+            read -rp "  → [S/n]: " hls_master_val
+            [[ ! "$hls_master_val" =~ ^[Nn] ]] && HLS_MASTER=true
             echo ""
             ;;
 
         # -- Todos los demás modos: elegir directorio y archivo --
         *)
-            echo -e "${BOLD}  Directorio de entrada${NC}"
+            echo -e "${BOLD}  ► Directorio de entrada${NC}"
             echo -e "  ${DIM}¿Dónde están los vídeos?${NC}"
             read -rp "  → $INPUT_DIR : " val
             [[ -n "$val" ]] && INPUT_DIR="$val"
@@ -3405,7 +3436,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 echo -e "  ${RED}El directorio no existe${NC}"
                 read -rp "  ¿Quieres crearlo? [S/n]: " val
                 if [[ ! "$val" =~ ^[Nn] ]]; then
-                    mkdir -p "$INPUT_DIR" 2>/dev/null || { echo -e "${RED}No se pudo crear${NC}"; exit 1; }
+                    mkdir -p "$INPUT_DIR" 2>/dev/null || { echo -e "${RED}✗${NC} No se pudo crear"; exit 1; }
                     echo -e "  ${GREEN}Creado: $INPUT_DIR${NC}"
                 else
                     exit 0
@@ -3416,13 +3447,13 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             # Seleccionar archivo(s) - multi-selección para modos batch
             case "$MODE" in
                 cut|convert|gif|thumbnail|rotate|crop|fade|normalize|watermark|deinterlace|fps|speed|subtitles|audio-only|remux|tracks)
-                    echo -e "${BOLD}  Selecciona los vídeos${NC}"
+                    echo -e "${BOLD}  ► Selecciona los vídeos${NC}"
                     if ! select_video_files "$INPUT_DIR"; then
                         exit 1
                     fi
                     ;;
                 *)
-                    echo -e "${BOLD}  Selecciona el vídeo${NC}"
+                    echo -e "${BOLD}  ► Selecciona el vídeo${NC}"
                     if ! select_video_file "$INPUT_DIR" "$MODE"; then
                         exit 1
                     fi
@@ -3441,12 +3472,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         *)
-            echo -e "${BOLD}  Directorio de salida${NC}"
+            echo -e "${BOLD}  ► Directorio de salida${NC}"
             read -rp "  → $OUTPUT_DIR : " val
             [[ -n "$val" ]] && OUTPUT_DIR="$val"
 
             if [[ ! -d "$OUTPUT_DIR" ]]; then
-                mkdir -p "$OUTPUT_DIR" 2>/dev/null && echo -e "  ${GREEN}Creado: $OUTPUT_DIR${NC}" || echo -e "  ${RED}No se pudo crear${NC}"
+                mkdir -p "$OUTPUT_DIR" 2>/dev/null && echo -e "  ${GREEN}Creado: $OUTPUT_DIR${NC}" || echo -e "  ${RED}✗${NC} No se pudo crear"
             fi
             echo ""
 
@@ -3478,19 +3509,19 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             fi
 
             if [[ ${#cut_archivos[@]} -eq 0 ]]; then
-                echo -e "${RED}No hay archivos seleccionados${NC}"
+                echo -e "${RED}✗${NC} No hay archivos seleccionados"
                 exit 1
             fi
 
             FILE_CUT=()
             for f in "${cut_archivos[@]}"; do
-                echo -e "${BOLD}  Vídeo ${CYAN}$(basename "$f")${NC}${BOLD} (${#cut_archivos[@]} en total)${NC}"
+                echo -e "${BOLD}  ► Vídeo ${CYAN}$(basename "$f")${NC}${BOLD} (${#cut_archivos[@]} en total)${NC}"
                 echo ""
 
                 ask_preview "$f"
                 echo ""
 
-                echo -e "${BOLD}  Tipo de corte${NC}"
+                echo -e "${BOLD}  ► Tipo de corte${NC}"
                 echo -e "    ${GREEN}1)${NC} Cortar un trozo     ${DIM}— Mantener solo ese trozo${NC}"
                 echo -e "    ${GREEN}2)${NC} Eliminar secciones  ${DIM}— Quitar partes del vídeo${NC}"
                 echo -e "    ${GREEN}3)${NC} Extraer clips       ${DIM}— Sacar varios trozos y unirlos${NC}"
@@ -3506,20 +3537,20 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                     3) CUT_MODE="extract" ;;
                     1) CUT_MODE="normal" ;;
                     "") : ;;
-                    *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                    *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
                 esac
 
                 if [[ "$CUT_MODE" == "normal" ]]; then
-                    echo -e "${BOLD}  Tiempo de corte${NC}"
+                    echo -e "${BOLD}  ► Tiempo de corte${NC}"
                     echo -e "  ${DIM}Formato: HH:MM:SS o MM:SS o segundos${NC}"
                     echo -e "  ${DIM}Vacío = conservar el valor actual (o dejar sin límite)${NC}"
                     read -rp "  → Tiempo inicio [$START_TIME]: " t_start
                     [[ -n "$t_start" ]] && START_TIME="$t_start"
                     read -rp "  → Tiempo fin [$END_TIME]: " t_end
                     [[ -n "$t_end" ]] && END_TIME="$t_end"
-                    [[ -z "$START_TIME" && -z "$END_TIME" ]] && { echo -e "${RED}Indica al menos un tiempo${NC}"; exit 1; }
+                    [[ -z "$START_TIME" && -z "$END_TIME" ]] && { echo -e "${RED}✗${NC} Indica al menos un tiempo"; exit 1; }
                 else
-                    echo -e "${BOLD}  Secciones a ${CUT_MODE}${NC}"
+                    echo -e "${BOLD}  ► Secciones a ${CUT_MODE}${NC}"
                     echo -e "  ${DIM}Formato: inicio-fin separados por coma${NC}"
                     echo -e "  ${DIM}Ejemplo: 00:01:00-00:02:30,00:05:00-00:07:15${NC}"
                     if [[ "$CUT_MODE" == "remove" ]]; then
@@ -3535,7 +3566,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                     if [[ -n "$clips_input" ]]; then
                         IFS=',' read -ra CUT_CLIPS <<< "$clips_input"
                     elif [[ ${#CUT_CLIPS[@]} -eq 0 ]]; then
-                        echo -e "${RED}Indica al menos un clip${NC}"; exit 1
+                        echo -e "${RED}✗${NC} Indica al menos un clip"; exit 1
                     fi
                     echo ""
                     echo -e "  ${CYAN}Clips a ${CUT_MODE}:${NC}"
@@ -3562,7 +3593,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         convert)
-            echo -e "${BOLD}  Red social (atajo)${NC}"
+            echo -e "${BOLD}  ► Red social (atajo)${NC}"
             echo -e "    ${GREEN}0)${NC} Ninguna — Manual"
             echo -e "    ${GREEN}1)${NC} WhatsApp  ${GREEN}2)${NC} Telegram  ${GREEN}3)${NC} Instagram"
             echo -e "    ${GREEN}4)${NC} TikTok    ${GREEN}5)${NC} YouTube   ${GREEN}6)${NC} Twitter"
@@ -3588,11 +3619,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 6) apply_social_preset "twitter" ;;
                 7) apply_social_preset "facebook" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Preset de calidad${NC}"
+            echo -e "${BOLD}  ► Preset de calidad${NC}"
             echo -e "    ${GREEN}1)${NC} ultrafast — Muy rápido, poco peso"
             echo -e "    ${GREEN}2)${NC} web       — Rápido, buen balance"
             echo -e "    ${GREEN}3)${NC} default   — Equilibrado"
@@ -3613,11 +3644,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 5) PRESET="quality" ;;
                 3) PRESET="default" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Códec de vídeo${NC}"
+            echo -e "${BOLD}  ► Códec de vídeo${NC}"
             echo -e "    ${GREEN}1)${NC} h264 — Máxima compatibilidad"
             echo -e "    ${GREEN}2)${NC} hevc — Mejor calidad/menor tamaño (más lento)"
             echo -e "    ${GREEN}3)${NC} av1  — Máxima eficiencia (muy lento)"
@@ -3635,11 +3666,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 3) VIDEO_CODEC="av1" ;;
                 4) VIDEO_CODEC="vp9" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Resolución${NC}"
+            echo -e "${BOLD}  ► Resolución${NC}"
             echo -e "    ${GREEN}1)${NC} original  ${GREEN}2)${NC} 4k  ${GREEN}3)${NC} 1080  ${GREEN}4)${NC} 720  ${GREEN}5)${NC} 480  ${GREEN}6)${NC} 360"
             res_def=1
             case "$RESOLUTION" in
@@ -3659,11 +3690,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 5) RESOLUTION="480" ;;
                 6) RESOLUTION="360" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Tamaño máximo en GB${NC} ${DIM}(vacío = sin límite)${NC}"
+            echo -e "${BOLD}  ► Tamaño máximo en GB${NC} ${DIM}(vacío = sin límite)${NC}"
             read -rp "  → ${MAX_SIZE:-sin límite}GB : " val
             if [[ -n "$val" ]]; then
                 MAX_SIZE="$val"
@@ -3671,10 +3702,15 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 :
             fi
             echo ""
+            echo -e "${BOLD}  ► Two-pass encoding${NC}"
+            echo -e "  ${DIM}Dos pasadas: mejor calidad con tamaño objetivo. Más lento.${NC}"
+            read -rp "  → ¿Usar two-pass? [s/N]: " twopass_val
+            [[ "$twopass_val" =~ ^[Ss] ]] && TWO_PASS=true
+            echo ""
             ;;
 
         gif)
-            echo -e "${BOLD}  FPS del GIF${NC}"
+            echo -e "${BOLD}  ► FPS del GIF${NC}"
             echo -e "  ${DIM}Más FPS = más suave pero más pesado${NC}"
             echo -e "    ${GREEN}1)${NC} 10 FPS — Ligero"
             echo -e "    ${GREEN}2)${NC} 15 FPS — Normal"
@@ -3690,7 +3726,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             esac
             echo ""
 
-            echo -e "${BOLD}  Tamaño del GIF${NC}"
+            echo -e "${BOLD}  ► Tamaño del GIF${NC}"
             echo -e "    ${GREEN}1)${NC} 320px — Pequeño"
             echo -e "    ${GREEN}2)${NC} 480px — Mediano"
             echo -e "    ${GREEN}3)${NC} 640px — Grande"
@@ -3707,7 +3743,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         thumbnail)
-            echo -e "${BOLD}  Timestamp del frame${NC}"
+            echo -e "${BOLD}  ► Timestamp del frame${NC}"
             echo -e "  ${DIM}En qué momento del vídeo quieres la captura${NC}"
             echo -e "    ${GREEN}1)${NC} 00:00:01 — Primer segundo"
             echo -e "    ${GREEN}2)${NC} 00:00:05 — 5 segundos"
@@ -3734,7 +3770,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         rotate)
-            echo -e "${BOLD}  ¿Cuánto quieres girar el vídeo?${NC}"
+            echo -e "${BOLD}  ► ¿Cuánto quieres girar el vídeo?${NC}"
             echo -e "    ${GREEN}1)${NC} 90°  — Girar a la derecha"
             echo -e "    ${GREEN}2)${NC} 180° — Dar la vuelta"
             echo -e "    ${GREEN}3)${NC} 270° — Girar a la izquierda"
@@ -3752,22 +3788,22 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 "") : ;;
                 *) [[ -n "$val" ]] && ROTATE_DEGREES="$val" ;;
             esac
-            [[ -z "$ROTATE_DEGREES" ]] && { echo -e "${RED}Selecciona grados${NC}"; exit 1; }
+            [[ -z "$ROTATE_DEGREES" ]] && { echo -e "${RED}✗${NC} Selecciona grados"; exit 1; }
             echo ""
             ;;
 
         crop)
-            echo -e "${BOLD}  Tamaño de recorte (Ancho:Alto)${NC}"
+            echo -e "${BOLD}  ► Tamaño de recorte (Ancho:Alto)${NC}"
             echo -e "  ${DIM}Ejemplo: 640:480 = recortar a 640x480 píxeles${NC}"
             echo -e "  ${DIM}El vídeo se recortará desde el centro${NC}"
             read -rp "  → W:H [$CROP_SIZE]: " csize
             [[ -n "$csize" ]] && CROP_SIZE="$csize"
-            [[ -z "$CROP_SIZE" ]] && { echo -e "${RED}Indica el tamaño${NC}"; exit 1; }
+            [[ -z "$CROP_SIZE" ]] && { echo -e "${RED}✗${NC} Indica el tamaño"; exit 1; }
             echo ""
             ;;
 
         fade)
-            echo -e "${BOLD}  Duración del efecto fade${NC}"
+            echo -e "${BOLD}  ► Duración del efecto fade${NC}"
             echo -e "  ${DIM}Cuántos segundos dura el aparecer y desaparecer${NC}"
             echo -e "    ${GREEN}1)${NC} 0.5s — Rápido"
             echo -e "    ${GREEN}2)${NC} 1s   — Normal"
@@ -3785,16 +3821,16 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         watermark)
-            echo -e "${BOLD}  Imagen de marca de agua${NC}"
+            echo -e "${BOLD}  ► Imagen de marca de agua${NC}"
             echo -e "  ${DIM}Ruta completa del archivo PNG o JPG${NC}"
             read -rp "  → Ruta [$WATERMARK_FILE]: " wm_file
             [[ -n "$wm_file" ]] && WATERMARK_FILE="$wm_file"
-            [[ -z "$WATERMARK_FILE" || ! -f "$WATERMARK_FILE" ]] && { echo -e "${RED}Archivo no encontrado${NC}"; exit 1; }
+            [[ -z "$WATERMARK_FILE" || ! -f "$WATERMARK_FILE" ]] && { echo -e "${RED}✗${NC} Archivo no encontrado"; exit 1; }
             echo ""
             ;;
 
         fps)
-            echo -e "${BOLD}  Frames por segundo objetivo${NC}"
+            echo -e "${BOLD}  ► Frames por segundo objetivo${NC}"
             echo -e "  ${DIM}Más FPS = vídeo más suave${NC}"
             echo -e "    ${GREEN}1)${NC} 24 FPS — Cine"
             echo -e "    ${GREEN}2)${NC} 30 FPS — Estándar"
@@ -3816,12 +3852,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 "") : ;;
                 *) [[ -n "$val" ]] && TARGET_FPS="$val" ;;
             esac
-            [[ -z "$TARGET_FPS" ]] && { echo -e "${RED}Indica los FPS${NC}"; exit 1; }
+            [[ -z "$TARGET_FPS" ]] && { echo -e "${RED}✗${NC} Indica los FPS"; exit 1; }
             echo ""
             ;;
 
         speed)
-            echo -e "${BOLD}  Velocidad del vídeo${NC}"
+            echo -e "${BOLD}  ► Velocidad del vídeo${NC}"
             echo -e "    ${GREEN}1)${NC} 0.25x — Muy lento"
             echo -e "    ${GREEN}2)${NC} 0.5x  — Mitad"
             echo -e "    ${GREEN}3)${NC} 0.75x — Un poco lento"
@@ -3848,12 +3884,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 "") : ;;
                 *) [[ -n "$val" ]] && SPEED="$val" ;;
             esac
-            [[ -z "$SPEED" ]] && { echo -e "${RED}Indica la velocidad${NC}"; exit 1; }
+            [[ -z "$SPEED" ]] && { echo -e "${RED}✗${NC} Indica la velocidad"; exit 1; }
             echo ""
             ;;
 
         subtitles)
-            echo -e "${BOLD}  Tipo de subtítulos${NC}"
+            echo -e "${BOLD}  ► Tipo de subtítulos${NC}"
             echo -e "    ${GREEN}1)${NC} Soft — Se pueden quitar después"
             echo -e "    ${GREEN}2)${NC} Hard — Siempre visibles en el vídeo"
             sub_def=1
@@ -3863,25 +3899,25 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             echo ""
             case "$val" in
                 1)
-                    echo -e "${BOLD}  Archivo de subtítulos${NC}"
+                    echo -e "${BOLD}  ► Archivo de subtítulos${NC}"
                     read -rp "  → Ruta (.srt) [$SUBTITLE_SOFT]: " sub_path
                     [[ -n "$sub_path" ]] && SUBTITLE_SOFT="$sub_path"
-                    [[ -z "$SUBTITLE_SOFT" || ! -f "$SUBTITLE_SOFT" ]] && { echo -e "${RED}Archivo no encontrado${NC}"; exit 1; }
+                    [[ -z "$SUBTITLE_SOFT" || ! -f "$SUBTITLE_SOFT" ]] && { echo -e "${RED}✗${NC} Archivo no encontrado"; exit 1; }
                     ;;
                 2)
-                    echo -e "${BOLD}  Archivo de subtítulos${NC}"
+                    echo -e "${BOLD}  ► Archivo de subtítulos${NC}"
                     read -rp "  → Ruta (.srt) [$SUBTITLE_HARD]: " sub_path
                     [[ -n "$sub_path" ]] && SUBTITLE_HARD="$sub_path"
-                    [[ -z "$SUBTITLE_HARD" || ! -f "$SUBTITLE_HARD" ]] && { echo -e "${RED}Archivo no encontrado${NC}"; exit 1; }
+                    [[ -z "$SUBTITLE_HARD" || ! -f "$SUBTITLE_HARD" ]] && { echo -e "${RED}✗${NC} Archivo no encontrado"; exit 1; }
                     ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
             ;;
 
         audio-only)
-            echo -e "${BOLD}  Formato de audio de salida${NC}"
+            echo -e "${BOLD}  ► Formato de audio de salida${NC}"
             echo -e "    ${GREEN}1)${NC} mp3  — Compatible con todo"
             echo -e "    ${GREEN}2)${NC} m4a  — Calidad, tamaño medio"
             echo -e "    ${GREEN}3)${NC} flac — Sin pérdida, pesado"
@@ -3903,11 +3939,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 4) OUTPUT_FORMAT="wav" ;;
                 5) OUTPUT_FORMAT="opus" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Nombre del archivo de audio${NC}"
+            echo -e "${BOLD}  ► Nombre del archivo de audio${NC}"
             audio_base=
             audio_base=$(basename "${SELECTED_FILES[0]:-$SELECTED_FILE}")
             audio_base="${audio_base%.*}"
@@ -3915,7 +3951,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         stabilize)
-            echo -e "${BOLD}  Nivel de estabilización${NC}"
+            echo -e "${BOLD}  ► Nivel de estabilización${NC}"
             echo -e "    ${GREEN}1)${NC} 3  — Suave"
             echo -e "    ${GREEN}2)${NC} 5  — Normal (recomendado)"
             echo -e "    ${GREEN}3)${NC} 7  — Fuerte"
@@ -3939,7 +3975,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         adjust)
-            echo -e "${BOLD}  Ajustes de imagen${NC}"
+            echo -e "${BOLD}  ► Ajustes de imagen${NC}"
             echo -e "  ${DIM}Vacío = conservar el valor actual de ese parámetro${NC}"
             echo -e "  ${DIM}Rango: -1.0 a 1.0 (brillo, contraste, saturación) o 0.1-10 (gamma)${NC}"
             read -rp "  → Brillo [$ADJUST_BRIGHTNESS]: " v
@@ -3950,12 +3986,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             [[ -n "$v" ]] && ADJUST_SATURATION="$v"
             read -rp "  → Gamma [$ADJUST_GAMMA]: " v
             [[ -n "$v" ]] && ADJUST_GAMMA="$v"
-            [[ -z "$ADJUST_BRIGHTNESS" && -z "$ADJUST_CONTRAST" && -z "$ADJUST_SATURATION" && -z "$ADJUST_GAMMA" ]] && { echo -e "${RED}Indica al menos un ajuste${NC}"; exit 1; }
+            [[ -z "$ADJUST_BRIGHTNESS" && -z "$ADJUST_CONTRAST" && -z "$ADJUST_SATURATION" && -z "$ADJUST_GAMMA" ]] && { echo -e "${RED}✗${NC} Indica al menos un ajuste"; exit 1; }
             echo ""
             ;;
 
         censor)
-            echo -e "${BOLD}  Regiones a censurar${NC}"
+            echo -e "${BOLD}  ► Regiones a censurar${NC}"
             echo -e "  ${DIM}Formato: x:y:w:h (posición X, posición Y, ancho, alto)${NC}"
             echo -e "  ${DIM}Ejemplo: 100:50:200:150${NC}"
             echo -e "  ${DIM}Escribe 'fin' cuando termines${NC}"
@@ -3972,12 +4008,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             if [[ ${#new_regions[@]} -gt 0 ]]; then
                 CENSOR_REGIONS=("${new_regions[@]}")
             fi
-            [[ ${#CENSOR_REGIONS[@]} -eq 0 ]] && { echo -e "${RED}Indica al menos una región${NC}"; exit 1; }
+            [[ ${#CENSOR_REGIONS[@]} -eq 0 ]] && { echo -e "${RED}✗${NC} Indica al menos una región"; exit 1; }
             echo ""
             ;;
 
         denoise)
-            echo -e "${BOLD}  Fuerza del denoise${NC}"
+            echo -e "${BOLD}  ► Fuerza del denoise${NC}"
             echo -e "    ${GREEN}1)${NC} 25  — Suave"
             echo -e "    ${GREEN}2)${NC} 50  — Normal (recomendado)"
             echo -e "    ${GREEN}3)${NC} 75  — Fuerte"
@@ -4001,7 +4037,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         sharpen)
-            echo -e "${BOLD}  Fuerza del sharpen${NC}"
+            echo -e "${BOLD}  ► Fuerza del sharpen${NC}"
             echo -e "    ${GREEN}1)${NC} 2  — Suave"
             echo -e "    ${GREEN}2)${NC} 5  — Normal (recomendado)"
             echo -e "    ${GREEN}3)${NC} 8  — Fuerte"
@@ -4025,7 +4061,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         scenes)
-            echo -e "${BOLD}  Umbral de detección de escenas${NC}"
+            echo -e "${BOLD}  ► Umbral de detección de escenas${NC}"
             echo -e "    ${GREEN}1)${NC} 0.2  — Detecta muchos cambios"
             echo -e "    ${GREEN}2)${NC} 0.3  — Equilibrado (recomendado)"
             echo -e "    ${GREEN}3)${NC} 0.5  — Solo cambios grandes"
@@ -4046,7 +4082,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         keyframes)
-            echo -e "${BOLD}  Directorio de salida para keyframes${NC}"
+            echo -e "${BOLD}  ► Directorio de salida para keyframes${NC}"
             kf_dir_default="${KEYFRAME_DIR:-./keyframes}"
             read -rp "  → Directorio (default: $kf_dir_default): " kf_dir
             [[ -n "$kf_dir" ]] && KEYFRAME_DIR="$kf_dir"
@@ -4055,7 +4091,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         aspect)
-            echo -e "${BOLD}  Ratio de aspecto objetivo${NC}"
+            echo -e "${BOLD}  ► Ratio de aspecto objetivo${NC}"
             echo -e "    ${GREEN}1)${NC} 16:9 — Widescreen"
             echo -e "    ${GREEN}2)${NC} 4:3  — Clásico"
             echo -e "    ${GREEN}3)${NC} 21:9 — Cine"
@@ -4083,7 +4119,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         metadata)
-            echo -e "${BOLD}  Metadata del vídeo${NC}"
+            echo -e "${BOLD}  ► Metadata del vídeo${NC}"
             echo -e "  ${DIM}Vacío = conservar el valor actual de ese campo${NC}"
             read -rp "  → Título [$METADATA_TITLE]: " v
             [[ -n "$v" ]] && METADATA_TITLE="$v"
@@ -4091,12 +4127,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             [[ -n "$v" ]] && METADATA_ARTIST="$v"
             read -rp "  → Comentario [$METADATA_COMMENT]: " v
             [[ -n "$v" ]] && METADATA_COMMENT="$v"
-            [[ -z "$METADATA_TITLE" && -z "$METADATA_ARTIST" && -z "$METADATA_COMMENT" ]] && { echo -e "${RED}Indica al menos un campo${NC}"; exit 1; }
+            [[ -z "$METADATA_TITLE" && -z "$METADATA_ARTIST" && -z "$METADATA_COMMENT" ]] && { echo -e "${RED}✗${NC} Indica al menos un campo"; exit 1; }
             echo ""
             ;;
 
         remux)
-            echo -e "${BOLD}  Formato de contenedor de salida${NC}"
+            echo -e "${BOLD}  ► Formato de contenedor de salida${NC}"
             echo -e "    ${GREEN}1)${NC} mp4 — Más compatible (móviles, web)"
             echo -e "    ${GREEN}2)${NC} mkv — Matroska (más flexible, soporta todo)"
             cont_def=1
@@ -4108,11 +4144,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 1) CONTAINER="mp4" ;;
                 2) CONTAINER="mkv" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
 
-            echo -e "${BOLD}  Seleccionar audio por idioma${NC} ${DIM}(opcional)${NC}"
+            echo -e "${BOLD}  ► Seleccionar audio por idioma${NC} ${DIM}(opcional)${NC}"
             echo -e "  ${DIM}Códigos: spa=español, eng=inglés, und=desconocido${NC}"
             read -rp "  → Idioma [$AUDIO_LANG]: " alang
             [[ -n "$alang" ]] && AUDIO_LANG="$alang"
@@ -4120,17 +4156,17 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             ;;
 
         tracks)
-            echo -e "${BOLD}  Reordenar pistas${NC}"
+            echo -e "${BOLD}  ► Reordenar pistas${NC}"
             echo -e "  ${DIM}Formato: tipo:índice separados por coma${NC}"
             echo -e "  ${DIM}Tipos: v=video, a=audio, s=subtítulos${NC}"
             echo -e "  ${DIM}Ejemplo: v:0,a:1,s:0 = primer video, segundo audio, primer subtítulo${NC}"
             echo -e "  ${DIM}Ejemplo: a:2,a:0,v:0 = tercer audio, primer audio, primer video${NC}"
             read -rp "  → Orden [$TRACKS_REORDER]: " torder
             [[ -n "$torder" ]] && TRACKS_REORDER="$torder"
-            [[ -z "$TRACKS_REORDER" ]] && { echo -e "${RED}Indica el orden de las pistas${NC}"; exit 1; }
+            [[ -z "$TRACKS_REORDER" ]] && { echo -e "${RED}✗${NC} Indica el orden de las pistas"; exit 1; }
             echo ""
 
-            echo -e "${BOLD}  Formato de contenedor de salida${NC}"
+            echo -e "${BOLD}  ► Formato de contenedor de salida${NC}"
             echo -e "    ${GREEN}1)${NC} mp4 — Más compatible"
             echo -e "    ${GREEN}2)${NC} mkv — Matroska"
             echo -e "    ${GREEN}3)${NC} Mantener original"
@@ -4145,7 +4181,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 2) CONTAINER="mkv" ;;
                 3) CONTAINER="" ;;
                 "") : ;;
-                *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+                *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
             esac
             echo ""
             ;;
@@ -4155,7 +4191,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     #  PASO 5: Progreso
     # ══════════════════════════════════════════════════════════════════
     if [[ "$MODE" != "info" ]]; then
-        echo -e "${BOLD}  Progreso${NC}"
+        echo -e "${BOLD}  ► Progreso${NC}"
         echo -e "    ${GREEN}1)${NC} Resumen  — Solo resultado"
         echo -e "    ${GREEN}2)${NC} Detallado — Porcentaje y tiempo"
         prog_def=1
@@ -4165,7 +4201,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             1) VERBOSE=false ;;
             2) VERBOSE=true ;;
             "") : ;;
-            *) echo -e "${RED}Opción no válida${NC}"; exit 1 ;;
+            *) echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
         esac
         echo ""
     fi
@@ -4273,23 +4309,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "${BOLD}═══════════════════════════════════════${NC}"
     echo ""
 
-    read -rp "  ¿Guardar esta configuración? [S/n]: " val
-    if [[ ! "$val" =~ ^[Nn] ]]; then
-        save_config "$MODE"
-    fi
-    echo ""
-
     read -rp "  ¿Empezar? [S/n]: " val
     if [[ "$val" =~ ^[Nn] ]]; then
         echo "Cancelado."
         exit 0
     fi
     echo ""
-fi
-
-# Guardar con flag -c aunque no sea interactivo
-if [[ "$SAVE_CONFIG" == true && "$INTERACTIVE" == false ]]; then
-    save_config "$MODE"
 fi
 
 # ── Aplicar preset de calidad ─────────────────────────────────────────
@@ -4300,7 +4325,7 @@ case "$PRESET" in
     default)   CRF=23; ENCODE_SPEED="medium" ;;
     archive)   CRF=18; ENCODE_SPEED="slow" ;;
     quality)   CRF=15; ENCODE_SPEED="veryslow" ;;
-    *)         echo -e "${RED}Preset desconocido: $PRESET${NC}"; exit 1 ;;
+    *)         echo -e "${RED}✗${NC} Preset desconocido: $PRESET"; exit 1 ;;
 esac
 
 # ── Resolver códec de vídeo ───────────────────────────────────────────
@@ -4313,7 +4338,7 @@ case "$VIDEO_CODEC" in
     hevc) VIDEO_ENCODER="libx265" ;;
     av1)  VIDEO_ENCODER="libsvtav1" ;;
     vp9)  VIDEO_ENCODER="libvpx-vp9" ;;
-    *)    echo -e "${RED}Códec de vídeo no válido: $VIDEO_CODEC${NC}"; exit 1 ;;
+    *)    echo -e "${RED}✗${NC} Códec de vídeo no válido: $VIDEO_CODEC"; exit 1 ;;
 esac
 
 # Presets por codec (ENCODE_SPEED: ultrafast|fast|medium|slow|veryslow)
@@ -4342,7 +4367,7 @@ esac
 
 # Fallback si ffmpeg no tiene el codificador (excepto GPU)
 if [[ "$GPU" == "none" ]] && ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -q "^.*$VIDEO_ENCODER"; then
-    echo -e "${YELLOW}ADVERTENCIA: ffmpeg no tiene el codificador $VIDEO_ENCODER. Usando libx264${NC}"
+    echo -e "${YELLOW}⚠${NC} ffmpeg no tiene el codificador $VIDEO_ENCODER. Usando libx264"
     VIDEO_CODEC="h264"
     VIDEO_ENCODER="libx264"
     ENC_CRF="$CRF"
@@ -4390,11 +4415,11 @@ run_chain() {
     fi
 
     if [[ -z "$input_file" ]]; then
-        echo -e "${RED}ERROR: No se encontró archivo de entrada${NC}"
+        echo -e "${RED}✗${NC} No se encontró archivo de entrada"
         return 1
     fi
 
-    echo -e "${BOLD}Pipeline:${NC} ${#ops[@]} pasos"
+    echo -e "${BOLD}► Pipeline:${NC} ${#ops[@]} pasos"
     echo -e "  ${DIM}Entrada: $(basename "$input_file")${NC}"
 
     local tmp_dir
@@ -4406,7 +4431,7 @@ run_chain() {
         ((step++))
         local op_name="${op%%=*}"
         local op_args="${op#*=}"
-        echo -e "${CYAN}  Paso $step/${#ops[@]}:${NC} $op_name ($op_args)"
+        echo -e "${CYAN}►${NC}   Paso $step/${#ops[@]}: $op_name ($op_args)"
 
         case "$op_name" in
             cut)
@@ -4451,13 +4476,13 @@ run_chain() {
                 current_file=$(ls -t "$tmp_dir"/*_norm.* 2>/dev/null | head -1)
                 ;;
             *)
-                echo -e "${YELLOW}  Operación desconocida: $op_name${NC}"
+                echo -e "${YELLOW}⚠${NC}   Operación desconocida: $op_name"
                 continue
                 ;;
         esac
 
         if [[ -z "$current_file" || ! -f "$current_file" ]]; then
-            echo -e "${RED}  Error en paso $step: archivo no creado${NC}"
+            echo -e "${RED}✗${NC}   Error en paso $step: archivo no creado"
             rm -rf "$tmp_dir"
             return 1
         fi
@@ -4470,25 +4495,25 @@ run_chain() {
     mkdir -p "$output_dir"
     mv "$current_file" "$output_dir/$final_name"
     rm -rf "$tmp_dir"
-    echo -e "${GREEN}Pipeline completado:${NC} $output_dir/$final_name"
+    echo -e "${GREEN}✓${NC} Pipeline completado: $output_dir/$final_name"
 }
 
 case "$MODE" in
     download)
         if [[ -z "$URL" ]]; then
-            echo -e "${RED}ERROR: Se requiere URL para descargar${NC}"
+            echo -e "${RED}✗${NC} Se requiere URL para descargar"
             echo "  Uso: ./midu.sh -d <URL>"
             exit 1
         fi
         # Validar que la URL esté soportada
-        echo -e "${BOLD}Comprobando URL...${NC}"
+        echo -e "${BOLD}► Comprobando URL...${NC}"
         if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-            echo -e "${RED}ERROR: URL no soportada o no válida${NC}"
+            echo -e "${RED}✗${NC} URL no soportada o no válida"
             echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
             echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
             exit 1
         fi
-        echo -e "${GREEN}URL válida${NC}"
+        echo -e "${GREEN}✓${NC} URL válida"
         download_video "$URL" "$OUTPUT_DIR"
         exit $?
         ;;
@@ -4497,7 +4522,7 @@ case "$MODE" in
             # Si no hay URL, extraer audio de archivos locales
             buscar_archivos
             if [[ $total -eq 0 ]]; then
-                echo -e "${YELLOW}No hay archivos de audio para extraer${NC}"
+                echo -e "${YELLOW}⚠${NC} No hay archivos de audio para extraer"
                 exit 0
             fi
             for file in "${archivos[@]}"; do
@@ -4515,7 +4540,7 @@ case "$MODE" in
             extract_audio "$downloaded" "$OUTPUT_DIR"
             rm -rf "$local_tmp"
         else
-            echo -e "${RED}No se pudo descargar el vídeo${NC}"
+            echo -e "${RED}✗${NC} No se pudo descargar el vídeo"
             rm -rf "$local_tmp"
             exit 1
         fi
@@ -4523,13 +4548,13 @@ case "$MODE" in
         ;;
     merge-audio)
         if [[ -z "$AUDIO_INPUT" ]]; then
-            echo -e "${RED}ERROR: Se requiere archivo de audio${NC}"
+            echo -e "${RED}✗${NC} Se requiere archivo de audio"
             echo "  Uso: ./midu.sh -ma <audio.mp3>"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para mezclar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para mezclar"
             exit 0
         fi
         for file in "${archivos[@]}"; do
@@ -4539,7 +4564,7 @@ case "$MODE" in
         ;;
     concat)
         if [[ ${#CONCAT_FILES[@]} -lt 2 ]]; then
-            echo -e "${RED}ERROR: Se necesitan al menos 2 archivos${NC}"
+            echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
             echo "  Uso: ./midu.sh --concat video1.mkv video2.mkv video3.mkv"
             exit 1
         fi
@@ -4548,7 +4573,7 @@ case "$MODE" in
         ;;
     concat-smart)
         if [[ ${#CONCAT_FILES[@]} -lt 2 ]]; then
-            echo -e "${RED}ERROR: Se necesitan al menos 2 archivos${NC}"
+            echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
             echo "  Uso: ./midu.sh --concat-smart video1.mkv video2.mkv"
             exit 1
         fi
@@ -4561,12 +4586,21 @@ case "$MODE" in
         ;;
     chain)
         if [[ ${#CHAIN_OPS[@]} -eq 0 ]]; then
-            echo -e "${RED}ERROR: Se requiere al menos una operación${NC}"
+            echo -e "${RED}✗${NC} Se requiere al menos una operación"
             echo "  Uso: ./midu.sh --chain 'cut=00:01:00:00:05:00' 'convert=720'"
             echo "  Operaciones: cut=START:END, convert=RES, rotate=GRADOS, fade=SEGUNDOS, reverse, denoise, sharpen"
             exit 1
         fi
         run_chain "$INPUT_DIR" "$OUTPUT_DIR" "${CHAIN_OPS[@]}"
+        exit $?
+        ;;
+    hls)
+        if [[ -z "$SELECTED_FILE" ]]; then
+            echo -e "${RED}✗${NC} Se requiere un vídeo para HLS"
+            echo "  Uso: ./midu.sh --hls"
+            exit 1
+        fi
+        convert_to_hls "$SELECTED_FILE" "$OUTPUT_DIR"
         exit $?
         ;;
     watch)
@@ -4576,7 +4610,7 @@ case "$MODE" in
     preview)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para previsualizar en $INPUT_DIR${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para previsualizar en $INPUT_DIR"
             exit 0
         fi
         host_open_video "${archivos[0]}"
@@ -4586,21 +4620,21 @@ case "$MODE" in
         case "$CUT_MODE" in
             remove)
                 if [[ ${#CUT_CLIPS[@]} -eq 0 ]]; then
-                    echo -e "${RED}ERROR: Se requiere -clips para eliminar secciones${NC}"
+                    echo -e "${RED}✗${NC} Se requiere -clips para eliminar secciones"
                     echo "  Uso: ./midu.sh --cut --remove -clips 00:01:00-00:02:30,00:05:00-00:07:15"
                     exit 1
                 fi
                 ;;
             extract)
                 if [[ ${#CUT_CLIPS[@]} -eq 0 ]]; then
-                    echo -e "${RED}ERROR: Se requiere -clips para extraer clips${NC}"
+                    echo -e "${RED}✗${NC} Se requiere -clips para extraer clips"
                     echo "  Uso: ./midu.sh --cut --extract -clips 00:01:00-00:02:30,00:05:00-00:07:15"
                     exit 1
                 fi
                 ;;
             normal)
                 if [[ -z "$START_TIME" && -z "$END_TIME" ]]; then
-                    echo -e "${RED}ERROR: Se requiere -ss y/o -e para cortar${NC}"
+                    echo -e "${RED}✗${NC} Se requiere -ss y/o -e para cortar"
                     echo "  Uso: ./midu.sh --cut -ss 00:01:30 -e 00:03:45"
                     exit 1
                 fi
@@ -4608,7 +4642,7 @@ case "$MODE" in
         esac
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para cortar en $INPUT_DIR${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para cortar en $INPUT_DIR"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4651,7 +4685,7 @@ case "$MODE" in
     gif)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para convertir a GIF${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para convertir a GIF"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4663,7 +4697,7 @@ case "$MODE" in
     thumbnail)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para extraer thumbnail${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para extraer thumbnail"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4675,7 +4709,7 @@ case "$MODE" in
     info)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para mostrar info${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para mostrar info"
             exit 0
         fi
         for file in "${archivos[@]}"; do
@@ -4685,13 +4719,13 @@ case "$MODE" in
         ;;
     rotate)
         if [[ -z "$ROTATE_DEGREES" ]]; then
-            echo -e "${RED}ERROR: Se requiere grados de rotación${NC}"
+            echo -e "${RED}✗${NC} Se requiere grados de rotación"
             echo "  Uso: ./midu.sh --rotate 90"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para rotar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para rotar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4702,13 +4736,13 @@ case "$MODE" in
         ;;
     crop)
         if [[ -z "$CROP_SIZE" ]]; then
-            echo -e "${RED}ERROR: Se requiere tamaño de crop (W:H)${NC}"
+            echo -e "${RED}✗${NC} Se requiere tamaño de crop (W:H)"
             echo "  Uso: ./midu.sh --crop 640:480"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para recortar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para recortar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4719,13 +4753,13 @@ case "$MODE" in
         ;;
     fade)
         if [[ -z "$FADE_SECONDS" ]]; then
-            echo -e "${RED}ERROR: Se requiere duración del fade${NC}"
+            echo -e "${RED}✗${NC} Se requiere duración del fade"
             echo "  Uso: ./midu.sh --fade 2"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para aplicar fade${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para aplicar fade"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4737,7 +4771,7 @@ case "$MODE" in
     normalize)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para normalizar audio${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para normalizar audio"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4748,13 +4782,13 @@ case "$MODE" in
         ;;
     watermark)
         if [[ -z "$WATERMARK_FILE" || ! -f "$WATERMARK_FILE" ]]; then
-            echo -e "${RED}ERROR: Se requiere archivo de marca de agua válido${NC}"
+            echo -e "${RED}✗${NC} Se requiere archivo de marca de agua válido"
             echo "  Uso: ./midu.sh --watermark logo.png"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para añadir marca de agua${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para añadir marca de agua"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4766,7 +4800,7 @@ case "$MODE" in
     deinterlace)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para desentrelazar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para desentrelazar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4777,13 +4811,13 @@ case "$MODE" in
         ;;
     fps)
         if [[ -z "$TARGET_FPS" ]]; then
-            echo -e "${RED}ERROR: Se requiere FPS objetivo${NC}"
+            echo -e "${RED}✗${NC} Se requiere FPS objetivo"
             echo "  Uso: ./midu.sh --fps 60"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para cambiar FPS${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para cambiar FPS"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4795,7 +4829,7 @@ case "$MODE" in
     stabilize)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para estabilizar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para estabilizar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4806,12 +4840,12 @@ case "$MODE" in
         ;;
     adjust)
         if [[ -z "$ADJUST_BRIGHTNESS" && -z "$ADJUST_CONTRAST" && -z "$ADJUST_SATURATION" && -z "$ADJUST_GAMMA" ]]; then
-            echo -e "${RED}ERROR: Indica al menos un ajuste (brightness, contrast, saturation, gamma)${NC}"
+            echo -e "${RED}✗${NC} Indica al menos un ajuste (brightness, contrast, saturation, gamma)${NC}"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para ajustar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para ajustar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4822,12 +4856,12 @@ case "$MODE" in
         ;;
     censor)
         if [[ ${#CENSOR_REGIONS[@]} -eq 0 ]]; then
-            echo -e "${RED}ERROR: Indica las regiones a censurar (x:y:w:h)${NC}"
+            echo -e "${RED}✗${NC} Indica las regiones a censurar (x:y:w:h)${NC}"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para censurar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para censurar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4839,7 +4873,7 @@ case "$MODE" in
     denoise)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para reducir ruido${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para reducir ruido"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4851,7 +4885,7 @@ case "$MODE" in
     sharpen)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para enfocar${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para enfocar"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4863,7 +4897,7 @@ case "$MODE" in
     reverse)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para invertir${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para invertir"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4875,7 +4909,7 @@ case "$MODE" in
     scenes)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para detectar escenas${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para detectar escenas"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4887,7 +4921,7 @@ case "$MODE" in
     keyframes)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para extraer keyframes${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para extraer keyframes"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4898,13 +4932,13 @@ case "$MODE" in
         ;;
     aspect)
         if [[ -z "$ASPECT_RATIO" ]]; then
-            echo -e "${RED}ERROR: Se requiere ratio de aspecto${NC}"
+            echo -e "${RED}✗${NC} Se requiere ratio de aspecto"
             echo "  Uso: ./midu.sh --aspect 16:9"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para cambiar aspect ratio${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para cambiar aspect ratio"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4915,12 +4949,12 @@ case "$MODE" in
         ;;
     metadata)
         if [[ -z "$METADATA_TITLE" && -z "$METADATA_ARTIST" && -z "$METADATA_COMMENT" ]]; then
-            echo -e "${RED}ERROR: Indica al menos un campo de metadata${NC}"
+            echo -e "${RED}✗${NC} Indica al menos un campo de metadata${NC}"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para editar metadata${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para editar metadata"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4932,7 +4966,7 @@ case "$MODE" in
     remux)
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para remux${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para remux"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4943,13 +4977,13 @@ case "$MODE" in
         ;;
     tracks)
         if [[ -z "$TRACKS_REORDER" ]]; then
-            echo -e "${RED}ERROR: Se requiere el orden de pistas${NC}"
+            echo -e "${RED}✗${NC} Se requiere el orden de pistas"
             echo "  Uso: ./midu.sh --tracks 'v:0,a:1,s:0'"
             exit 1
         fi
         buscar_archivos
         if [[ $total -eq 0 ]]; then
-            echo -e "${YELLOW}No hay vídeos para reordenar pistas${NC}"
+            echo -e "${YELLOW}⚠${NC} No hay vídeos para reordenar pistas"
             exit 0
         fi
         mkdir -p "$OUTPUT_DIR"
@@ -4960,7 +4994,7 @@ case "$MODE" in
         ;;
     resume)
         if [[ -z "$CHECKPOINT_FILE" || ! -f "$CHECKPOINT_FILE" ]]; then
-            echo -e "${RED}ERROR: No se encontró el checkpoint${NC}"
+            echo -e "${RED}✗${NC} No se encontró el checkpoint"
             exit 1
         fi
         load_checkpoint
@@ -4972,7 +5006,7 @@ case "$MODE" in
             fi
         done
         if [[ ${#pending_files[@]} -eq 0 ]]; then
-            echo -e "${GREEN}Todos los archivos ya fueron procesados${NC}"
+            echo -e "${GREEN}✓${NC} Todos los archivos ya fueron procesados"
             exit 0
         fi
         echo -e "${BOLD}Archivos pendientes:${NC} ${#pending_files[@]}"
@@ -4988,11 +5022,11 @@ esac
 
 if [[ "$INTERACTIVE" == false ]]; then
     if ! mkdir -p "$OUTPUT_DIR" 2>/dev/null; then
-        echo -e "${RED}ERROR: No se pudo crear el directorio: $OUTPUT_DIR${NC}"
+        echo -e "${RED}✗${NC} No se pudo crear el directorio: $OUTPUT_DIR"
         exit 1
     fi
     if [ ! -w "$OUTPUT_DIR" ]; then
-        echo -e "${RED}ERROR: Sin permisos de escritura en: $OUTPUT_DIR${NC}"
+        echo -e "${RED}✗${NC} Sin permisos de escritura en: $OUTPUT_DIR"
         exit 1
     fi
 fi
@@ -5001,12 +5035,12 @@ buscar_archivos
 
 if [[ $total -eq 0 ]]; then
     echo ""
-    echo -e "${YELLOW}No hay vídeos nuevos para convertir en $INPUT_DIR${NC}"
+    echo -e "${YELLOW}⚠${NC} No hay vídeos nuevos para convertir en $INPUT_DIR"
     [[ $saltados -gt 0 ]] && echo -e "  ${DIM}($saltados ya convertidos)${NC}"
     exit 0
 fi
 
-echo -e "${BOLD}Encontrados${NC} $total archivos, $saltados ya hechos (hilos: 4 máx)"
+echo -e "${BOLD}► Encontrados${NC} $total archivos, $saltados ya hechos (hilos: 4 máx)"
 echo ""
 
 # ── Seleccionar pista de audio (si hay múltiples) ──────────────────
@@ -5015,7 +5049,7 @@ if [[ "$MODE" == "convert" || "$MODE" == "remux" || "$MODE" == "tracks" ]]; then
     first_file="${archivos[0]}"
     ac=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$first_file" 2>/dev/null | wc -l)
     if [[ "$ac" -gt 1 ]]; then
-        echo -e "${CYAN}El primer archivo tiene $ac pistas de audio:${NC}"
+        echo -e "${CYAN}►${NC} El primer archivo tiene $ac pistas de audio:"
         select_audio_track "$first_file" "Audio para todo el lote"
         echo ""
     fi
@@ -5094,7 +5128,7 @@ convertir_archivo() {
 
         # Validar que start_secs no sea mayor que la duración del archivo
         if [[ "$start_secs" -ge "$duration" ]]; then
-            emit_log "$job_log" "${RED}ERROR: Tiempo de inicio ($START_TIME) mayor que la duración del vídeo ($(format_time "$duration"))${NC}"
+            emit_log "$job_log" "${RED}✗${NC} Tiempo de inicio ($START_TIME) mayor que la duración del vídeo ($(format_time "$duration"))"
             return 1
         fi
 
@@ -5105,7 +5139,7 @@ convertir_archivo() {
 
         # Validar que end_secs sea mayor que start_secs
         if [[ "$end_secs" -le "$start_secs" ]]; then
-            emit_log "$job_log" "${RED}ERROR: Tiempo de fin ($END_TIME) debe ser mayor que el inicio ($START_TIME)${NC}"
+            emit_log "$job_log" "${RED}✗${NC} Tiempo de fin ($END_TIME) debe ser mayor que el inicio ($START_TIME)${NC}"
             return 1
         fi
 
@@ -5138,7 +5172,7 @@ convertir_archivo() {
         local video_kbits=$((total_bits / 1000 - audio_kbps * effective_duration))
 
         if [[ "$video_kbits" -lt 0 ]]; then
-            emit_log "$job_log" "${YELLOW}AVISO: El tamaño máximo (${MAX_SIZE}GB) es demasiado pequeño para el audio y la duración${NC}"
+            emit_log "$job_log" "${YELLOW}⚠${NC} El tamaño máximo (${MAX_SIZE}GB) es demasiado pequeño para el audio y la duración"
             emit_log "$job_log" "  ${DIM}Se usará bitrate mínimo de 100k${NC}"
             video_kbits=0
         fi
@@ -5267,13 +5301,7 @@ convertir_archivo() {
     has_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$file" 2>/dev/null | head -1)
     if [[ -n "$has_audio" ]]; then
         if [[ "$AUDIO_SELECTED_IDX" -gt 0 ]]; then
-            local selected_audio
-            selected_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$file" 2>/dev/null | sed -n "$((AUDIO_SELECTED_IDX + 1))p")
-            if [[ -n "$selected_audio" ]]; then
-                ffmpeg_args+=(-map "0:a:${selected_audio}")
-            else
-                ffmpeg_args+=(-map 0:a:0)
-            fi
+            ffmpeg_args+=(-map "0:a:${AUDIO_SELECTED_IDX}")
         else
             ffmpeg_args+=(-map 0:a:0)
         fi
@@ -5301,7 +5329,7 @@ convertir_archivo() {
         pass1_args+=(-f null /dev/null -pass 1 -passlogfile "$tmp_file.passlog")
 
         if ! ffmpeg "${pass1_args[@]}" 2>/dev/null; then
-            emit_log "$job_log" "${RED}Error en pasada 1${NC}"
+            emit_log "$job_log" "${RED}✗${NC} Error en pasada 1"
             rm -f "$tmp_file" "$ffmpeg_log" "$tmp_file.passlog"*
             return 1
         fi
@@ -5358,7 +5386,7 @@ convertir_archivo() {
     fi
 
     if [[ "$ffmpeg_exit" -ne 0 ]]; then
-        emit_log "$job_log" "${RED}[$file_idx/$total] ERROR: $filename (ffmpeg exit: $ffmpeg_exit)${NC}"
+        emit_log "$job_log" "${RED}✗${NC} [$file_idx/$total] $filename (ffmpeg exit: $ffmpeg_exit)"
         if [[ -f "$ffmpeg_log" ]]; then
             if [[ -n "$job_log" ]]; then
                 tail -5 "$ffmpeg_log" | sed 's/^/    /' >> "$job_log"
@@ -5372,14 +5400,14 @@ convertir_archivo() {
     rm -f "$ffmpeg_log"
 
     if [[ ! -f "$tmp_file" ]]; then
-        emit_log "$job_log" "${RED}[$file_idx/$total] ERROR: archivo temporal no creado${NC}"
+        emit_log "$job_log" "${RED}✗${NC} [$file_idx/$total] Archivo temporal no creado"
         return 1
     fi
 
     local size
     size=$(stat -c%s "$tmp_file" 2>/dev/null || stat -f%z "$tmp_file" 2>/dev/null || echo 0)
     if [[ "$size" -lt 1024 ]]; then
-        emit_log "$job_log" "${RED}[$file_idx/$total] ERROR: archivo temporal sospechosamente pequeño (${size} bytes)${NC}"
+        emit_log "$job_log" "${RED}✗${NC} [$file_idx/$total] Archivo temporal sospechosamente pequeño (${size} bytes)"
         rm -f "$tmp_file"
         return 1
     fi
@@ -5392,7 +5420,7 @@ convertir_archivo() {
         if [[ "$bitrate_k" -lt 100 ]]; then
             bitrate_k=100
         fi
-        emit_log "$job_log" "${YELLOW}Tamaño $((size / 1024 / 1024))MB > máx ${MAX_SIZE}GB; reintento $attempt con bitrate ${bitrate_k}k${NC}"
+        emit_log "$job_log" "${YELLOW}⚠${NC} Tamaño $((size / 1024 / 1024))MB > máx ${MAX_SIZE}GB; reintento $attempt con bitrate ${bitrate_k}k"
         rm -f "$tmp_file" "$tmp_file.passlog"*
         continue
     fi
@@ -5415,7 +5443,7 @@ convertir_archivo() {
     if [[ -n "$MAX_SIZE_MB" ]]; then
         emit_log "$job_log" "  ${DIM}Tamaño final: ${out_mb}MB (límite ${MAX_SIZE}GB)${NC}"
         if [[ "$size" -gt "$size_target_bytes" ]]; then
-            emit_log "$job_log" "${YELLOW}AVISO: No se pudo bajar de ${MAX_SIZE}GB (límite de bitrate mínimo alcanzado)${NC}"
+            emit_log "$job_log" "${YELLOW}⚠${NC} No se pudo bajar de ${MAX_SIZE}GB (límite de bitrate mínimo alcanzado)"
         fi
     fi
 
@@ -5426,7 +5454,7 @@ convertir_archivo() {
 
 # Comprobar espacio en disco
 if ! check_disk_space "$OUTPUT_DIR" 500; then
-    echo -e "${RED}Continuando con poco espacio...${NC}"
+    echo -e "${RED}✗${NC} Continuando con poco espacio..."
 fi
 
 # Crear checkpoint si se pide
@@ -5568,7 +5596,7 @@ BATCH_ELAPSED=$((BATCH_END - BATCH_START))
 BATCH_FMT=$(format_time "$BATCH_ELAPSED")
 
 echo ""
-echo -e "${BOLD}Completado:${NC} ${GREEN}$procesados OK${NC}, ${RED}$fallidos fallos${NC} de $total archivos."
+echo -e "${BOLD}► Completado:${NC} ${GREEN}$procesados OK${NC}, ${RED}$fallidos fallos${NC} de $total archivos."
 echo -e "${DIM}Tiempo total: $BATCH_FMT${NC}"
 
 # Notificación
@@ -5582,3 +5610,422 @@ if [[ "$RETRY_FAILED" == true && "$fallidos" -gt 0 ]]; then
 fi
 
 rm -f "$FAILED_LIST"
+
+# ── Compose: construir vídeo personalizado ───────────────────────────
+
+COMPOSE_VIDEO_IDX=0
+COMPOSE_AUDIO_IDXS=()
+COMPOSE_AUDIO_CODECS=()
+COMPOSE_AUDIO_BITRATES=()
+COMPOSE_SUB_IDXS=()
+COMPOSE_OUT_FORMAT=""
+COMPOSE_OUT_NAME=""
+
+select_video_stream() {
+    local input="$1"
+    local video_info
+    video_info=$(ffprobe -v error -select_streams v \
+        -show_entries stream=index,codec_name,width,height,r_frame_rate,bit_rate \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null)
+
+    local video_count
+    video_count=$(echo "$video_info" | grep -c "^index=")
+
+    if [[ "$video_count" -le 1 ]]; then
+        COMPOSE_VIDEO_IDX=0
+        return 0
+    fi
+
+    echo -e "${CYAN}►${NC} Pistas de vídeo disponibles:"
+    echo ""
+    local i=1
+    local current_idx="" current_codec="" current_w="" current_h="" current_fps="" current_br=""
+    while IFS= read -r line; do
+        case "$line" in
+            index=*)
+                if [[ -n "$current_idx" ]]; then
+                    local fps_label=""
+                    [[ -n "$current_fps" ]] && fps_label="${current_fps%%.*}fps"
+                    printf "    ${GREEN}%2d)${NC} %s — %sx%s ${DIM}(%s)${NC}\n" "$i" "$current_codec" "$current_w" "$current_h" "$fps_label"
+                    ((i++))
+                fi
+                current_idx="${line#index=}"; current_codec=""; current_w=""; current_h=""; current_fps=""; current_br=""
+                ;;
+            codec_name=*)  current_codec="${line#codec_name=}" ;;
+            width=*)       current_w="${line#width=}" ;;
+            height=*)      current_h="${line#height=}" ;;
+            r_frame_rate=*) current_fps="${line#r_frame_rate=}" ;;
+            bit_rate=*)    current_br="${line#bit_rate=}" ;;
+        esac
+    done <<< "$video_info"
+    if [[ -n "$current_idx" ]]; then
+        local fps_label=""
+        [[ -n "$current_fps" ]] && fps_label="${current_fps%%.*}fps"
+        printf "    ${GREEN}%2d)${NC} %s — %sx%s ${DIM}(%s)${NC}\n" "$i" "$current_codec" "$current_w" "$current_h" "$fps_label"
+    fi
+    echo ""
+    echo -e "    ${GREEN} 0)${NC} Copiar (sin re-encoding)"
+    echo ""
+
+    read -rp "  → Vídeo [0]: " choice
+    if [[ -z "$choice" || "$choice" == "0" ]]; then
+        COMPOSE_VIDEO_IDX=0
+    elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "$video_count" ]]; then
+        COMPOSE_VIDEO_IDX=$((choice - 1))
+    else
+        COMPOSE_VIDEO_IDX=0
+    fi
+}
+
+select_multiple_audio_tracks() {
+    local input="$1"
+
+    local audio_raw
+    audio_raw=$(ffprobe -v error -select_streams a \
+        -show_entries stream=index,codec_name,channels,sample_rate \
+        -show_entries stream_tags=language,title,handler_name,description \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null)
+
+    local audio_info=""
+    local current_idx="" current_lang="" current_title="" current_handler=""
+    local current_desc="" current_codec="" current_channels="" current_sr=""
+    flush_compose() { if [[ -n "$current_idx" ]]; then audio_info+="${current_idx},${current_lang},${current_title},${current_handler},${current_desc},${current_codec},${current_channels},${current_sr}"; audio_info+=$'\n'; fi; }
+    while IFS= read -r line; do
+        case "$line" in
+            index=*) flush_compose; current_idx="${line#index=}"; current_lang=""; current_title=""; current_handler=""; current_desc=""; current_codec=""; current_channels=""; current_sr="" ;;
+            TAG:language=*)    current_lang="${line#TAG:language=}" ;;
+            TAG:title=*)       current_title="${line#TAG:title=}" ;;
+            TAG:handler_name=*) current_handler="${line#TAG:handler_name=}" ;;
+            TAG:description=*) current_desc="${line#TAG:description=}" ;;
+            codec_name=*)      current_codec="${line#codec_name=}" ;;
+            channels=*)        current_channels="${line#channels=}" ;;
+            sample_rate=*)     current_sr="${line#sample_rate=}" ;;
+        esac
+    done <<< "$audio_raw"
+    flush_compose
+
+    local audio_count
+    audio_count=$(echo "$audio_info" | grep -c .)
+    if [[ "$audio_count" -le 1 ]]; then
+        COMPOSE_AUDIO_IDXS=("0")
+        return 0
+    fi
+
+    echo -e "${CYAN}►${NC} Pistas de audio disponibles:"
+    echo ""
+    local i=1
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local lang title handler codec channels sr
+        lang=$(echo "$line" | cut -d',' -f2)
+        title=$(echo "$line" | cut -d',' -f3)
+        handler=$(echo "$line" | cut -d',' -f4)
+        codec=$(echo "$line" | cut -d',' -f6)
+        channels=$(echo "$line" | cut -d',' -f7)
+        sr=$(echo "$line" | cut -d',' -f8)
+
+        local lang_name label=""
+        lang_name=$(lang_code_to_name "$lang")
+        if [[ -n "$title" ]]; then label="$title"
+        elif [[ -n "$handler" && "$handler" != "Sound Handler" && "$handler" != "Audio" ]]; then label="$handler"
+        fi
+        if [[ -n "$lang_name" ]]; then
+            [[ -n "$label" ]] && label="$lang_name — $label" || label="$lang_name"
+        elif [[ -n "$lang" && "$lang" != "und" ]]; then
+            [[ -n "$label" ]] && label="$lang — $label" || label="$lang"
+        fi
+        [[ -z "$label" ]] && label="Sin nombre"
+
+        local ch_label=""
+        case "$channels" in
+            1) ch_label="Mono" ;; 2) ch_label="Stereo" ;; 6) ch_label="5.1" ;; 8) ch_label="7.1" ;; *) ch_label="${channels}ch" ;;
+        esac
+
+        printf "    ${GREEN}%2d)${NC} %s ${DIM}(%s, %s, %skHz)${NC}\n" "$i" "$label" "$codec" "$ch_label" "$((sr / 1000))"
+        ((i++))
+    done <<< "$audio_info"
+
+    echo ""
+    echo -e "  ${DIM}Selecciona varias pistas separadas por coma (ej: 1,2 o 1-2)${NC}"
+    read -rp "  → Audio [1]: " selection
+
+    COMPOSE_AUDIO_IDXS=()
+    if [[ -z "$selection" || "$selection" == "1" ]]; then
+        COMPOSE_AUDIO_IDXS=("0")
+    else
+        local IFS=','
+        for part in $selection; do
+            if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                for ((n=${BASH_REMATCH[1]}; n<=${BASH_REMATCH[2]}; n++)); do
+                    if [[ "$n" -ge 1 && "$n" -le "$audio_count" ]]; then
+                        COMPOSE_AUDIO_IDXS+=("$((n-1))")
+                    fi
+                done
+            elif [[ "$part" =~ ^[0-9]+$ && "$part" -ge 1 && "$part" -le "$audio_count" ]]; then
+                COMPOSE_AUDIO_IDXS+=("$((part-1))")
+            fi
+        done
+    fi
+    [[ ${#COMPOSE_AUDIO_IDXS[@]} -eq 0 ]] && COMPOSE_AUDIO_IDXS=("0")
+}
+
+select_subtitle_tracks() {
+    local input="$1"
+
+    local sub_info
+    sub_info=$(ffprobe -v error -select_streams s \
+        -show_entries stream=index,codec_name \
+        -show_entries stream_tags=language,title \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null)
+
+    local sub_count
+    sub_count=$(echo "$sub_info" | grep -c "^index=" 2>/dev/null || echo 0)
+
+    if [[ "$sub_count" -eq 0 ]]; then
+        COMPOSE_SUB_IDXS=()
+        echo -e "  ${DIM}No hay pistas de subtítulos${NC}"
+        return 0
+    fi
+
+    echo -e "${CYAN}►${NC} Pistas de subtítulos disponibles:"
+    echo ""
+    local i=1
+    local current_idx="" current_codec="" current_lang="" current_title=""
+    while IFS= read -r line; do
+        case "$line" in
+            index=*)
+                if [[ -n "$current_idx" ]]; then
+                    local lang_name label=""
+                    lang_name=$(lang_code_to_name "$current_lang")
+                    [[ -n "$current_title" ]] && label="$current_title"
+                    if [[ -n "$lang_name" ]]; then
+                        [[ -n "$label" ]] && label="$lang_name — $label" || label="$lang_name"
+                    elif [[ -n "$current_lang" && "$current_lang" != "und" ]]; then
+                        [[ -n "$label" ]] && label="$current_lang — $label" || label="$current_lang"
+                    fi
+                    [[ -z "$label" ]] && label="Sin nombre"
+                    printf "    ${GREEN}%2d)${NC} %s ${DIM}(%s)${NC}\n" "$i" "$label" "$current_codec"
+                    ((i++))
+                fi
+                current_idx="${line#index=}"; current_codec=""; current_lang=""; current_title=""
+                ;;
+            codec_name=*)    current_codec="${line#codec_name=}" ;;
+            TAG:language=*)  current_lang="${line#TAG:language=}" ;;
+            TAG:title=*)     current_title="${line#TAG:title=}" ;;
+        esac
+    done <<< "$sub_info"
+    if [[ -n "$current_idx" ]]; then
+        local lang_name label=""
+        lang_name=$(lang_code_to_name "$current_lang")
+        [[ -n "$current_title" ]] && label="$current_title"
+        if [[ -n "$lang_name" ]]; then
+            [[ -n "$label" ]] && label="$lang_name — $label" || label="$lang_name"
+        fi
+        [[ -z "$label" ]] && label="Sin nombre"
+        printf "    ${GREEN}%2d)${NC} %s ${DIM}(%s)${NC}\n" "$i" "$label" "$current_codec"
+    fi
+    echo ""
+    echo -e "  ${DIM}Selecciona subtítulos (ej: 1,2) o vacío para ninguno${NC}"
+    read -rp "  → Subtítulos [ninguno]: " selection
+
+    COMPOSE_SUB_IDXS=()
+    if [[ -n "$selection" ]]; then
+        local IFS=','
+        for part in $selection; do
+            if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                for ((n=${BASH_REMATCH[1]}; n<=${BASH_REMATCH[2]}; n++)); do
+                    [[ "$n" -ge 1 && "$n" -le "$sub_count" ]] && COMPOSE_SUB_IDXS+=("$((n-1))")
+                done
+            elif [[ "$part" =~ ^[0-9]+$ && "$part" -ge 1 && "$part" -le "$sub_count" ]]; then
+                COMPOSE_SUB_IDXS+=("$((part-1))")
+            fi
+        done
+    fi
+}
+
+assign_codecs_per_track() {
+    local input="$1"
+    local audio_count=${#COMPOSE_AUDIO_IDXS[@]}
+
+    COMPOSE_AUDIO_CODECS=()
+    COMPOSE_AUDIO_BITRATES=()
+
+    if [[ "$audio_count" -le 1 ]]; then
+        echo -e "${CYAN}►${NC} Codec de audio:"
+        echo "    1) aac       ${DIM}— Estándar, buena compatibilidad${NC}"
+        echo "    2) copy      ${DIM}— Sin re-encoding (rápido)${NC}"
+        echo "    3) opus      ${DIM}— Mejor calidad/bitrate${NC}"
+        echo "    4) ac3       ${DIM}— Surround 5.1${NC}"
+        echo "    5) eac3      ${DIM}— Dolby Digital Plus${NC}"
+        echo "    6) flac      ${DIM}— Sin pérdida${NC}"
+        echo ""
+        read -rp "  → Codec [aac]: " codec_choice
+        case "$codec_choice" in
+            1|"") COMPOSE_AUDIO_CODECS=("aac") ;;
+            2)    COMPOSE_AUDIO_CODECS=("copy") ;;
+            3)    COMPOSE_AUDIO_CODECS=("opus") ;;
+            4)    COMPOSE_AUDIO_CODECS=("ac3") ;;
+            5)    COMPOSE_AUDIO_CODECS=("eac3") ;;
+            6)    COMPOSE_AUDIO_CODECS=("flac") ;;
+            *)    COMPOSE_AUDIO_CODECS=("aac") ;;
+        esac
+        if [[ "${COMPOSE_AUDIO_CODECS[0]}" != "copy" && "${COMPOSE_AUDIO_CODECS[0]}" != "flac" ]]; then
+            read -rp "  → Bitrate [192k]: " br
+            COMPOSE_AUDIO_BITRATES=("${br:-192k}")
+        else
+            COMPOSE_AUDIO_BITRATES=("0")
+        fi
+        return 0
+    fi
+
+    echo -e "${CYAN}►${NC} Codec por cada pista de audio:"
+    echo ""
+    local audio_raw
+    audio_raw=$(ffprobe -v error -select_streams a \
+        -show_entries stream=index,codec_name,channels,sample_rate \
+        -show_entries stream_tags=language,title,handler_name,description \
+        -of default=noprint_wrappers=1 "$input" 2>/dev/null)
+    local audio_info=""
+    local current_idx="" current_lang="" current_title="" current_handler="" current_codec=""
+    flush_ac() { if [[ -n "$current_idx" ]]; then audio_info+="${current_idx},${current_lang},${current_title},${current_handler},${current_codec}"; audio_info+=$'\n'; fi; }
+    while IFS= read -r line; do
+        case "$line" in
+            index=*) flush_ac; current_idx="${line#index=}"; current_lang=""; current_title=""; current_handler=""; current_codec="" ;;
+            TAG:language=*)    current_lang="${line#TAG:language=}" ;;
+            TAG:title=*)       current_title="${line#TAG:title=}" ;;
+            TAG:handler_name=*) current_handler="${line#TAG:handler_name=}" ;;
+            codec_name=*)      current_codec="${line#codec_name=}" ;;
+        esac
+    done <<< "$audio_raw"
+    flush_ac
+
+    for ((a=0; a<audio_count; a++)); do
+        local track_pos=$((COMPOSE_AUDIO_IDXS[a] + 1))
+        local track_line
+        track_line=$(echo "$audio_info" | sed -n "${track_pos}p")
+        local tlang ttitle thandler
+        tlang=$(echo "$track_line" | cut -d',' -f2)
+        ttitle=$(echo "$track_line" | cut -d',' -f3)
+        thandler=$(echo "$track_line" | cut -d',' -f4)
+
+        local tlabel=""
+        local tlname
+        tlname=$(lang_code_to_name "$tlang")
+        if [[ -n "$ttitle" ]]; then tlabel="$ttitle"
+        elif [[ -n "$thandler" && "$thandler" != "Sound Handler" && "$thandler" != "Audio" ]]; then tlabel="$thandler"
+        fi
+        if [[ -n "$tlname" ]]; then
+            [[ -n "$tlabel" ]] && tlabel="$tlname — $tlabel" || tlabel="$tlname"
+        fi
+        [[ -z "$tlabel" ]] && tlabel="pista $track_pos"
+
+        echo -e "  ${BOLD}Pista $((a+1)):${NC} $tlabel"
+        echo "    1) aac    ${DIM}— Estándar${NC}"
+        echo "    2) copy   ${DIM}— Sin re-encoding${NC}"
+        echo "    3) opus   ${DIM}— Mejor calidad${NC}"
+        echo "    4) ac3    ${DIM}— Surround${NC}"
+        echo "    5) flac   ${DIM}— Sin pérdida${NC}"
+        read -rp "    → Codec [aac]: " cc
+        case "$cc" in
+            1|"") COMPOSE_AUDIO_CODECS+=("aac") ;;
+            2)    COMPOSE_AUDIO_CODECS+=("copy") ;;
+            3)    COMPOSE_AUDIO_CODECS+=("opus") ;;
+            4)    COMPOSE_AUDIO_CODECS+=("ac3") ;;
+            5)    COMPOSE_AUDIO_CODECS+=("flac") ;;
+            *)    COMPOSE_AUDIO_CODECS+=("aac") ;;
+        esac
+
+        local last_codec="${COMPOSE_AUDIO_CODECS[-1]}"
+        if [[ "$last_codec" != "copy" && "$last_codec" != "flac" ]]; then
+            read -rp "    → Bitrate [192k]: " br
+            COMPOSE_AUDIO_BITRATES+=("${br:-192k}")
+        else
+            COMPOSE_AUDIO_BITRATES+=("0")
+        fi
+        echo ""
+    done
+}
+
+select_output_format() {
+    echo -e "${CYAN}►${NC} Contenedor de salida:"
+    echo "    1) mkv     ${DIM}— Soporta todo: múltiples audios, subtítulos, codecs${NC}"
+    echo "    2) mp4     ${DIM}— Mejor compatibilidad (web, móviles)${NC}"
+    echo "    3) ts      ${DIM}— Streaming, transmisión en vivo${NC}"
+    echo ""
+    read -rp "  → Formato [mkv]: " fmt
+    case "$fmt" in
+        1|"") COMPOSE_OUT_FORMAT="mkv" ;;
+        2)    COMPOSE_OUT_FORMAT="mp4" ;;
+        3)    COMPOSE_OUT_FORMAT="ts" ;;
+        *)    COMPOSE_OUT_FORMAT="mkv" ;;
+    esac
+}
+
+build_compose_command() {
+    local input="$1"
+    local base_name="${2%.*}"
+    local output_dir="${3:-.}"
+
+    COMPOSE_OUT_NAME="${output_dir}/${base_name}_compose.${COMPOSE_OUT_FORMAT}"
+
+    local ffmpeg_args=(-i "$input")
+
+    ffmpeg_args+=(-map "0:v:${COMPOSE_VIDEO_IDX}")
+
+    for idx in "${COMPOSE_AUDIO_IDXS[@]}"; do
+        ffmpeg_args+=(-map "0:a:${idx}")
+    done
+
+    for idx in "${COMPOSE_SUB_IDXS[@]}"; do
+        ffmpeg_args+=(-map "0:s:${idx}")
+    done
+
+    ffmpeg_args+=(-map_metadata 0)
+
+    if [[ "$COMPOSE_VIDEO_IDX" -eq 0 ]]; then
+        ffmpeg_args+=(-c:v copy)
+    else
+        ffmpeg_args+=(-c:v copy)
+    fi
+
+    local a=0
+    for codec in "${COMPOSE_AUDIO_CODECS[@]}"; do
+        if [[ "$codec" == "copy" ]]; then
+            ffmpeg_args+=(-c:a:$a copy)
+        else
+            ffmpeg_args+=(-c:a:$a "$codec")
+            local br="${COMPOSE_AUDIO_BITRATES[$a]}"
+            [[ "$br" != "0" ]] && ffmpeg_args+=(-b:a:$a "$br")
+        fi
+        ((a++))
+    done
+
+    for ((s=0; s<${#COMPOSE_SUB_IDXS[@]}; s++)); do
+        ffmpeg_args+=(-c:s:$s copy)
+    done
+
+    if [[ "$COMPOSE_OUT_FORMAT" == "mp4" ]]; then
+        ffmpeg_args+=(-movflags +faststart)
+    fi
+
+    ffmpeg_args+=("$COMPOSE_OUT_NAME")
+
+    echo ""
+    echo -e "${BOLD}═══ Resumen de compose ═══${NC}"
+    echo -e "  Vídeo:     ${CYAN}pista $((COMPOSE_VIDEO_IDX+1)) (copy)${NC}"
+    echo -e "  Audio:"
+    local ai=0
+    for idx in "${COMPOSE_AUDIO_IDXS[@]}"; do
+        echo -e "    ${CYAN}pista $((idx+1)): ${COMPOSE_AUDIO_CODECS[$ai]} ${COMPOSE_AUDIO_BITRATES[$ai]}${NC}"
+        ((ai++))
+    done
+    if [[ ${#COMPOSE_SUB_IDXS[@]} -gt 0 ]]; then
+        echo -e "  Subtítulos: ${CYAN}${COMPOSE_SUB_IDXS[*]}${NC}"
+    fi
+    echo -e "  Salida:    ${CYAN}$COMPOSE_OUT_NAME${NC}"
+    echo ""
+    echo -e "  ${DIM}ffmpeg ${ffmpeg_args[*]}${NC}"
+    echo ""
+
+    "${ffmpeg_args[@]}"
+}
