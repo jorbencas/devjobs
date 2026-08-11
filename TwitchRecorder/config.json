@@ -23,7 +23,5 @@
 
     "max_duration": "24:00:00",
 
-    "retry_interval": 60,
-
-    "copy_to_test": true
+    "retry_interval": 60
 }

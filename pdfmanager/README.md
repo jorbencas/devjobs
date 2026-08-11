@@ -1,33 +1,36 @@
-# 🥷 PDF Ninja Master
+# PDF Ninja Master
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Gestor definitivo de documentos PDF: desbloquear, unir, dividir y comprimir.
-
-
 
 ## Requisitos
 
 - Docker
 
-## Uso
-
-### Con Docker (recomendado)
+## Despliegue
 
 ```bash
+git clone https://github.com/jorge-bencas/devjobs.git
+cd devjobs/pdfmanager
 docker compose build
 docker compose up
 ```
-
-Los PDFs se procesan desde `./pdfs_protegidos/` y salen en `./pdfs_libres/`.
 
 ### Sin Docker
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install pymupdf rich inquirerpy tqdm readchar pikepdf Pillow
 python desproteger_pdf.py
 ```
 
-## Menú interactivo
+## Uso
+
+Los PDFs se procesan desde `./pdfs_protegidos/` y salen en `./pdfs_libres/`.
+
+### Menú interactivo
 
 ```
 1. Desbloqueo Limpio
@@ -47,19 +50,20 @@ pdfmanager/
 ├── docker-compose.yml    # servicio con volúmenes
 ├── pdfs_protegidos/      # coloca aquí los PDFs a procesar
 ├── pdfs_libres/          # aquí salen los resultados
+├── LICENSE               # MIT
 └── README.md
 ```
 
-## Dependencias Docker
+## Dependencias
 
-Se instalan automáticamente en la imagen:
+Se instalan automáticamente en la imagen Docker:
 
-- `PyMuPDF` (fitz) - Lectura y manipulación de PDFs
-- `pikepdf` - Eliminación de restricciones de seguridad
-- `rich` - Interfaz de terminal con colores
-- `tqdm` - Barras de progreso
-- `readchar` - Navegación con teclado
-- `Pillow` - Conversión de imágenes
+- `PyMuPDF` (fitz) — Lectura y manipulación de PDFs
+- `pikepdf` — Eliminación de restricciones de seguridad
+- `rich` — Interfaz de terminal con colores
+- `tqdm` — Barras de progreso
+- `readchar` — Navegación con teclado
+- `Pillow` — Conversión de imágenes
 
 ## Blog
 

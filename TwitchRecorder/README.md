@@ -50,8 +50,7 @@ Edita `config.json`:
     "start_time": "21:30",
     "check_every": 30,
     "max_duration": "24:00:00",
-    "retry_interval": 60,
-    "copy_to_test": true
+    "retry_interval": 60
 }
 ```
 
@@ -74,7 +73,6 @@ Edita `config.json`:
 | `check_every` | Cada cuántos segundos se comprueba si el canal está en directo |
 | `max_duration` | Duración máxima de grabación en formato `HH:MM:SS` |
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
-| `copy_to_test` | Si es `true`, copia cada vídeo a una carpeta `test/` para fácil acceso |
 
 ---
 

@@ -26,9 +26,28 @@ def sistema_auto_setup():
 
 # Ejecutar instalador
 sistema_auto_setup()
-# --- RELLENA TUS DATOS AQUÍ ---
-API_ID = '39937314'
-API_HASH = 'be1b57db99dfe149a2a06db3b47d68c3'
+
+def load_credentials():
+    api_id = os.environ.get("API_ID")
+    api_hash = os.environ.get("API_HASH")
+    if api_id and api_hash:
+        return api_id, api_hash
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("API_ID="):
+                    api_id = line.split("=", 1)[1].strip()
+                elif line.startswith("API_HASH="):
+                    api_hash = line.split("=", 1)[1].strip()
+        if api_id and api_hash:
+            return api_id, api_hash
+    api_id = input("API_ID: ").strip()
+    api_hash = input("API_HASH: ").strip()
+    return api_id, api_hash
+
+API_ID, API_HASH = load_credentials()
 
 with TelegramClient(StringSession(), API_ID, API_HASH) as client:
     print("\n✅ SESIÓN GENERADA CON ÉXITO:")

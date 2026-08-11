@@ -1,5 +1,7 @@
 # HDFull Downloader
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Descargador automatizado de películas de **HDFull** con Docker + noVNC. Detecta automáticamente dominios activos, resuelve reCAPTCHA **manualmente** a través de noVNC, y captura el stream real (MPEG-DASH/HLS/MP4) usando ffmpeg.
 
 ---
@@ -54,7 +56,27 @@ Docker (Alpine + Xvfb + openbox + x11vnc + novnc + chromium + ffmpeg + DrissionP
 ## Requisitos
 
 - Docker (Docker Desktop con WSL2 en Windows)
-- Nada instalado en Windows: todo corre en el contenedor
+
+## Despliegue
+
+```bash
+git clone https://github.com/jorge-bencas/devjobs.git
+cd devjobs/hdfull-downloader
+```
+
+1. Crea el archivo `.env` (usa `.env.example` como plantilla):
+
+```bash
+cp .env.example .env
+# Editar .env con tus credenciales reales
+```
+
+2. Construye y ejecuta:
+
+```bash
+docker compose build --no-cache
+./menu.sh
+```
 
 ## Configuración
 
@@ -355,6 +377,7 @@ Los logs muestran el progreso en tiempo real:
 ```
 hdfull-downloader/
 ├── .env                  # credenciales (gitignoreado)
+├── .env.example          # plantilla de credenciales
 ├── .gitignore            # .env, __pycache__, downloads/, logs/
 ├── Dockerfile            # imagen: Alpine + chromium + xvfb + novnc + ffmpeg + openbox + DrissionPage
 ├── docker-compose.yml    # servicio con network_mode: host, volumen de perfil, montaje ./:/app
@@ -363,6 +386,7 @@ hdfull-downloader/
 ├── hdfull_downloader.py  # script principal
 ├── downloads/            # MP4 descargados (+ un .url con la fuente)
 ├── logs/                 # logs de las ejecuciones del menú
+├── LICENSE               # MIT
 └── README.md
 ```
 

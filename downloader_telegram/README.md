@@ -1,21 +1,29 @@
-# 📦 Telegram Ultimate Toolbox
+# Telegram Ultimate Toolbox
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Descargador masivo, clonador y vigilante de contenido en Telegram.
-
-
 
 ## Requisitos
 
 - Docker
-- Cuenta de Telegram con API ID/Hash (obtener en [my.telegram.org](https://my.telegram.org))
+- Cuenta de Telegram con API ID/Hash (crear en https://my.telegram.org/apps)
 
-## Uso
-
-### Con Docker (recomendado)
+## Despliegue
 
 ```bash
+git clone https://github.com/jorge-bencas/devjobs.git
+cd devjobs/downloader_telegram
+cp .env.example .env
+# Editar .env con tus credenciales de Telegram
 docker compose build
 docker compose up
+```
+
+### Generar sesión portátil
+
+```bash
+docker compose run --rm telegram python test_string.py
 ```
 
 ### Sin Docker
@@ -23,18 +31,13 @@ docker compose up
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install telethon mtranslate cryptography cryptg rich inquirerpy
 python test_download_protected_content_telegram.py
 ```
 
-## Generador de sesiones portátiles
+## Uso
 
-```bash
-docker compose run --rm telegram python test_string.py
-```
-
-Genera una `StringSession` para ejecutar en la nube (GitHub Actions, Heroku) sin archivos `.session`.
-
-## Menú principal
+### Menú principal
 
 ```
 1. Descargas Masivas (Enlace/Rango/TXT)
@@ -51,28 +54,30 @@ downloader_telegram/
 ├── test_string.py                               # generador de sesiones
 ├── Dockerfile                                   # imagen Python + dependencias
 ├── docker-compose.yml                           # servicio con volúmenes
+├── .env.example                                 # plantilla de credenciales
 ├── config.bin                                   # credenciales cifradas (AES)
 ├── secret.key                                   # llave de cifrado
 ├── ultimate_session.session                     # sesión de Telegram
 ├── Descargas_Telegram/                          # carpeta de descargas
+├── LICENSE                                      # MIT
 └── README.md
 ```
 
 ## Seguridad
 
 - Las credenciales (API ID/Hash) se cifran con AES en `config.bin`
-- La llave de cifrado se guarda en `secret.key` (si la borras, pierdes acceso al config)
+- La llave de cifrado se guarda en `secret.key`
 - El archivo `.session` contiene el token de persistencia
-- **Nunca commitees** `config.bin`, `secret.key` ni `.session`
+- **Nunca commitees** `config.bin`, `secret.key`, `.session` ni `.env`
 
-## Dependencias Docker
+## Dependencias
 
-Se instalan automáticamente en la imagen:
+Se instalan automáticamente en la imagen Docker:
 
-- `Telethon` - Cliente de Telegram para Python
-- `cryptography` (Fernet) - Cifrado AES de credenciales
-- `mtranslate` - Traducción automática
-- `cryptg` - Aceleración de descargas
+- `Telethon` — Cliente de Telegram para Python
+- `cryptography` (Fernet) — Cifrado AES de credenciales
+- `mtranslate` — Traducción automática
+- `cryptg` — Aceleración de descargas
 
 ## Blog
 

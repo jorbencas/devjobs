@@ -38,14 +38,13 @@ def _format_size(size_bytes: int) -> str:
 
 
 class Recorder:
-    def __init__(self, channel: str, platform_name: str, record_path: str, max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = True):
+    def __init__(self, channel: str, platform_name: str, record_path: str, max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60):
         self.channel = channel
         self.platform_name = platform_name
         self.record_path = Path(record_path)
         self.max_duration_hours = max_duration_hours
         self.max_duration_str = max_duration_str
         self.retry_interval = retry_interval
-        self.copy_to_test = copy_to_test
         self.process = None
         self.is_recording = False
         self.finished = False
@@ -153,25 +152,11 @@ class Recorder:
             except subprocess.TimeoutExpired:
                 self.process.kill()
         self.is_recording = False
-        if self.copy_to_test:
-            self._copy_to_test()
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
             log.info(f"[{self.channel}] Grabación finalizada ({size})")
         else:
             log.info(f"[{self.channel}] Grabación finalizada")
-
-    def _copy_to_test(self) -> None:
-        if not self._current_file or not self._current_file.exists():
-            return
-
-        test_dir = self.record_path / "test"
-        test_dir.mkdir(parents=True, exist_ok=True)
-
-        dest = test_dir / self._current_file.name
-        if self._current_file.resolve() != dest.resolve():
-            shutil.copy2(self._current_file, dest)
-            log.info(f"[{self.channel}] Copiado a {dest}")
 
     def monitor(self) -> None:
         max_seconds = self.max_duration_hours * 3600

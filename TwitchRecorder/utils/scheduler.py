@@ -43,7 +43,6 @@ def run_scheduler(dry_run: bool = False):
     max_duration_str = config.get("max_duration", "24:00:00")
     max_duration = parse_duration(max_duration_str)
     retry_interval = config.get("retry_interval", 60)
-    copy_to_test = config.get("copy_to_test", True)
 
     log.info("=== TwitchRecorder iniciado ===")
     log.info(f"Canales: {[ch for ch, _ in channels_with_platform]}")
@@ -69,7 +68,7 @@ def run_scheduler(dry_run: bool = False):
 
     recorders = {}
     for channel, platform_name in channels_with_platform:
-        recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval, copy_to_test)
+                recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval)
 
     current_day = _get_today()
 
@@ -86,7 +85,7 @@ def run_scheduler(dry_run: bool = False):
         for channel, platform_name in new_channels_with_platform:
             if channel not in recorders:
                 log.info(f"[{channel}] Nuevo canal detectado ({platform_name}), añadiendo...")
-                recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval, copy_to_test)
+        recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval)
 
         all_offline = True
 

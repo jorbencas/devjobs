@@ -1,4 +1,6 @@
-# 🎥 FFmpeg + yt-dlp Pipeline
+# FFmpeg + yt-dlp Pipeline
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Conversor, descargador y editor de vídeo con ffmpeg, yt-dlp y preview watcher para WSL.
 
@@ -8,6 +10,27 @@ Conversor, descargador y editor de vídeo con ffmpeg, yt-dlp y preview watcher p
 
 - Docker
 - (Opcional) VLC en Windows para previsualización desde WSL
+
+## Despliegue
+
+```bash
+git clone https://github.com/jorge-bencas/devjobs.git
+cd devjobs/ffmpeg-yt-dlp
+docker compose build
+docker compose up
+```
+
+### Fuera de Docker
+
+```bash
+# Instalar dependencias (Ubuntu/Debian)
+sudo apt install ffmpeg
+pip install yt-dlp
+
+# Ejecutar
+cd test_video
+bash midu.sh
+```
 
 ## Uso
 
@@ -321,13 +344,16 @@ Genera:
 ffmpeg-yt-dlp/
 ├── docker-compose.yml     # servicio Docker (Alpine + ffmpeg + yt-dlp)
 ├── preview_watcher.sh     # abre vídeos en WSL/Windows (host)
+├── .env.example           # plantilla de variables de entorno
 ├── scripts/
 │   ├── backup_youtube.sh  # backup automático de canales de YouTube
 │   └── monitor_folder.sh  # monitoreo y compresión automática
-└── test_video/
-    ├── midu.sh            # script principal (~6000 líneas, 33 modos)
-    ├── optimizados/       # vídeos convertidos (por defecto)
-    └── test/              # vídeos de entrada (por defecto)
+├── test_video/
+│   ├── midu.sh            # script principal (~6000 líneas, 33 modos)
+│   ├── optimizados/       # vídeos convertidos (por defecto)
+│   └── test/              # vídeos de entrada (por defecto)
+├── LICENSE                # MIT
+└── README.md
 ```
 
 ## Flujo recomendado
