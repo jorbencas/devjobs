@@ -2,7 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Descargador masivo, clonador y vigilante de contenido en Telegram.
+Descargador masivo, clonador, vigilante de contenido y **subidor automático de vídeos a grupos** en Telegram.
+
+> Subida automática y pipeline "Grabar → Comprimir → Subir": [ver `README_UPLOADER.md`](README_UPLOADER.md).
 
 ## Requisitos
 
@@ -19,6 +21,24 @@ cp .env.example .env
 docker compose build
 docker compose up
 ```
+
+### Módulo Uploader (`subir_videos.py`)
+
+Sube vídeos comprimidos a varios grupos de Telegram automáticamente (pieza final del pipeline **"Grabar → Comprimir → Subir"**):
+
+```bash
+# Setup de sesión (una vez, pide teléfono + código, crea uploader.session)
+docker compose run --rm uploader python /app/subir_videos.py --setup
+
+# Descubrir los IDs de tus chats/grupos
+docker compose run --rm uploader python /app/subir_videos.py --list-chats
+
+# Modo automático en background (vigila /comprimidos y sube a los grupos)
+docker compose up -d uploader
+docker compose logs -f uploader
+```
+
+El detalle completo (configuración con variables de entorno, `grupos.json`, división de vídeos >2 GB, sesión propia que no conflictúa): [ver `README_UPLOADER.md`](README_UPLOADER.md).
 
 ### Generar sesión portátil
 
@@ -43,22 +63,28 @@ python test_download_protected_content_telegram.py
 1. Descargas Masivas (Enlace/Rango/TXT)
 2. Clonación & Backup (Filtro + Traducción)
 3. Modo Vigilante (Alertas por palabras)
-4. Re-configurar / Salir
+4. Uploader a grupos (subir_videos.py, ver README_UPLOADER.md)
+5. Re-configurar / Salir
 ```
 
 ## Estructura
 
 ```
 downloader_telegram/
-├── test_download_protected_content_telegram.py  # script principal
+├── test_download_protected_content_telegram.py  # script principal (3 módulos)
+├── subir_videos.py                              # uploader automático a grupos (pipeline)
 ├── test_string.py                               # generador de sesiones
-├── Dockerfile                                   # imagen Python + dependencias
-├── docker-compose.yml                           # servicio con volúmenes
+├── grupos.json                                  # IDs/@usuario de los grupos (uploader)
+├── enviados.json                                # registro de vídeos ya subidos (uploader)
+├── Dockerfile                                   # imagen Python + dependencias + ffmpeg
+├── docker-compose.yml                           # servicios telegram + uploader
 ├── .env.example                                 # plantilla de credenciales
 ├── config.bin                                   # credenciales cifradas (AES)
 ├── secret.key                                   # llave de cifrado
-├── ultimate_session.session                     # sesión de Telegram
+├── ultimate_session.session                     # sesión de Telegram (menú)
+├── uploader.session                             # sesión de Telegram (uploader, separada)
 ├── Descargas_Telegram/                          # carpeta de descargas
+├── README_UPLOADER.md                           # documentación del uploader
 ├── LICENSE                                      # MIT
 └── README.md
 ```
@@ -78,7 +104,8 @@ Se instalan automáticamente en la imagen Docker:
 - `cryptography` (Fernet) — Cifrado AES de credenciales
 - `mtranslate` — Traducción automática
 - `cryptg` — Aceleración de descargas
+- `ffmpeg` — División de vídeos >2 GB en el uploader
 
 ## Blog
 
-- [Telegram Ultimate Toolbox: Descargador Masivo y Vigilante](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/)
+- [Telegram Ultimate Toolbox: Descargador Masivo, Clonador, Vigilante y Uploader](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/)

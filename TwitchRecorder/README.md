@@ -50,7 +50,9 @@ Edita `config.json`:
     "start_time": "21:30",
     "check_every": 30,
     "max_duration": "24:00:00",
-    "retry_interval": 60
+    "retry_interval": 60,
+    "copy_to_test": true,
+    "test_path": "/recordings/test"
 }
 ```
 
@@ -73,6 +75,10 @@ Edita `config.json`:
 | `check_every` | Cada cuántos segundos se comprueba si el canal está en directo |
 | `max_duration` | Duración máxima de grabación en formato `HH:MM:SS` |
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
+| `copy_to_test` | Si `true`, al terminar un directo mueve la grabación a `test_path` renombrada a `*_completed.mp4` |
+| `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
+
+> **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/test_videos:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/test_videos/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 
 ---
 
@@ -125,7 +131,7 @@ docker compose build
 ```bash
 docker run --rm \
   -v ./config.json:/app/config.json:ro \
-  -v /home/jorge/test_videos:/recordings \
+  -v /home/jorge/dev/devjobs/test_videos:/recordings \
   -e TZ=Europe/Madrid \
   twitchrecorder-run
 ```
@@ -241,10 +247,37 @@ grabaciones/
 │       ├── MrBeast_2026-07-26_21-15-00.mp4
 │       └── adin_2026-07-27_22-00-00.mp4
 └── test/
-    └── sendosama_2026-07-26_21-15-00.mp4
+    └── sendosama_2026-07-26_21-15-00_completed.mp4
 ```
 
 **Nombre del archivo:** `canal_YYYY-MM-DD_HH-MM-SS.mp4`
+**Cuando `copy_to_test` está activo:** al terminar el directo, la grabación se **mueve** a `test/` y se renombra a `canal_..._completed.mp4` (marcada como lista para el pipeline).
+
+---
+
+## Pipeline completo: grabar → comprimir → subir a Telegram
+
+TwitchRecorder es la **primera pieza** de un pipeline automático. Las tres piezas:
+
+| Pieza | Proyecto | Hace |
+|---|---|---|
+| 1. Grabar | `TwitchRecorder` | Graba el directo y deja `*_completed.mp4` en `test/` |
+| 2. Comprimir | `ffmpeg-yt-dlp` (servicio `monitor`) | Convierte a 720p → `comprimidos/*_compressed.mp4` |
+| 3. Subir | `downloader_telegram` (servicio `uploader`) | Sube a los grupos de Telegram |
+
+**Arranque del pipeline:**
+```bash
+# TwitchRecorder (esta carpeta)
+docker compose up -d twitchrecorder
+# ffmpeg-yt-dlp
+cd ../ffmpeg-yt-dlp && docker compose up -d monitor
+# downloader_telegram
+cd ../downloader_telegram && docker compose up -d uploader
+```
+
+**Auto-arranque al encender el PC:** los tres servicios se levantan solos vía un servicio systemd. Ver `servicios/twitch-stream-pipeline.service` en la raíz de `devjobs` y la sección *AUTO-ARRANQUE* en `docker_help.txt`.
+
+> Documentación completa del pipeline en `README.md` de la raíz de `devjobs`.
 
 ---
 
@@ -323,7 +356,7 @@ CMD []
 
 | Comando | Qué hace |
 |---|---|
-| `docker compose up -d` | Arranca en background |
+| `docker compose up -d twitchrecorder` | Arranca el daemon en background |
 | `docker compose down` | Para todo |
 | `docker compose run --rm run` | Ejecuta una vez |
 | `docker compose run --rm run --dry-run` | Simula sin grabar |

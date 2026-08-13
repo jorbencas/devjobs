@@ -17,6 +17,60 @@ Repositorio de herramientas avanzadas para la gestión de activos digitales, aut
 
 ---
 
+## 🎬 PIPELINE: Directos de Twitch → Telegram
+
+Automatización que graba los directos de **sendo sama**, los comprime y los sube a varios grupos de Telegram, **sin intervención** (ideal para ausencias). Encadena 3 proyectos existentes:
+
+```
+┌──────────────┐   *_completed.mp4   ┌──────────────────┐   *_compressed.mp4   ┌──────────────────┐
+│ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
+│  (grabar)     │    mover a test/  │  monitor *720p*    │      a 720p         │  uploader (subir) │
+└──────────────┘                    └──────────────────┘                      └──────────────────┘
+   /home/jorge/dev/devjobs/test_videos/test/  /home/jorge/dev/devjobs/Videos/comprimidos/  N grupos
+```
+
+| Pieza | Proyecto | Servicio | Qué hace |
+|---|---|---|---|
+| 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo y lo mueve a `test/` como `*_completed.mp4` |
+| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `comprimidos/*_compressed.mp4` |
+| 3. Subir | `downloader_telegram/` | `uploader` | Sube a los grupos de `grupos.json` (divide si >2 GB) |
+
+### Arrancar el pipeline
+
+```bash
+cd TwitchRecorder && docker compose up -d twitchrecorder
+cd ../ffmpeg-yt-dlp && docker compose up -d monitor
+cd ../downloader_telegram && docker compose up -d uploader
+```
+
+### Preparación inicial (solo la primera vez, ANTES de dejarlo solo)
+
+```bash
+# 1. Sesión del uploader (una sola vez, pide teléfono + código)
+cd downloader_telegram && docker compose run --rm uploader python /app/subir_videos.py --setup
+
+# 2. Descubrir los IDs de tus grupos
+docker compose run --rm uploader python /app/subir_videos.py --list-chats
+
+# 3. Rellenar grupos.json con los IDs/@usuarios
+```
+
+### Documentación detallada
+
+- **Monitoreo de compresión:** [`ffmpeg-yt-dlp/README_MONITOR.md`](ffmpeg-yt-dlp/README_MONITOR.md)
+- **Subida a Telegram:** [`downloader_telegram/README_UPLOADER.md`](downloader_telegram/README_UPLOADER.md)
+- **Grabación `_completed`:** [`TwitchRecorder/README.md`](TwitchRecorder/README.md)
+- **Comandos Docker y auto-arranque:** [`docker_help.txt`](docker_help.txt)
+- **Servicio systemd (auto-arranque al boot):** [`servicios/twitch-stream-pipeline.service`](servicios/twitch-stream-pipeline.service)
+
+### Auto-arranque al encender el PC
+
+Los 3 servicios se levantan solos al arrancar el sistema vía un servicio **systemd**:
+`sudo systemctl enable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service`
+Ver la sección *AUTO-ARRANQUE* en `docker_help.txt`.
+
+---
+
 ## 📦 Instalación Rápida (Docker)
 
 Cada herramienta es independiente. Entra en su carpeta y ejecuta:

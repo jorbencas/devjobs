@@ -62,6 +62,17 @@ Docker (Python slim + ffmpeg + requests + beautifulsoup4)
 - Docker
 - Cuenta en aula.pmoposiciones.com
 
+## Configuración
+
+La autenticación se configura con **variables de entorno** (en el servicio `aula_downloader` del `docker-compose.yml` o pasadas con `-e`):
+
+| Variable | Descripción | Default |
+|---|---|---|
+| `AULA_USER` | Usuario de aula | `REDACTED` |
+| `AULA_PASS` | Contraseña de aula | `REDACTED` |
+
+Las descargas salen a `./descargas/`, organizadas por curso (`./descargas/CURSO/`).
+
 ## Uso con Docker (Recomendado)
 
 ```bash

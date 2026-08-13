@@ -17,11 +17,15 @@
         "Sunday"
     ],
 
-    "start_time": "21:30",
+    "start_time": "20:00",
 
     "check_every": 30,
 
     "max_duration": "24:00:00",
 
-    "retry_interval": 60
+    "retry_interval": 60,
+
+    "copy_to_test": true,
+
+    "test_path": "/recordings/test"
 }

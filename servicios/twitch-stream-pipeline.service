@@ -1,0 +1,28 @@
+[Unit]
+Description=Pipeline Directos sendo sama (grabar + comprimir + subir a Telegram)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+
+# 1) TwitchRecorder (grabar)
+WorkingDirectory=/home/jorge/dev/devjobs/TwitchRecorder
+ExecStart=/usr/bin/docker compose up -d twitchrecorder
+
+# 2) Monitor de compresión (ffmpeg-yt-dlp)
+WorkingDirectory=/home/jorge/dev/devjobs/ffmpeg-yt-dlp
+ExecStart=/usr/bin/docker compose up -d monitor
+
+# 3) Uploader a Telegram (downloader_telegram)
+WorkingDirectory=/home/jorge/dev/devjobs/downloader_telegram
+ExecStart=/usr/bin/docker compose up -d uploader
+
+ExecStop=/usr/bin/docker compose -f /home/jorge/dev/devjobs/TwitchRecorder/docker-compose.yml down
+ExecStop=/usr/bin/docker compose -f /home/jorge/dev/devjobs/ffmpeg-yt-dlp/docker-compose.yml down
+ExecStop=/usr/bin/docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target

@@ -28,12 +28,14 @@ config.bin
 credentials.txt
 ultimate_session.session
 ultimate_session.session-journal
+uploader.session
 secret.key
 pdfs_libres
 pdfs_protegidos
 tituls AR
 test/
 optimizados/
+Videos/
 
 ### Python ###
 __pycache__/
@@ -52,4 +54,5 @@ skills-lock.json
 ### Tests ###
 tests/
 descargas/
-docker_help.txt
+test_videos/
+test_videos_backup/

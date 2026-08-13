@@ -9,3 +9,23 @@ services:
       - ./Descargas_Telegram:/app/Descargas_Telegram
     stdin_open: true
     tty: true
+
+  uploader:
+    build: .
+    container_name: telegram-uploader
+    restart: unless-stopped
+    volumes:
+      - ./config.bin:/app/config.bin
+      - ./secret.key:/app/secret.key
+      - ./uploader.session:/app/uploader.session
+      - ./grupos.json:/app/grupos.json
+      - ./enviados.json:/app/enviados.json
+      - ./partes:/app/partes
+      - /home/jorge/dev/devjobs/Videos/comprimidos:/comprimidos
+    environment:
+      # Opcional: cambiar credenciales SIN tocar config.bin
+      # UPLOADER_API_ID:
+      # UPLOADER_API_HASH:
+      # Intervalo entre pasadas (segundos)
+      UPLOADER_INTERVALO: "60"
+    command: python -u /app/subir_videos.py /comprimidos

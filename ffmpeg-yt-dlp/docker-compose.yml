@@ -14,3 +14,20 @@ services:
       id -u jorge >/dev/null 2>&1 || adduser -D -u 1000 jorge &&
       chown -R jorge:jorge /app/test_video &&
       su-exec jorge bash midu.sh"
+
+  monitor:
+    image: alpine:latest
+    container_name: ffmpeg_monitor
+    restart: unless-stopped
+    user: root
+    command: >-
+      sh -c "apk add --no-cache ffmpeg bash findutils &&
+      mkdir -p /watch /comprimidos &&
+      bash /app/scripts/monitor_folder.sh --completed-only -r 720 --codec libx264 -c 28 -p fast /watch"
+    volumes:
+      - ./:/app
+      - /home/jorge/dev/devjobs/test_videos/test:/watch
+      - /home/jorge/dev/devjobs/Videos/comprimidos:/comprimidos
+    environment:
+      - OUTPUT_DIR=/comprimidos
+      - POLL_INTERVAL=30

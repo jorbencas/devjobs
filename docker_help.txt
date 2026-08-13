@@ -1,11 +1,22 @@
-================================================================================
+==============================================================================
   DOCKER CHEATSHEET - devjobs Ultimate Automation Suite
   Ruta: /home/jorge/dev/devjobs/docker_help.txt
-================================================================================
+==============================================================================
 
-================================================================================
+ÍNDICE
+  1. Docker general (imágenes, contenedores, limpieza, build, run, red)
+  2. Docker compose (comandos genéricos)
+  3. Alias / utilidades (estado de contenedores, espacio en disco)
+  4. PROYECTOS (por proyecto: ejecutar, parar, logs, watch, otros)
+       4a. pdfmanager            4d. aula-downloader
+       4b. downloader_telegram   4e. TwitchRecorder
+       4c. hdfull-downloader     4f. ffmpeg-yt-dlp
+  5. PIPELINE: directo sendo sama → Telegram
+  6. AUTO-ARRANQUE al encender el PC (systemd)
+
+==============================================================================
   1. DOCKER GENERAL
-================================================================================
+==============================================================================
 
 --- Imágenes ---
 docker images                          # Listar imágenes
@@ -15,7 +26,7 @@ docker image prune -a                  # Limpiar TODAS las imágenes sin usar
 
 --- Contenedores ---
 docker ps                              # Contenedores activos
-docker ps -a                           # Todos los contenedores (incluidos detenidos)
+docker ps -a                           # Todos los contenedores
 docker stop <container>                # Parar contenedor
 docker rm <container>                  # Eliminar contenedor
 docker rm -f <container>               # Eliminar forzadamente
@@ -44,9 +55,9 @@ docker run -v /host:/container <image> # Montar volúmenes
 docker network ls                      # Listar redes
 docker network inspect <network>       # Info de red
 
-================================================================================
+==============================================================================
   2. DOCKER COMPOSE
-================================================================================
+==============================================================================
 
 --- Comandos básicos ---
 docker compose up                      # Arrancar servicios (foreground)
@@ -69,117 +80,123 @@ docker compose run --rm <service>      # Ejecutar y eliminar al terminar
 docker compose run --rm --service-ports <service>  # Con puertos expuestos
 docker compose run -e VAR=value <service>  # Con variable de entorno
 
---- Shell ---
+--- Shell / Restart / Escalado ---
 docker compose exec <service> bash     # Entrar al servicio corriendo
-
---- Restart ---
 docker compose restart                 # Reiniciar servicios
 docker compose restart <service>       # Reiniciar un servicio
-
---- Escalado ---
 docker compose up --scale <service>=3  # Escalar servicio
 
-================================================================================
-  3. PROYECTO: pdfmanager
-================================================================================
+==============================================================================
+  3. ALIAS / UTILIDADES
+==============================================================================
+
+# Agregar a ~/.bashrc o ~/.zshrc:
+alias docker_help='cat /home/jorge/dev/devjobs/docker_help.txt'
+
+# Recargar shell:
+source ~/.bashrc
+
+# Uso:
+docker_help
+
+--- Estado de contenedores (qué está corriendo) ---
+docker ps                                             # Contenedores activos del pipeline (funciona desde CUALQUIER carpeta)
+cd /home/jorge/dev/devjobs/<proyecto> && docker compose ps   # Estado por servicio del proyecto (compose lee el .yml de la carpeta actual)
+docker ps --format "table {{.Names}}\t{{.Status}}"   # Nombres + estado, más legible
+
+--- Espacio en disco ---
+df -h                                  # Uso de los discos
+du -sh /home/jorge/dev/devjobs/*/      # Peso por proyecto (videos y backups pesan mucho)
+
+==============================================================================
+  4a. PROYECTO: pdfmanager
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/pdfmanager
 
---- Comandos Docker ---
-docker compose build                    # Construir imagen
-docker compose up                       # Ejecutar (interactivo)
+--- Arrancar ---
+docker compose build                   # Construir imagen (primera vez)
+docker compose up                      # Ejecutar (interactivo)
 
---- Directorios ---
-./pdfs_protegidos/    # Coloca PDFs aquí
-./pdfs_libres/        # Salen los resultados aquí
+--- Logs ---
+docker compose logs -f                 # Ver logs
 
-================================================================================
-  4. PROYECTO: downloader_telegram
-================================================================================
+--- Otros ---
+docker compose down                    # Parar y eliminar el contenedor
+
+# Configuración (directorios) y uso: ver README de pdfmanager
+
+==============================================================================
+  4b. PROYECTO: downloader_telegram
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/downloader_telegram
+Servicios: telegram (menú interactivo), uploader (pipeline)
 
---- Comandos Docker ---
-docker compose build                    # Construir imagen
-docker compose up                       # Ejecutar (interactivo)
+--- Arrancar ---
+docker compose build                   # Construir imagen (primera vez)
+docker compose up                      # Menú interactivo
+docker compose up -d uploader          # Subir videos comprimidos a grupos (pipeline)
+
+--- Logs ---
+docker compose logs -f uploader        # Logs del uploader
+
+--- Parar ---
+docker compose stop uploader           # Parar solo el uploader
+docker compose down                    # Parar todo
+
+--- Otros (pipeline) ---
+# Setup de sesión (una vez) + listar chats:
+docker compose run --rm uploader python /app/subir_videos.py --setup
+docker compose run --rm uploader python /app/subir_videos.py --list-chats
 
 # Generador de sesiones portátiles
 docker compose run --rm telegram python test_string.py
 
---- Seguridad ---
-# Las credenciales se cifran automáticamente en config.bin
-# La llave se guarda en secret.key
-# NUNCA commitees: config.bin, secret.key, .session
+# Configuración (credenciales, sesiones, grupos), seguridad y detalle:
+# ver README de downloader_telegram y README_UPLOADER.md
 
-================================================================================
-  5. PROYECTO: hdfull-downloader
-================================================================================
+==============================================================================
+  4c. PROYECTO: hdfull-downloader
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/hdfull-downloader
-Contenedor: hdfull-downloader
+Servicio: hdfull_downloader
 
---- Configuración ---
-# Crear archivo .env
-echo "HDFULL_USER=tu_usuario" > .env
-echo "HDFULL_PASS=tu_contraseña" >> .env
+--- Preparar (solo una vez) ---
+docker compose down                    # Eliminar contenedor antiguo
+docker compose build --no-cache        # Construir imagen (IMPORTANTE: usar --no-cache)
 
---- Comandos Docker ---
-docker compose down                     # Eliminar contenedor antiguo
-docker compose build --no-cache         # Construir imagen (IMPORTANTE: usar --no-cache)
-
-# Ejecutar (URL como argumento - recomendado)
+--- Ejecutar ---
+# Descargar (URL como argumento - recomendado)
 docker compose run --rm hdfull_downloader "https://hdfull.sbs/pelicula/swimming-pool"
 
-# Ejecutar (URL como variable de entorno - fallback)
+# Descargar (URL como variable de entorno - fallback)
 docker compose run --rm -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader
 
-# Borrar perfil del navegador y ejecutar (limpiar cookies/sesión)
+# Borrar perfil del navegador y descargar (limpiar cookies/sesión)
 docker compose run --rm hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
 
 # Menú interactivo
 ./menu.sh                              # Menú normal
 ./menu.sh --clear-profile              # Menú con perfil limpio
 
-# Ver logs
-docker compose logs -f
+--- Logs ---
+docker compose logs -f                 # Ver logs
 
---- Puertos (network_mode: host) ---
-6080 → noVNC (web): http://localhost:6080/vnc.html
-5900 → VNC cliente
+# Configuración (.env), variables, puertos y características: ver README de hdfull-downloader
 
---- Variables de entorno ---
-HDFULL_USER            # Usuario (obligatorio)
-HDFULL_PASS            # Contraseña (obligatorio)
-HDFULL_URL             # URL de la película (fallback si no se pasa como argumento)
-HDFULL_CAPTCHA_TIMEOUT # Segundos esperando captcha (default: 900)
-HDFULL_OUT             # Directorio de salida (default: /app/downloads)
-
---- Características ---
-- Detección automática de dominios desde dominioshdfull.com
-- Cloudflare challenge: espera manual en noVNC sin recargar la página
-- network_mode: host: puertos directos en localhost
-- Persistencia de sesión via volumen profile
-
---- Archivos importantes ---
-.profile/              # Perfil de Chromium (persistente entre ejecuciones)
-downloads/             # MP4 descargados
-
-================================================================================
-  6. PROYECTO: aula-downloader
-================================================================================
+==============================================================================
+  4d. PROYECTO: aula-downloader
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/aula-downloader
-Contenedor: aula-downloader
+Servicio: aula_downloader
 
---- Descripción ---
-Descargador de vídeos de aula.pmoposiciones.com (plataforma Moodle con Vimeo).
-No necesita navegador - usa requests + Python puro para extraer URLs HLS.
-Incluye logs mejorados con progreso, ETA y resumen final.
+--- Preparar (solo una vez) ---
+docker compose build                   # Construir imagen (primera vez)
 
---- Comandos Docker ---
-docker compose build                    # Construir imagen
-docker compose build --no-cache         # Reconstruir sin caché
-
+--- Ejecutar ---
 # Descargar una carpeta
 docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py \
   "https://aula.pmoposiciones.com/mod/folder/view.php?id=4189"
@@ -194,128 +211,119 @@ docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py
 # Menú interactivo (sin argumentos)
 docker compose run --rm aula_downloader
 
-# Ver logs
-docker compose logs -f
+--- Logs ---
+docker compose logs -f                 # Ver logs
 
---- Variables de entorno ---
-AULA_USER            # Usuario de aula (default: REDACTED)
-AULA_PASS            # Contraseña de aula (default: REDACTED)
+# Configuración, variables y detalles: ver README de aula-downloader
 
---- Directorios ---
-./descargas/              # Salen los vídeos organizados por curso
-./descargas/CURSO/        # Cada curso tiene su propia carpeta
-
---- Logs mejorados ---
-- Pre-escaneo de carpetas con conteo total de vídeos
-- Progreso por segmento con %, tiempo transcurrido y ETA
-- Resumen por vídeo: tamaño, tiempo, velocidad
-- Panel final: total vídeos, tamaño, tiempo, velocidad media
-- Lista de vídeos fallidos si los hay
-
---- Cómo funciona ---
-1. Login con requests (sin navegador)
-2. Pre-escanea carpetas y cachea HTML (sin requests duplicados)
-3. Extrae iframes de Vimeo del HTML cacheado
-4. Para cada vídeo, obtiene el player HTML de Vimeo
-5. Extrae el playerConfig JSON del HTML
-6. Descarga segmentos HLS con Python (video + audio por separado)
-7. Concatena segmentos y mezcla con ffmpeg
-8. Guarda MP4 organizado por curso
-
-================================================================================
-  7. PROYECTO: TwitchRecorder
-================================================================================
+==============================================================================
+  4e. PROYECTO: TwitchRecorder
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/TwitchRecorder
+Servicios: twitchrecorder (daemon), run (test)
 
---- Comandos Docker ---
-docker compose up -d                    # Ejecutar en background (producción)
-docker compose run --rm run             # Ejecutar una vez (test)
-docker compose run --rm run --dry-run   # Dry-run (sin grabar)
-docker compose down                     # Parar
-docker compose logs -f                  # Ver logs
-docker compose build                    # Reconstruir tras cambios
+--- Arrancar ---
+docker compose up -d twitchrecorder    # Daemon en background (producción)
 
-# Ejecutar con config temporal
-docker run --rm \
-  -v ./config.json:/app/config.json:ro \
-  -v /home/jorge/test_videos:/recordings \
-  -e TZ=Europe/Madrid \
-  twitchrecorder-run
+--- Ejecutar (una vez / test) ---
+docker compose run --rm run            # Ejecutar una vez (test)
+docker compose run --rm run --dry-run  # Dry-run (sin grabar)
 
---- Configuración (config.json) ---
-{
-    "channels": {
-        "sendosama": { "platform": "twitch" },
-        "MrBeast": { "platform": "youtube" },
-        "adin": { "platform": "kick" }
-    },
-    "record_path": "/recordings",
-    "days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
-    "start_time": "21:30",
-    "check_every": 30,
-    "max_duration": "24:00:00",
-    "retry_interval": 60,
-    "copy_to_test": true
-}
+--- Parar ---
+docker compose down                    # Parar
 
---- Formato legacy (solo Twitch) ---
-{ "channels": ["sendosama"] }
+--- Logs ---
+docker compose logs -f                 # Ver logs
 
---- Cambiar ruta de grabación ---
-# En docker-compose.yml, modificar volumes:
-volumes:
-  - ./config.json:/app/config.json:ro
-  - /ruta/local/en/tu/pc:/recordings
+# Pipeline: grabar (ver sección 5 PIPELINE más abajo)
+# Configuración (config.json), structure y detalles: ver README de TwitchRecorder
 
---- Estructura de grabaciones ---
-grabaciones/
-├── 2026/07/
-│   ├── sendosama_2026-07-25_21-30-00.mp4
-│   └── MrBeast_2026-07-26_21-15-00.mp4
-└── test/
-    └── sendosama_2026-07-26_21-15-00.mp4
-
-================================================================================
-  7. PROYECTO: ffmpeg-yt-dlp
-================================================================================
+==============================================================================
+  4f. PROYECTO: ffmpeg-yt-dlp
+==============================================================================
 
 Ruta: /home/jorge/dev/devjobs/ffmpeg-yt-dlp
+Servicios: downloader (midu.sh), monitor (pipeline)
 
---- Comandos Docker ---
-docker compose build                    # Construir imagen
-docker compose up                       # Ejecutar midu.sh (interactivo)
+--- Arrancar ---
+docker compose up                      # Ejecutar midu.sh (interactivo)
+docker compose up -d monitor           # Monitor de compresión (pipeline)
 
---- Preview Watcher (ejecutar en WSL, host) ---
-bash preview_watcher.sh --daemon        # Segundo plano
-bash preview_watcher.sh --stop          # Detener
-bash preview_watcher.sh --status        # Verificar estado
-bash preview_watcher.sh --once          # Procesar una petición
-bash preview_watcher.sh                 # Debug en primer plano
+--- Parar ---
+docker compose stop monitor            # Parar solo el monitor
 
---- Variables del Watcher ---
-IDLE_TIMEOUT          # Segundos sin actividad (default: 600)
-MIDU_CONTAINER_NAME   # Nombre del contenedor (default: yt_ffmpeg_downloader)
+--- Logs ---
+docker compose logs -f monitor         # Logs del monitor
 
---- Variables de entorno ---
-NTFY_URL              # Webhook de ntfy.sh para notificaciones push
+--- Watch (Preview Watcher, ejecutar en WSL, host) ---
+bash preview_watcher.sh --daemon       # Segundo plano
+bash preview_watcher.sh --stop         # Detener
+bash preview_watcher.sh --status       # Verificar estado
+bash preview_watcher.sh --once         # Procesar una petición
+bash preview_watcher.sh                # Debug en primer plano
+
+# Variables del watcher y flags del monitor: ver README_MONITOR.md y README de ffmpeg-yt-dlp
+
+==============================================================================
+  5. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM
+==============================================================================
+
+Encadena 3 proyectos: grabar → comprimir → subir automáticamente a Telegram.
+Ver README.md (raíz de devjobs) y README_MONITOR.md / README_UPLOADER.md.
 
 --- Flujo ---
+TwitchRecorder (grabar) → test/*_completed.mp4
+  → ffmpeg-yt-dlp monitor (720p) → /home/jorge/dev/devjobs/Videos/comprimidos/*_compressed.mp4
+  → downloader_telegram uploader → N grupos (grupos.json)
+
+--- Preparación inicial (solo una vez, ANTES de dejarlo solo) ---
+cd /home/jorge/dev/devjobs/downloader_telegram
 docker compose build
-docker compose up
-bash preview_watcher.sh --daemon        # En otra terminal (WSL)
+docker compose run --rm uploader python /app/subir_videos.py --setup     # pide teléfono+código, crea uploader.session
+docker compose run --rm uploader python /app/subir_videos.py --list-chats # descubre IDs de tus grupos
+# Edita grupos.json con los IDs (negativos) o @usernames
 
-================================================================================
-  ALIAS BASH
-================================================================================
+--- Arrancar TODO el pipeline ---
+cd /home/jorge/dev/devjobs/TwitchRecorder && docker compose up -d twitchrecorder
+cd /home/jorge/dev/devjobs/ffmpeg-yt-dlp && docker compose up -d monitor
+cd /home/jorge/dev/devjobs/downloader_telegram && docker compose up -d uploader
 
-# Agregar a ~/.bashrc o ~/.zshrc:
-alias docker_help='cat /home/jorge/dev/devjobs/docker_help.txt'
+--- Parar TODO ---
+docker compose -f /home/jorge/dev/devjobs/TwitchRecorder/docker-compose.yml down
+docker compose -f /home/jorge/dev/devjobs/ffmpeg-yt-dlp/docker-compose.yml down
+docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml down
 
-# Recargar shell:
-source ~/.bashrc
+--- Estado / logs (sirven desde CUALQUIER carpeta, usan -f con ruta absoluta) ---
+docker ps                                                            # Qué contenedores del pipeline están arriba
+docker compose -f /home/jorge/dev/devjobs/TwitchRecorder/docker-compose.yml logs -f
+docker compose -f /home/jorge/dev/devjobs/ffmpeg-yt-dlp/docker-compose.yml logs -f monitor
+docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml logs -f uploader
 
-# Uso:
-docker_help
+--- Carpetas ---
+/home/jorge/dev/devjobs/test_videos/test/ # Grabaciones terminadas (*_completed.mp4)
+/home/jorge/dev/devjobs/Videos/comprimidos/ # Videos comprimidos listos para subir
+/home/jorge/dev/devjobs/test_videos_backup/ # Grabaciones antiguas archivadas
 
-================================================================================
+# Configuración (grupos.json, credenciales, sesiones, cambio de contenedores,
+# pregunta de borrado de original): ver README_UPLOADER.md y README de cada proyecto
+
+==============================================================================
+  6. AUTO-ARRANQUE AL ENCENDER EL PC (SYSTEMD)
+==============================================================================
+
+El pipeline (twitchrecorder + monitor + uploader) se levanta solo al arrancar el
+sistema mediante un servicio systemd. Docker ya está habilitado en el boot.
+
+--- Instalar (una vez, requiere sudo) ---
+sudo systemctl enable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service
+
+--- Operación manual ---
+sudo systemctl start   twitch-stream-pipeline.service   # Arrancar el pipeline
+sudo systemctl stop    twitch-stream-pipeline.service   # Parar todo
+sudo systemctl restart twitch-stream-pipeline.service   # Reiniciar
+sudo systemctl status  twitch-stream-pipeline.service   # Ver estado
+
+# Detalle del servicio: ver README.md (raíz de devjobs)
+
+==============================================================================

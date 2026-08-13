@@ -41,7 +41,9 @@ DEFAULT_CONFIG = {
     ],
     "start_time": "19:55",
     "check_every": 30,
-    "max_duration": "24:00:00"
+    "max_duration": "24:00:00",
+    "copy_to_test": False,
+    "test_path": ""
 }
 
 

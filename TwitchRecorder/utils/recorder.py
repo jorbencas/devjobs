@@ -38,13 +38,15 @@ def _format_size(size_bytes: int) -> str:
 
 
 class Recorder:
-    def __init__(self, channel: str, platform_name: str, record_path: str, max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60):
+    def __init__(self, channel: str, platform_name: str, record_path: str, max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = ""):
         self.channel = channel
         self.platform_name = platform_name
         self.record_path = Path(record_path)
         self.max_duration_hours = max_duration_hours
         self.max_duration_str = max_duration_str
         self.retry_interval = retry_interval
+        self.copy_to_test = copy_to_test
+        self.test_path = Path(test_path) if test_path else None
         self.process = None
         self.is_recording = False
         self.finished = False
@@ -77,7 +79,14 @@ class Recorder:
             log.info(f"[{self.channel}] No está en directo")
             return False
 
-        output_path = get_recording_path(self.channel, self.record_path)
+        # RECONEXIÓN: si ya hay una grabación con archivo, seguir escribiendo
+        # en el mismo archivo, NO crear uno nuevo (evita doble vídeo al cruzar
+        # la medianoche o tras un corte de conexión).
+        if self.is_recording and self._current_file and self._current_file.exists():
+            output_path = self._current_file
+        else:
+            output_path = get_recording_path(self.channel, self.record_path)
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         log.info(f"[{self.channel}] Grabación iniciada -> {output_path}")
@@ -155,8 +164,21 @@ class Recorder:
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
             log.info(f"[{self.channel}] Grabación finalizada ({size})")
+            self._move_to_completed()
         else:
             log.info(f"[{self.channel}] Grabación finalizada")
+
+    def _move_to_completed(self) -> None:
+        if not self.copy_to_test or not self.test_path or not self._current_file:
+            return
+        try:
+            self.test_path.mkdir(parents=True, exist_ok=True)
+            dest = self.test_path / f"{self._current_file.stem}_completed.mp4"
+            shutil.move(str(self._current_file), str(dest))
+            log.info(f"[{self.channel}] Movida a test/ como {dest.name}")
+            self._current_file = dest
+        except Exception as e:
+            log.error(f"[{self.channel}] Error moviendo a test/: {e}")
 
     def monitor(self) -> None:
         max_seconds = self.max_duration_hours * 3600

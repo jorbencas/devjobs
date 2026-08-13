@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./config.json:/app/config.json:ro
-      - /home/jorge/test_videos:/recordings
+      - /home/jorge/dev/devjobs/test_videos:/recordings
     environment:
       - TZ=Europe/Madrid
 
@@ -13,6 +13,6 @@ services:
     build: .
     volumes:
       - ./config.json:/app/config.json:ro
-      - /home/jorge/test_videos:/recordings
+      - /home/jorge/dev/devjobs/test_videos:/recordings
     environment:
       - TZ=Europe/Madrid

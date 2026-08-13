@@ -16,9 +16,20 @@ CODEC="${CODEC:-libx264}"
 AUDIO_CODEC="${AUDIO_CODEC:-aac}"
 AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
 POLL_INTERVAL="${POLL_INTERVAL:-30}"
+RESOLUTION="${RESOLUTION:-}"
+COMPLETED_ONLY="${COMPLETED_ONLY:-false}"
 
 # Extensiones de vídeo soportadas
 VIDEO_EXTENSIONS="mp4|mkv|avi|mov|webm|flv|ts|m4v|mpg|mpeg"
+
+# Construye el patrón find: solo *_completed.mp4 si COMPLETED_ONLY, si no cualquier vídeo
+video_find_pattern() {
+    if [[ "$COMPLETED_ONLY" == "true" ]]; then
+        echo -regextype posix-extended -iregex '.*_completed\.('"$VIDEO_EXTENSIONS"')$'
+    else
+        echo -regextype posix-extended -iregex '.*\.('"$VIDEO_EXTENSIONS"')$'
+    fi
+}
 
 # ── Colores ──────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -50,6 +61,9 @@ compress_video() {
     local ffmpeg_args=(-y -i "$input")
     ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
+    if [[ -n "$RESOLUTION" ]]; then
+        ffmpeg_args+=(-vf "scale=-2:${RESOLUTION}")
+    fi
     ffmpeg_args+=(-movflags +faststart)
 
     if ffmpeg "${ffmpeg_args[@]}" "$output" 2>/dev/null; then
@@ -81,7 +95,7 @@ process_pending() {
     while IFS= read -r -d '' file; do
         compress_video "$file" || true
         ((count++))
-    done < <(find "$WATCH_DIR" -maxdepth 1 -type f -regextype posix-extended -iregex ".*\.($VIDEO_EXTENSIONS)$" -print0 2>/dev/null)
+    done < <(find "$WATCH_DIR" -maxdepth 1 -type f $(video_find_pattern) -print0 2>/dev/null)
     return $count
 }
 
@@ -93,6 +107,8 @@ show_help() {
     echo "  -c, --crf VALUE      Calidad CRF (default: 28, menor = mejor)"
     echo "  -p, --preset NAME    Preset de velocidad (default: fast)"
     echo "  --codec NAME         Códec de vídeo (default: libx264)"
+    echo "  -r, --resolution N   Escalar altura a N px, ej: 720 (default: sin reescalar)"
+    echo "  --completed-only     Procesar solo archivos *_completed.* / *_compressed.*"
     echo "  --interval SEGS      Intervalo de polling en segundos (default: 30)"
     echo "  -h, --help           Mostrar ayuda"
     echo ""
@@ -108,6 +124,8 @@ while [[ $# -gt 0 ]]; do
         -c|--crf)      CRF="$2"; shift 2 ;;
         -p|--preset)   PRESET="$2"; shift 2 ;;
         --codec)       CODEC="$2"; shift 2 ;;
+        -r|--resolution) RESOLUTION="$2"; shift 2 ;;
+        --completed-only) COMPLETED_ONLY="true"; shift ;;
         --interval)    POLL_INTERVAL="$2"; shift 2 ;;
         -h|--help)     show_help; exit 0 ;;
         -*)            echo -e "${RED}Opción desconocida: $1${NC}"; show_help; exit 1 ;;
@@ -121,6 +139,8 @@ log "${CYAN}=== Monitor de vídeo iniciado ===${NC}"
 log "Vigilando: $WATCH_DIR"
 log "Salida: $OUTPUT_DIR"
 log "CRF: $CRF | Preset: $PRESET | Códec: $CODEC"
+[[ -n "$RESOLUTION" ]] && log "Resolución: $RESOLUTION (escala)"
+[[ "$COMPLETED_ONLY" == "true" ]] && log "Solo archivos *_completed / *_compressed"
 log "Polling cada ${POLL_INTERVAL}s"
 log "Presiona Ctrl+C para detener"
 echo ""
@@ -135,7 +155,7 @@ log "Procesados $existing vídeos existentes"
 log "Iniciando monitoreo..."
 while true; do
     # Buscar vídeos nuevos
-    new_files=$(find "$WATCH_DIR" -maxdepth 1 -type f -regextype posix-extended -iregex ".*\.($VIDEO_EXTENSIONS)$" 2>/dev/null | wc -l)
+    new_files=$(find "$WATCH_DIR" -maxdepth 1 -type f $(video_find_pattern) 2>/dev/null | wc -l)
 
     if [[ "$new_files" -gt 0 ]]; then
         log "Detectados $new_files vídeos nuevos"

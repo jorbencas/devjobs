@@ -5440,6 +5440,21 @@ convertir_archivo() {
 
     emit_log "$job_log" "  ${GREEN}OK${NC}: ${orig_mb}MB → ${out_mb}MB (${ratio}%)"
 
+    # ── Preguntar si eliminar el archivo original (solo interactivo) ─────
+    if [[ -t 0 || -e /dev/tty ]] && [[ "$file" != "$output_file" ]]; then
+        echo ""
+        echo -e "${BOLD}  Conversión completada${NC} → $output_file"
+        local resp=""
+        read -rp "  ¿Eliminar el archivo ORIGINAL ($(basename "$file"), ${orig_mb}MB)? [s/N]: " resp </dev/tty
+        if [[ "$resp" =~ ^[Ss]$ ]]; then
+            rm -f "$file"
+            emit_log "$job_log" "  ${CYAN}Archivo original eliminado: $(basename "$file")${NC}"
+        else
+            echo -e "  ${DIM}Original conservado.${NC}"
+        fi
+        echo ""
+    fi
+
     if [[ -n "$MAX_SIZE_MB" ]]; then
         emit_log "$job_log" "  ${DIM}Tamaño final: ${out_mb}MB (límite ${MAX_SIZE}GB)${NC}"
         if [[ "$size" -gt "$size_target_bytes" ]]; then

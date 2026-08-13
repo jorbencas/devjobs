@@ -113,14 +113,35 @@ bash scripts/monitor_folder.sh -o /mnt/comp -c 23 -p medium ~/Videos/nuevos
 
 # Con intervalo de polling personalizado
 bash scripts/monitor_folder.sh --interval 60 ~/Videos/para_comprimir
+
+# Solo procesar grabaciones terminadas, escalando a 720p (uso en pipeline)
+bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 ```
 
-| Variable | Default | Descripción |
-|----------|---------|-------------|
-| `OUTPUT_DIR` | `~/Videos/comprimidos` | Directorio de salida |
-| `CRF` | `28` | Calidad (menor = mejor) |
-| `PRESET` | `fast` | Velocidad de encoding |
-| `POLL_INTERVAL` | `30` | Segundos entre comprobaciones |
+| Flag | Default | Descripción |
+|------|---------|-------------|
+| `-o, --output DIR` | `Videos/comprimidos` | Directorio de salida |
+| `-c, --crf VALUE` | `28` | Calidad CRF (menor = mejor) |
+| `-p, --preset NAME` | `fast` | Preset de velocidad |
+| `--codec NAME` | `libx264` | Códec de vídeo |
+| `-r, --resolution N` | sin reescalar | Escalar altura a N px (ej: `720`) |
+| `--completed-only` | off | Procesar solo `*_completed.*` |
+| `--interval SEGS` | `30` | Segundos entre comprobaciones |
+
+#### Servicio `monitor` (pipeline)
+
+El `docker-compose.yml` define el servicio **`monitor`** (`ffmpeg_monitor`), pensado para el pipeline "Grabar → Comprimir → Subir a Telegram":
+
+```bash
+docker compose build
+docker compose up -d monitor      # arranca el monitor en background
+docker compose logs -f monitor    # logs del monitor
+docker compose stop monitor       # parar solo el monitor
+```
+
+Vigila `/home/jorge/dev/devjobs/test_videos/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `/home/jorge/dev/devjobs/Videos/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
+
+> Documentación completa del monitor: [ver `README_MONITOR.md`](README_MONITOR.md).
 
 ## Los 33 modos de midu.sh
 
@@ -159,6 +180,10 @@ bash scripts/monitor_folder.sh --interval 60 ~/Videos/para_comprimir
 | 31 | `chain` | Pipeline encadenado: varios pasos en un solo comando | `--chain "cut=00:01:00:00:05:00" "convert=720"` |
 | 32 | `compose` | Seleccionar vídeo + varias pistas de audio + subtítulos + codec por pista | `--compose` |
 | 33 | `hls` | Preparar vídeo para streaming HLS (m3u8) con múltiples calidades | `--hls` |
+
+### Pregunta al eliminar el original (modo convert)
+
+Al terminar cada conversión, `midu.sh` pregunta en pantalla **¿Eliminar el archivo ORIGINAL? `[s/N]`** (solo en terminal interactiva; en modo automatizado/daemon no pregunta y conserva el original). Responde `s` para borrarlo o `Enter`/`n` para conservarlo.
 
 ## Selección de audio interactivo
 
