@@ -82,27 +82,108 @@ def log(tipo, mensaje):
 
 
 def cargar_grupos():
+    """Carga la config de grupos con ruteo por keyword.
+
+    Formato:
+        {
+            "default": <id_grupo_fallback>,
+            "grupos": [ {"nombre": "prueba", "id": <id>}, ... ]
+        }
+
+    Devuelve (default, grupos) donde:
+        - default: id del grupo al que se sube si ninguna keyword coincide
+        - grupos: [{nombre, id}]
+    """
     if not GRUPOS_FILE.exists():
         raise SystemExit(
             f"\n[x] No existe {GRUPOS_FILE}.\n"
-            "  → Rellena con los chat_id/@usuario de tus grupos.\n"
-            "  → Usa --list-chats para descubrirlos."
+            "  → Rellena con 'default' y una lista 'grupos' [{nombre, id}].\n"
+            "  → Usa --list-chats para descubrir los IDs."
         )
     try:
         with open(GRUPOS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        grupos = data.get("grupos", [])
     except Exception as e:
         raise SystemExit(
             f"\n[x] Error leyendo {GRUPOS_FILE}: {e}\n"
             "  → El JSON está mal formado. Revísalo."
         )
+
+    grupos = data.get("grupos", [])
+    default = data.get("default")
+
     if not isinstance(grupos, list) or not grupos:
         raise SystemExit(
             f"\n[x] {GRUPOS_FILE} está vacío o mal configurado.\n"
-            "  → Debe contener una lista 'grupos' con los chat_id/@usuario."
+            "  → Debe contener una lista 'grupos' con [{nombre, id}]."
         )
-    return grupos
+
+    validos = []
+    for g in grupos:
+        if isinstance(g, dict) and g.get("nombre") and g.get("id"):
+            validos.append({"nombre": str(g["nombre"]).lower(), "id": g["id"]})
+    if not validos:
+        raise SystemExit(
+            f"\n[x] {GRUPOS_FILE} no tiene grupos válidos.\n"
+            "  → Cada entrada debe ser {'nombre': '...', 'id': <grupo>}."
+        )
+
+    return default, validos
+
+
+def keyword_from_filename(filename: str) -> str:
+    """Extrae la keyword del nombre del archivo (*_KW_<keyword>_compressed.mp4)."""
+    base = Path(filename).stem
+    if "_KW_" in base:
+        # ..._KW_<keyword>_compressed -> quitar prefijo y sufijo _compressed
+        kw = base.split("_KW_", 1)[1]
+        for suffix in ("_compressed", "_completed"):
+            if kw.endswith(suffix):
+                kw = kw[: -len(suffix)]
+        return kw.lower()
+    return ""
+
+
+def _normalizar_texto(s: str) -> str:
+    """Normaliza para comparar: minúsculas, sin tildes, sin signos,
+    espacios colapsados y quita una 'y' extra al final (ej. 'cry' vs 'cryy')."""
+    import re
+    s = s.lower()
+    s = s.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    s = s.replace("ñ", "n")
+    s = re.sub(r"[^a-z0-9 ]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"y+$", "y", s)  # 'cryyy' -> 'cry'
+    return s
+
+
+def grupos_para_keyword(keyword, default, grupos):
+    """Elige el(los) grupo(s) según la keyword del directo.
+    - Coincidencia flexible: el 'nombre' (o una palabra significativa del nombre)
+      debe aparecer en la keyword, aunque el directo repita letras (ej. 'cryyy').
+    - Si no coincide → el grupo 'default' (si existe)."""
+    kw = _normalizar_texto(keyword)
+    if kw:
+        coincidencias = []
+        for g in grupos:
+            nombre = _normalizar_texto(g["nombre"])
+            if not nombre:
+                continue
+            # coincidencia por substring del nombre completo
+            if nombre in kw:
+                coincidencias.append(g)
+                continue
+            # coincidencia por palabra significativa del nombre (>= 4 letras)
+            palabras = [p for p in nombre.split() if len(p) >= 4]
+            if palabras and any(p in kw for p in palabras):
+                coincidencias.append(g)
+        if coincidencias:
+            return list(dict.fromkeys(g["id"] for g in coincidencias))
+
+    # Fallback al grupo por defecto
+    if default:
+        return [default]
+    return []
 
 
 def cargar_enviados():
@@ -238,33 +319,71 @@ async def subir_archivo(client, archivo, grupos, caption_base):
         log("WARN", f"{nombre}: no se completó la subida a todos los grupos. Se reintentará.")
 
 
+async def _conectar(client, pedir_login=False):
+    """Conecta y comprueba si la sesión está autenticada.
+    - Si ya hay sesión logueada: reutiliza (nunca vuelve a pedir credenciales).
+    - Si NO hay sesión válida y pedir_login=False: avisa y sale (modo no interactivo).
+    - Si pedir_login=True (--setup): hace el login interactivo (teléfono + código)."""
+    await client.connect()
+    if await client.is_user_authorized():
+        return True
+    if not pedir_login:
+        raise SystemExit(
+            "\n[x] No hay sesión de Telegram autenticada (o está vencida).\n"
+            f"  → Archivo de sesión: {SESION_UPLOADER}\n"
+            "  → Inicia sesión una vez con: python subir_videos.py --setup"
+        )
+    return False
+
+
 async def run_setup(api_id, api_hash):
     log("INFO", "Modo setup: creará uploader.session (inicio de sesión único).")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+    if await _conectar(client):
+        me = await client.get_me()
+        log("OK", f"Sesión ya autenticada. Cuenta: {me.first_name} ({me.username}) → no hace falta loguear de nuevo.")
+        await client.disconnect()
+        return
     await client.start()
     me = await client.get_me()
     log("OK", f"Sesión uploader creada. Cuenta: {me.first_name} ({me.username})")
     await client.disconnect()
 
 
-async def run_list_chats(api_id, api_hash):
+async def run_list_chats(api_id, api_hash, folder=None, creados=False):
     log("INFO", "Modo list-chats: mostrando tus chats/grupos.")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
-    await client.start()
-    print("\nID\tTipo\tNombre")
-    print("-" * 60)
+    await _conectar(client)
+    print("\nID\tTipo\tNombre\tCarpeta\t¿Creado por ti?")
+    print("-" * 80)
+    count = 0
     async for d in client.iter_dialogs():
-        tipo = "grupo" if d.is_group else ("canal" if d.is_channel else "usuario")
-        print(f"{d.id}\t{tipo}\t{d.name}")
-    print("\nCopia los IDs (negativos para grupos) o @usernames a grupos.json.")
+        fid = getattr(d, "folder_id", None)
+        f_title = "Archivado" if fid == 1 else ("Principal" if fid in (None, 0) else f"#{fid}")
+        ent = getattr(d, "entity", None)
+        creado = bool(getattr(ent, "creator", False)) if ent is not None else False
+        if folder:
+            f = folder.strip().lower()
+            if f != f_title.lower() and f not in (d.name or "").lower():
+                continue
+        if creados and not creado:
+            continue
+        tipo = "grupo" if getattr(d, "is_group", False) else ("canal" if getattr(d, "is_channel", False) else "usuario")
+        print(f"{d.id}\t{tipo}\t{d.name}\t{f_title}\t{'sí' if creado else 'no'}")
+        count += 1
+    print(f"\n{count} chats mostrados.")
+    print("Copia los IDs (negativos para grupos/canales) o @usernames a grupos.json.")
     await client.disconnect()
 
 
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
-    grupos = cargar_grupos()
+    default, grupos = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     try:
-        await client.start()
+        await _conectar(client)
+    except SystemExit:
+        await client.disconnect()
+        raise
     except Exception as e:
         await client.disconnect()
         raise SystemExit(
@@ -273,7 +392,7 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
             "    docker compose run --rm uploader python /app/subir_videos.py --setup"
         )
 
-    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {grupos}")
+    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}")
 
     def a_carpeta(p):
         pp = Path(p)
@@ -287,7 +406,13 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
             for carpeta in carpetas:
                 for archivo in sorted(carpeta.glob("*_compressed.mp4")):
                     caption_base = "🎬 Directo sendo sama"
-                    await subir_archivo(client, archivo, grupos, caption_base)
+                    keyword = keyword_from_filename(archivo.name)
+                    destinos = grupos_para_keyword(keyword, default, grupos)
+                    if not destinos:
+                        log("WARN", f"{archivo.name}: sin keyword y sin grupo default. Se omite.")
+                        continue
+                    log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
+                    await subir_archivo(client, archivo, destinos, caption_base)
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")
         if una_pasada:
@@ -303,6 +428,8 @@ def main():
     grupo = parser.add_mutually_exclusive_group()
     grupo.add_argument("--setup", action="store_true", help="Iniciar sesión una vez (crea uploader.session)")
     grupo.add_argument("--list-chats", action="store_true", help="Listar chats/grupos")
+    parser.add_argument("--folder", help="Filtrar por nombre del chat o carpeta (archivado/principal) (--list-chats)")
+    parser.add_argument("--creados", action="store_true", help="Solo chats que creaste tú (--list-chats)")
     parser.add_argument("--once", action="store_true", help="Una sola pasada y salir")
     parser.add_argument("--intervalo", type=int, default=int(os.environ.get("UPLOADER_INTERVALO", "60")), help="Segundos entre pasadas (default: 60)")
     parser.add_argument("carpetas", nargs="*", default=os.environ.get("UPLOADER_CARPETAS", "").split(":"), help="Carpetas a vigilar (default: UPLOADER_CARPETAS o /comprimidos)")
@@ -321,7 +448,7 @@ def main():
             asyncio.run(run_setup(api_id, api_hash))
             return
         if args.list_chats:
-            asyncio.run(run_list_chats(api_id, api_hash))
+            asyncio.run(run_list_chats(api_id, api_hash, args.folder, args.creados))
             return
         carpetas = [c for c in args.carpetas if c] or ["/comprimidos"]
         asyncio.run(run_autoupload(api_id, api_hash, carpetas, args.intervalo, args.once))

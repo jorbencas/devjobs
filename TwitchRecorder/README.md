@@ -253,6 +253,16 @@ grabaciones/
 **Nombre del archivo:** `canal_YYYY-MM-DD_HH-MM-SS.mp4`
 **Cuando `copy_to_test` está activo:** al terminar el directo, la grabación se **mueve** a `test/` y se renombra a `canal_..._completed.mp4` (marcada como lista para el pipeline).
 
+### Keyword del directo (para ruteo a grupos)
+
+Al detectar el directo, TwitchRecorder lee su **título** con yt-dlp y extrae una `keyword` normalizada, que incrusta en el nombre del archivo:
+
+```
+sendosama_2026-08-13_20-15-00_KW_prueba.mp4
+```
+
+Esa keyword viaja intacta por todo el pipeline (`*_completed.mp4` → `*_compressed.mp4`). El servicio `uploader` la usa para decidir a qué grupo de Telegram subir el vídeo: **al grupo cuyo `nombre` coincida con la keyword**, o al `default` si no hay coincidencia. Ver `downloader_telegram/README_UPLOADER.md`.
+
 ---
 
 ## Pipeline completo: grabar → comprimir → subir a Telegram

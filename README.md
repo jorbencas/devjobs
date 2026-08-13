@@ -31,9 +31,9 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
-| 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo y lo mueve a `test/` como `*_completed.mp4` |
-| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `comprimidos/*_compressed.mp4` |
-| 3. Subir | `downloader_telegram/` | `uploader` | Sube a los grupos de `grupos.json` (divide si >2 GB) |
+| 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
+| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
+| 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
 
 ### Arrancar el pipeline
 
@@ -50,9 +50,9 @@ cd ../downloader_telegram && docker compose up -d uploader
 cd downloader_telegram && docker compose run --rm uploader python /app/subir_videos.py --setup
 
 # 2. Descubrir los IDs de tus grupos
-docker compose run --rm uploader python /app/subir_videos.py --list-chats
+docker compose run --rm uploader python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]
 
-# 3. Rellenar grupos.json con los IDs/@usuarios
+# 3. Rellenar grupos.json con 'default' + [{nombre, id}] (ruteo por keyword)
 ```
 
 ### Documentación detallada

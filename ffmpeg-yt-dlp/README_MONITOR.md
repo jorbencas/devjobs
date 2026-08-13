@@ -6,10 +6,12 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Este servici
 
 ## Qué hace
 
-1. Vigila una carpeta (por defecto `/home/jorge/dev/devjobs/test_videos/test`, donde TwitchRecorder deja los `*_completed.mp4`).
+1. Vigila una carpeta (por defecto `/home/jorge/dev/devjobs/test_videos/test`, donde TwitchRecorder deja los `*_completed.mp4`,
+   que pueden incluir la keyword del directo: `*_KW_<keyword>_completed.mp4`).
 2. Detecta archivos que terminan en `*_completed.mp4`.
 3. Los comprime a **720p** (H.264, CRF 28, preset fast, AAC 128k).
-4. Guarda el resultado como `*_compressed.mp4` en `/home/jorge/dev/devjobs/Videos/comprimidos`.
+4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
+   en `/home/jorge/dev/devjobs/Videos/comprimidos`.
 5. Mueve el original a `$OUTPUT_DIR/.processed`.
 6. Repite cada `POLL_INTERVAL` segundos.
 
@@ -71,7 +73,7 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 ## Funcionamiento con el pipeline
 
 ```
-TwitchRecorder → test/*_completed.mp4  →  [este servicio]  →  comprimidos/*_compressed.mp4  →  uploader (Telegram)
+TwitchRecorder → test/*_KW_<keyword>_completed.mp4  →  [este servicio]  →  comprimidos/*_KW_<keyword>_compressed.mp4  →  uploader (Telegram)
 ```
 
 > Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (sección *PIPELINE* y *AUTO-ARRANQUE*).

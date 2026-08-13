@@ -148,7 +148,7 @@ docker compose down                    # Parar todo
 --- Otros (pipeline) ---
 # Setup de sesión (una vez) + listar chats:
 docker compose run --rm uploader python /app/subir_videos.py --setup
-docker compose run --rm uploader python /app/subir_videos.py --list-chats
+docker compose run --rm uploader python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]
 
 # Generador de sesiones portátiles
 docker compose run --rm telegram python test_string.py
@@ -273,16 +273,19 @@ Encadena 3 proyectos: grabar → comprimir → subir automáticamente a Telegram
 Ver README.md (raíz de devjobs) y README_MONITOR.md / README_UPLOADER.md.
 
 --- Flujo ---
-TwitchRecorder (grabar) → test/*_completed.mp4
-  → ffmpeg-yt-dlp monitor (720p) → /home/jorge/dev/devjobs/Videos/comprimidos/*_compressed.mp4
-  → downloader_telegram uploader → N grupos (grupos.json)
+TwitchRecorder (grabar) → test/*_KW_<keyword>_completed.mp4   (keyword del título del directo)
+  → ffmpeg-yt-dlp monitor (720p) → /home/jorge/dev/devjobs/Videos/comprimidos/*_KW_<keyword>_compressed.mp4
+  → downloader_telegram uploader → ruteo por keyword (grupo cuyo nombre coincida, si no default)
 
 --- Preparación inicial (solo una vez, ANTES de dejarlo solo) ---
 cd /home/jorge/dev/devjobs/downloader_telegram
 docker compose build
+touch uploader.session                          # crear archivo vacío si no existe (si no, Docker lo monta como dir → falla la sesión)
 docker compose run --rm uploader python /app/subir_videos.py --setup     # pide teléfono+código, crea uploader.session
-docker compose run --rm uploader python /app/subir_videos.py --list-chats # descubre IDs de tus grupos
-# Edita grupos.json con los IDs (negativos) o @usernames
+docker compose run --rm uploader python /app/subir_videos.py --list-chats          # descubre IDs de tus grupos
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --folder "sendo" # solo esa carpeta
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --creados # solo lo que creaste tú
+# Edita grupos.json: "default" + grupos [{nombre, id}]  (ver README_UPLOADER.md)
 
 --- Arrancar TODO el pipeline ---
 cd /home/jorge/dev/devjobs/TwitchRecorder && docker compose up -d twitchrecorder
@@ -301,8 +304,8 @@ docker compose -f /home/jorge/dev/devjobs/ffmpeg-yt-dlp/docker-compose.yml logs 
 docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml logs -f uploader
 
 --- Carpetas ---
-/home/jorge/dev/devjobs/test_videos/test/ # Grabaciones terminadas (*_completed.mp4)
-/home/jorge/dev/devjobs/Videos/comprimidos/ # Videos comprimidos listos para subir
+/home/jorge/dev/devjobs/test_videos/test/ # Grabaciones terminadas (*_KW_<keyword>_completed.mp4)
+/home/jorge/dev/devjobs/Videos/comprimidos/ # Videos listos para subir (*_KW_<keyword>_compressed.mp4)
 /home/jorge/dev/devjobs/test_videos_backup/ # Grabaciones antiguas archivadas
 
 # Configuración (grupos.json, credenciales, sesiones, cambio de contenedores,

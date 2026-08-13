@@ -74,7 +74,7 @@ downloader_telegram/
 ├── test_download_protected_content_telegram.py  # script principal (3 módulos)
 ├── subir_videos.py                              # uploader automático a grupos (pipeline)
 ├── test_string.py                               # generador de sesiones
-├── grupos.json                                  # IDs/@usuario de los grupos (uploader)
+├── grupos.json                                  # ruteo por keyword: default + [{nombre, id}]
 ├── enviados.json                                # registro de vídeos ya subidos (uploader)
 ├── Dockerfile                                   # imagen Python + dependencias + ffmpeg
 ├── docker-compose.yml                           # servicios telegram + uploader

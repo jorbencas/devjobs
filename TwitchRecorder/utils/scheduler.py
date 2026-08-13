@@ -102,12 +102,16 @@ def run_scheduler(dry_run: bool = False):
                 log.info(f"[{channel}] ¡Directo detectado! ({recorder.platform_name})")
                 if dry_run:
                     log.info(f"[{channel}] DRY-RUN: grabaría aquí")
-                elif recorder.start():
-                    monitor_thread = threading.Thread(
-                        target=recorder.monitor,
-                        daemon=True
-                    )
-                    monitor_thread.start()
+                else:
+                    keyword = recorder.get_live_keyword()
+                    if keyword:
+                        log.info(f"[{channel}] Keyword del directo: {keyword}")
+                    if recorder.start(keyword):
+                        monitor_thread = threading.Thread(
+                            target=recorder.monitor,
+                            daemon=True
+                        )
+                        monitor_thread.start()
 
         if all_offline and not any(r.is_recording for r in recorders.values()):
             log.info("Todos los canales offline. Esperando...")

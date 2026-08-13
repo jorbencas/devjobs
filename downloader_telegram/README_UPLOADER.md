@@ -42,10 +42,19 @@ Todo es configurable con **variables de entorno** (en el bloque `environment` de
 ```bash
 cd /home/jorge/dev/devjobs/downloader_telegram
 docker compose build
+touch uploader.session   # si no existe, Docker lo montaría como un directorio y la sesión fallaría
 docker compose run --rm uploader python /app/subir_videos.py --setup
 ```
 
 Te pedirá teléfono + código. Crea `uploader.session` (solo se hace una vez).
+
+> **Ojo 1 — verificación automática de sesión:** el script comprueba ANTES de cada uso si la sesión ya está autenticada. Si lo está, **no vuelve a pedir credenciales** (reutiliza `uploader.session`). Si no lo está:
+> - `--list-chats` / autoupload: **no piden login**; avisan y salen indicando que ejecutes `--setup`.
+> - `--setup`: es el único modo que inicia login (teléfono + código), y solo lo pedirá si la sesión no está autenticada. Si ya lo está, lo dice y sale sin preguntar.
+>
+> **Ojo 2 — archivo vs sesión autenticada:** un archivo `.session` por sí solo NO vale. Tiene que haber pasado por `--setup` (login con teléfono + código). Este paso **solo puede hacerlo tú** (es interactivo).
+>
+> **Ojo 3 — `uploader.session` inexistente:** si el archivo no existe, el `volumes:` de `docker-compose.yml` lo monta como un **directorio vacío** y Telethon falla con `unable to open database file`. Crea siempre el archivo vacío con `touch uploader.session` ANTES del primer `--setup`.
 
 ### 2. Descubrir tus grupos
 
@@ -53,20 +62,62 @@ Te pedirá teléfono + código. Crea `uploader.session` (solo se hace una vez).
 docker compose run --rm uploader python /app/subir_videos.py --list-chats
 ```
 
-Muestra `ID / tipo / nombre` de tus chats. Copia los IDs (los grupos suelen ser negativos) o los `@usernames`.
+Muestra `ID / Tipo / Nombre / Carpeta / ¿Creado por ti?` de tus chats. Copia los IDs (los grupos y canales suelen ser negativos) o los `@usernames`.
+
+Opciones de filtro para reducir la lista:
+
+- La columna **Carpeta** solo etiqueta: `Principal`, `Archivado`, o `#N` para carpetas personalizadas (Telethon no expone el título real de estas carpeta).
+- `--folder <texto>` filtra por **nombre del chat** (subcadena) o por la etiqueta de carpeta (`archivado` / `principal`).
+
+```bash
+# Solo los chats cuyo nombre contenga "sendo" (o los de la carpeta Archivado)
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --folder "sendo"
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --folder archivado
+
+# Solo los chats/grupos/canales que creaste tú (columna ¿Creado por ti? = sí)
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --creados
+
+# Ambos a la vez
+docker compose run --rm uploader python /app/subir_videos.py --list-chats --folder "sendo" --creados
+```
 
 ### 3. Rellenar `grupos.json`
 
 ```json
 {
+    "default": -100999888777,
     "grupos": [
-        "@mi_grupo_publico",
-        -1001234567890
+        { "nombre": "prueba", "id": -100111222333 },
+        { "nombre": "sendo", "id": -100444555666 }
     ]
 }
 ```
 
-Acepta IDs numéricos (con `-` para grupos/canales) y `@usernames`.
+- **`default`**: grupo al que se sube cuando ningún `nombre` coincide con la keyword del directo. Si lo omites y no hay coincidencia, el vídeo no se sube.
+- **`grupos`**: lista de `{ "nombre", "id" }`. El `nombre` es la keyword que debe aparecer en el título/descripción del directo para enrutar el vídeo a ese grupo; el `id` es el chat ID numérico (negativo) del grupo, obtenido con `--list-chats`.
+
+### Ruteo automático por keyword
+
+1. `TwitchRecorder` lee el **título del directo** con yt-dlp y lo incrusta en el nombre del archivo: `sendosama_2026-08-13_20-15-00_KW_prueba.mp4`.
+2. El monitor comprime y conserva el nombre → `..._KW_prueba_compressed.mp4`.
+3. El uploader extrae la keyword (`prueba`) y sube el vídeo **solo al grupo cuyo `nombre` coincida**.
+4. Si ninguna coincidencia → se sube al **`default`**.
+
+**Coincidencia flexible (tolerante a cómo escriba sendo el título):**
+- No exige el nombre exacto del grupo. Compara normalizado (sin mayúsculas/tildes, espacios colapsados) y acepta:
+  - **Substring** del nombre completo: `devil may cryyy` → grupo `"devil may cry"`.
+  - **Palabra significativa** del nombre (≥4 letras): `resident evily` → grupo `"resident evil"`; `sendo sama` → `"sendo"`.
+- Solo falla (y va al `default`) cuando el nombre del grupo no aparece en absoluto en el título (p. ej. un typo de letras como `residnet evil`).
+
+**Aliases (una misma palabra puede apuntar al mismo canal):** varias entradas de `grupos` pueden compartir `id`. Ejemplos configurados:
+- `sendokai` y `jojo` → mismo canal.
+- `solo leveling` y `hazbin hotel` → mismo canal.
+- `db kai` y `db daima` → mismo canal.
+- `avatar` y `korra` → mismo canal.
+
+Si un título coincide con varias keywords del mismo canal, **se deduplica** (sube una sola vez a ese canal).
+
+Si el directo no tiene título/keyword, se aplica el mismo fallback al `default`.
 
 ---
 
@@ -83,7 +134,7 @@ El servicio corre con `restart: unless-stopped`, vigila `/comprimidos` cada 60 s
 | Modo | Comando |
 |---|---|
 | Setup de sesión | `python /app/subir_videos.py --setup` |
-| Listar chats | `python /app/subir_videos.py --list-chats` |
+| Listar chats | `python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]` |
 | Auto-upload (bucle) | `python /app/subir_videos.py --intervalo 60 /comprimidos` |
 | Una pasada y salir | `python /app/subir_videos.py --once /comprimidos` |
 

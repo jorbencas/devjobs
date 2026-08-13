@@ -1,4 +1,5 @@
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,19 @@ from utils.logger import log
 
 
 IS_WINDOWS = platform.system() == "Windows"
+
+
+def _normalize_keyword(text: str, max_len: int = 40) -> str:
+    """Reduce el título del directo a una keyword segura para el nombre del archivo."""
+    if not text:
+        return ""
+    text = re.sub(r"[\W_]+", " ", text.lower())
+    text = re.sub(r"\s+", " ", text).strip()
+    words = [w for w in text.split(" ") if w]
+    # Intentar quedarse con las primeras palabras que sean 'informativas'
+    stop = {"de", "la", "el", "los", "las", "del", "en", "con", "y", "a", "para", "por", "es", "un", "una"}
+    selected = [w for w in words if w not in stop][:2] or words[:2]
+    return "_".join(selected)[:max_len]
 
 
 def _find_streamlink() -> str:
@@ -74,7 +88,23 @@ class Recorder:
             return f"https://kick.com/{self.channel}"
         return ""
 
-    def start(self) -> bool:
+    def get_live_title(self) -> str:
+        """Obtiene el título del directo usando yt-dlp (sin guardar nada)."""
+        url = self.get_stream_url()
+        if not url:
+            return ""
+        try:
+            from yt_dlp import YoutubeDL
+            with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info.get("title", "")
+        except Exception:
+            return ""
+
+    def get_live_keyword(self) -> str:
+        return _normalize_keyword(self.get_live_title())
+
+    def start(self, keyword: str = "") -> bool:
         if not self.is_live():
             log.info(f"[{self.channel}] No está en directo")
             return False
@@ -85,7 +115,7 @@ class Recorder:
         if self.is_recording and self._current_file and self._current_file.exists():
             output_path = self._current_file
         else:
-            output_path = get_recording_path(self.channel, self.record_path)
+            output_path = get_recording_path(self.channel, self.record_path, keyword)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
