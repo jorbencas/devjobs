@@ -29,7 +29,7 @@ al encender el PC (no bloquea la prueba).
 | `grupos.json` con IDs reales | ✅ Listo | 32 canales + aliases + `default` "Jorge videos" |
 | Ruteo por keyword (uploader) | ✅ Listo | Coincidencia flexible + alias + fallback |
 | Servicio `uploader` | ✅ Corriendo | Vigila `/comprimidos` cada 60 s |
-| systemd (auto-arranque al boot) | ❌ Pendiente | No habilitado, requiere `sudo` |
+| systemd (auto-arranque al boot) | ✅ Habilitado | `enabled` + `active (exited)`, los 3 servicios arrancan al boot |
 
 ---
 
@@ -127,7 +127,7 @@ Con esto, al encender el PC se levantan solos los 3 servicios del pipeline.
 - [x] `ls downloader_telegram/uploader.session` → existe y autenticada
 - [x] `grupos.json` → contiene `default` + 36 grupos reales (no placeholders)
 - [x] `docker ps` → `twitchrecorder`, `ffmpeg_monitor` y `telegram-uploader` arriba
-- [ ] `systemctl is-enabled twitch-stream-pipeline.service` → responde `enabled`
+- [x] `systemctl is-enabled twitch-stream-pipeline.service` → responde `enabled`
 
 ---
 
