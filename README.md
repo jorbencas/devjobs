@@ -43,6 +43,14 @@ cd ../ffmpeg-yt-dlp && docker compose up -d monitor
 cd ../downloader_telegram && docker compose up -d uploader
 ```
 
+> **Aliases para controlarlo:** `bash servicios/instalar_aliases.sh && source ~/.bashrc`
+> instala dos bloques idempotentes: el del pipeline (`plogs`, `pipe_up/down/ps`,
+> `pipe_recreate/rebuild`, etc.) y uno **por-proyecto**. Regla: `pipe_*` =
+> los 3 daemons del pipeline a la vez; `*_logs`/`*_stop`/`*_restart` = daemon
+> individual (p. ej. `ff_logs` para el `ffmpeg_monitor`, `ff_stop` para pararlo);
+> `*_manual_*` = la versión para probar a mano. La lista completa está en
+> `docker_help.txt` (sección 3 y 4).
+
 ### Preparación inicial (solo la primera vez, ANTES de dejarlo solo)
 
 ```bash
@@ -99,6 +107,11 @@ cd aula-downloader && docker compose build && docker compose run --rm aula_downl
 
 ```bash
 docker_help   # Muestra todos los comandos Docker y de cada proyecto
+# Pipeline completo de una vez: pipe_up (parar: pipe_down)
+# Logs en directo por proyecto/instancia:
+#   ff_logs (monitor)  ff_manual_logs (midu)  tw_logs  tg_logs  pdf_logs
+# Logs de los 3 daemons del pipeline de una vez (con color): plogs
+# Estado de los contenedores: pipe_ps (pipeline) | docker ps
 ```
 
 ## 📝 Blog

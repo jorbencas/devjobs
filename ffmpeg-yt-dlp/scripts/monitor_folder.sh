@@ -18,6 +18,10 @@ AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
 POLL_INTERVAL="${POLL_INTERVAL:-30}"
 RESOLUTION="${RESOLUTION:-}"
 COMPLETED_ONLY="${COMPLETED_ONLY:-false}"
+# Detección de episodios (corte de extremos + metadata para el uploader)
+OCR_STEP="${OCR_STEP:-180}"
+CORTE_MARGEN="${CORTE_MARGEN:-300}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Extensiones de vídeo soportadas
 VIDEO_EXTENSIONS="mp4|mkv|avi|mov|webm|flv|ts|m4v|mpg|mpeg"
@@ -51,22 +55,68 @@ compress_video() {
     local name="${filename%.*}"
     local ext="${filename##*.}"
     local output="$OUTPUT_DIR/${name}_compressed.mp4"
+    # Escribir a un temporal y renombrar al terminar, para que el uploader
+    # (que vigila *_compressed.mp4) nunca coja un archivo a medio escribir.
+    local tmp_output="${output}.tmp"
 
     log "${CYAN}Comprimiendo:${NC} $filename"
 
-    # Obtener duración para calcular progreso
+    # Detectar episodios para recortar extremos y guardar metadata para el uploader
+    local det_json="${OUTPUT_DIR}/${name}_episodios.json"
+    local cut_inicio=""
+    local cut_fin=""
     local duration
-    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input" 2>/dev/null | cut -d. -f1)
+    if command -v python3 >/dev/null 2>&1 && command -v tesseract >/dev/null 2>&1 \
+       && [[ -f "$SCRIPT_DIR/detectar_episodios.py" ]]; then
+        local det
+        det=$(python3 "$SCRIPT_DIR/detectar_episodios.py" "$input" "$OCR_STEP" "$CORTE_MARGEN" 2>/dev/null)
+        if [[ -n "$det" ]] && echo "$det" | grep -q '"episodios"'; then
+            echo "$det" > "$det_json"
+            local rango desc
+            desc=$(echo "$det" | python3 -c "import sys,json;print(json.load(sys.stdin).get('descripcion',''))" 2>/dev/null)
+            rango=${desc:-$(echo "$det" | python3 -c "import sys,json;print(json.load(sys.stdin).get('rango',''))" 2>/dev/null)}
+            cut_inicio=$(echo "$det" | python3 -c "import sys,json;d=json.load(sys.stdin).get('corte',{});print(d.get('inicio',''))" 2>/dev/null)
+            cut_fin=$(echo "$det" | python3 -c "import sys,json;d=json.load(sys.stdin).get('corte',{});print(d.get('fin',''))" 2>/dev/null)
+            corte_posible=$(echo "$det" | python3 -c "import sys,json;d=json.load(sys.stdin).get('corte',{});print(str(d.get('posible',False)).lower())" 2>/dev/null)
+            if [[ -n "$rango" ]]; then
+                if [[ "$corte_posible" == "true" ]]; then
+                    log "  Contenido detectado: $rango (corte ${cut_inicio}s → ${cut_fin}s)"
+                else
+                    log "  Contenido detectado: $rango (sin corte: margen inválido)"
+                    cut_inicio=""
+                    cut_fin=""
+                fi
+            else
+                log "  Contenido no detectado (sin corte)"
+            fi
+        fi
+    fi
 
-    local ffmpeg_args=(-y -i "$input")
+    # Obtener duración para calcular progreso
+    if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
+        duration=$(( cut_fin - cut_inicio ))
+    else
+        duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input" 2>/dev/null | cut -d. -f1)
+    fi
+
+    local ffmpeg_args=(-y)
+    if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
+        ffmpeg_args+=(-ss "$cut_inicio" -i "$input" -t "$duration")
+    else
+        ffmpeg_args+=(-i "$input")
+    fi
     ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
     if [[ -n "$RESOLUTION" ]]; then
         ffmpeg_args+=(-vf "scale=-2:${RESOLUTION}")
     fi
     ffmpeg_args+=(-movflags +faststart)
+    # -f mp4 explícito: el temporal acaba en .tmp y ffmpeg necesita el formato
+    # para no fallar al elegir muxer por extensión.
+    ffmpeg_args+=(-f mp4)
 
-    if ffmpeg "${ffmpeg_args[@]}" "$output" 2>/dev/null; then
+    if ffmpeg "${ffmpeg_args[@]}" "$tmp_output" 2>/dev/null; then
+        mv "$tmp_output" "$output"
         local input_size output_size
         input_size=$(stat -c%s "$input" 2>/dev/null || stat -f%z "$input" 2>/dev/null || echo 0)
         output_size=$(stat -c%s "$output" 2>/dev/null || stat -f%z "$output" 2>/dev/null || echo 0)
@@ -85,7 +135,8 @@ compress_video() {
         return 0
     else
         log "${RED}✗${NC} Error al comprimir: $filename"
-        rm -f "$output"
+        rm -f "$tmp_output"
+        rm -f "$det_json"
         return 1
     fi
 }

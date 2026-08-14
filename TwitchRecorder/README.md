@@ -261,6 +261,12 @@ Al detectar el directo, TwitchRecorder lee su **título** con yt-dlp y extrae un
 sendosama_2026-08-13_20-15-00_KW_prueba.mp4
 ```
 
+> **Título real vs genérico**: algunos canales de Twitch dejan el título genérico
+> (`"<canal> (live)"`) en el campo `title`, y el título real va en la descripción
+> (p. ej. `"📗 LOS DIARIOS DE LA BOTICARIA..."`). Si se detecta un título genérico,
+> TwitchRecorder usa la **descripción** como fuente del título, para que el
+> keyword sea el correcto (ej. `diarios_boticaria` y no `sendosama_live`).
+
 Esa keyword viaja intacta por todo el pipeline (`*_completed.mp4` → `*_compressed.mp4`). El servicio `uploader` la usa para decidir a qué grupo de Telegram subir el vídeo: **al grupo cuyo `nombre` coincida con la keyword**, o al `default` si no hay coincidencia. Ver `downloader_telegram/README_UPLOADER.md`.
 
 ---

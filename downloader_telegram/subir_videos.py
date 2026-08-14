@@ -241,6 +241,113 @@ def dividir_video(archivo):
     return partes
 
 
+def episodios_desde_json(archivo):
+    """Lee la descripción de episodios/temporada de la metadata que genera
+    el monitor ('<name>_episodios.json' junto al comprimido). Evita repetir
+    el OCR. Devuelve la cadena 'descripcion' (p. ej. 'Episodio 1-4' o
+    'Temporada 2 · Episodio 1-4') o '' si no hay metadata."""
+    meta = archivo.with_name(archivo.stem.replace("_compressed", "_episodios") + ".json")
+    if not meta.exists():
+        return ""
+    try:
+        with open(meta, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("descripcion", "") or data.get("rango", "") or ""
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+
+def detectar_episodios(archivo):
+    """Detecta el contenido de la franja superior (episodios/temporada o
+    película) mediante OCR de varios frames.
+
+    Escanea el vídeo con un paso (3 min por defecto, configurable con
+    UPLOADER_OCR_STEP), recorta la franja superior, hace OCR y:
+      - Si aparecen 'EPISODIO/CAPÍTULO N' (opcionalmente con 'TEMPORADA N'),
+        devuelve 'Episodio 1-4' o 'Temporada 2 · Episodio 1-4'.
+      - Si aparece 'película', devuelve 'Película · TÍTULO' (por frecuencia
+        de palabras de la franja).
+      - Si no detecta nada, ''.
+    Necesita ffmpeg y tesseract-ocr (con tesseract-ocr-data-eng) disponibles."""
+    import re
+    from collections import Counter
+    paso = int(os.environ.get("UPLOADER_OCR_STEP", "180"))
+    try:
+        dur_out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(archivo)],
+            capture_output=True, text=True)
+        dur = float(dur_out.stdout.strip()) if dur_out.stdout.strip() else 0
+    except Exception:
+        return ""
+    if not dur or dur <= 0:
+        return ""
+
+    STOP = {
+        "episodio", "episodios", "capitulo", "capitulos", "capítulo", "capítulos",
+        "temporada", "temp", "pelicula", "peliculas", "película", "películas",
+        "la", "el", "los", "las", "de", "en", "y", "a", "que",
+    }
+    episodios = set()
+    temporadas = set()
+    pelicula_times = 0
+    palabras = Counter()
+    muestras = 0
+    tmp = Path("/tmp") / (archivo.stem + "_ep")
+    n = 0
+    t = 0
+    while t < dur:
+        img = str(tmp) + f"_{n}.png"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-ss", str(t), "-i", str(archivo),
+                 "-frames:v", "1", "-vf", "crop=iw:ih*0.2:0:0,scale=iw*2:-1",
+                 "-q:v", "2", img],
+                capture_output=True, text=True, check=True)
+            ocr = subprocess.run(
+                ["tesseract", img, "stdout", "-l", "eng"],
+                capture_output=True, text=True)
+            texto = ocr.stdout
+            texto_bajo = texto.lower()
+            for m in re.finditer(r"(?:episodio|cap[ií]tulo)\s*(\d+)", texto, re.IGNORECASE):
+                episodios.add(int(m.group(1)))
+            for m in re.finditer(r"(?:temporada|temp)[a-z]*\s*(\d+)", texto, re.IGNORECASE):
+                temporadas.add(int(m.group(1)))
+            if re.search(r"pel[ií]cula", texto_bajo):
+                pelicula_times += 1
+            for m in re.finditer(r"[a-záéíóúñü]{3,}", texto_bajo):
+                w = m.group(0)
+                if w not in STOP:
+                    palabras[w] += 1
+            muestras += 1
+        except Exception:
+            pass
+        finally:
+            try:
+                Path(img).unlink(missing_ok=True)
+            except OSError:
+                pass
+        n += 1
+        t = n * paso
+
+    if pelicula_times >= 2:
+        umbral = max(3, int(muestras * 0.25))
+        orden = [w for w, c in palabras.most_common() if c >= umbral]
+        titulo = " ".join(orden).upper()
+        return f"Película · {titulo}" if titulo else "Película"
+
+    if not episodios:
+        return ""
+    episodios = sorted(episodios)
+    if len(episodios) == 1:
+        rango = str(episodios[0])
+    else:
+        rango = f"{episodios[0]}-{episodios[-1]}"
+    if temporadas:
+        rango = f"Temporada {min(temporadas)} · Episodio {rango}"
+    return rango
+
+
 def fotograma(archivo):
     """Genera un thumbnail jpg (necesario para send_file de video)."""
     thumb = archivo.with_suffix(".jpg")
@@ -292,7 +399,7 @@ async def subir_archivo(client, archivo, grupos, caption_base):
             try:
                 await client.send_file(
                     grupo, str(parte),
-                    caption=f"{caption_base} {parte.name}",
+                    caption=caption_base,
                     video_note=False,
                     thumb=thumb,
                     progress_callback=lambda c, t: None,
@@ -412,6 +519,15 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         log("WARN", f"{archivo.name}: sin keyword y sin grupo default. Se omite.")
                         continue
                     log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
+                    episodios = episodios_desde_json(archivo)
+                    if not episodios:
+                        episodios = detectar_episodios(archivo)
+                        log("INFO", f"{archivo.name}: OCR de episodios realizado")
+                    if episodios:
+                        caption_base += f" — Episodio {episodios}"
+                        log("INFO", f"{archivo.name}: episodio(s): {episodios}")
+                    else:
+                        log("WARN", f"{archivo.name}: sin episodios detectados")
                     await subir_archivo(client, archivo, destinos, caption_base)
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")

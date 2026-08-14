@@ -38,6 +38,10 @@ docker compose ps
 docker compose logs -f monitor
 ```
 
+> Atajo: con los alias instalados (`bash servicios/instalar_aliases.sh`), escribe
+> **`ff_logs`** para seguir el `ffmpeg_monitor` en directo (igual que `plogs`
+> muestra los 3 servicios del pipeline a la vez). Ver `docker_help.txt` sección 3.
+
 ### Parar
 
 ```bash

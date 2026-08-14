@@ -45,6 +45,21 @@ def _find_ytdlp() -> str:
     return sys.executable, ["-m", "yt_dlp"]
 
 
+def _is_generic_live_title(title: str, channel: str, uploader: str = "") -> bool:
+    """True si `title` es el título genérico de Twitch ("<nombre> (live)") y no el
+    real. El título real de muchos directos de Twitch va en la descripción."""
+    t = (title or "").strip().lower()
+    if not t:
+        return True
+    # Quitar marcas de fecha que a veces yt-dlp añade: "<name> (live) 2026-08-13 21:48"
+    t = re.sub(r"\b20\d{2}-?\d{0,2}-?\d{0,2}.*$", "", t).strip()
+    names = {n.strip().lower() for n in (channel, uploader) if n}
+    for name in names:
+        if name and re.match(rf"^{re.escape(name)}(\s*\(?\s*live?\s*\)?)?$", t):
+            return True
+    return False
+
+
 def _format_size(size_bytes: int) -> str:
     if size_bytes >= 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
@@ -89,7 +104,10 @@ class Recorder:
         return ""
 
     def get_live_title(self) -> str:
-        """Obtiene el título del directo usando yt-dlp (sin guardar nada)."""
+        """Obtiene el título del directo usando yt-dlp (sin guardar nada).
+        Algunos canales de Twitch dejan el título genérico ("<canal> (live)") en
+        el campo title, pero ponen el título real en la descripción. Si detectamos
+        un título genérico, usamos la descripción como fuente del título."""
         url = self.get_stream_url()
         if not url:
             return ""
@@ -97,9 +115,16 @@ class Recorder:
             from yt_dlp import YoutubeDL
             with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
                 info = ydl.extract_info(url, download=False)
-                return info.get("title", "")
         except Exception:
             return ""
+
+        title = info.get("title", "") or ""
+        desc = info.get("description", "") or ""
+
+        generic = _is_generic_live_title(title, self.channel, info.get("uploader", ""))
+        if generic and desc:
+            return desc
+        return title
 
     def get_live_keyword(self) -> str:
         return _normalize_keyword(self.get_live_title())

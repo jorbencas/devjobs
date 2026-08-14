@@ -30,6 +30,9 @@ ultimate_session.session
 ultimate_session.session-journal
 uploader.session
 secret.key
+grupos.json
+enviados.json
+config.bin
 pdfs_libres
 pdfs_protegidos
 tituls AR

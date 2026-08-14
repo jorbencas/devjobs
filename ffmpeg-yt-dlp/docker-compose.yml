@@ -21,9 +21,9 @@ services:
     restart: unless-stopped
     user: root
     command: >-
-      sh -c "apk add --no-cache ffmpeg bash findutils &&
+      sh -c "apk add --no-cache ffmpeg bash findutils python3 tesseract-ocr tesseract-ocr-data-eng &&
       mkdir -p /watch /comprimidos &&
-      bash /app/scripts/monitor_folder.sh --completed-only -r 720 --codec libx264 -c 28 -p fast /watch"
+      bash /app/scripts/monitor_folder.sh --completed-only -r 720 --codec libx265 -c 28 -p fast /watch"
     volumes:
       - ./:/app
       - /home/jorge/dev/devjobs/test_videos/test:/watch

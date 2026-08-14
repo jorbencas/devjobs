@@ -24,7 +24,7 @@ al encender el PC (no bloquea la prueba).
 | Imagen Docker `downloader_telegram` | ✅ Construida | `docker compose build` hecho |
 | Servicio `twitchrecorder` | ✅ Corriendo | Grabación de directos activa |
 | Servicio `monitor` (`ffmpeg_monitor`) | ✅ Corriendo | Compresión a 720p activa |
-| Config TwitchRecorder | ✅ Listo | `channels`, `start_time: 20:00`, `copy_to_test: true` |
+| Config TwitchRecorder | ✅ Listo | `channels`, `start_time: 21:30`, `copy_to_test: true` |
 | Sesión del uploader (`uploader.session`) | ✅ Autenticada | Loguin hecho, se reutiliza sin pedir credenciales |
 | `grupos.json` con IDs reales | ✅ Listo | 32 canales + aliases + `default` "Jorge videos" |
 | Ruteo por keyword (uploader) | ✅ Listo | Coincidencia flexible + alias + fallback |
