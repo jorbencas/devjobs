@@ -8,8 +8,8 @@ Cada paso requiere intervención manual (teléfono/código de Telegram o `sudo`)
 ## ⏱️ Mínimo imprescindible para probar esta noche
 
 ✅ **Ya está todo hecho**: sesión creada, `grupos.json` con los 36 grupos reales,
-y el uploader corriendo. Falta **solo el Paso 5 (systemd)** para que arranque solo
-al encender el PC (no bloquea la prueba).
+y el uploader corriendo. DECISIÓN: el pipeline **NO arranca solo al encender el PC**
+(arranque manual con `pipe_up`). Solo queda (opcional) el `disable` del Paso 5.
 
 **Prueba rápida:** copia un MP4 con extensión `_compressed.mp4` a
 `/home/jorge/dev/devjobs/Videos/comprimidos/` → en ~60 s se sube a los grupos.
@@ -29,7 +29,7 @@ al encender el PC (no bloquea la prueba).
 | `grupos.json` con IDs reales | ✅ Listo | 32 canales + aliases + `default` "Jorge videos" |
 | Ruteo por keyword (uploader) | ✅ Listo | Coincidencia flexible + alias + fallback |
 | Servicio `uploader` | ✅ Corriendo | Vigila `/comprimidos` cada 60 s |
-| systemd (auto-arranque al boot) | ✅ Habilitado | `enabled` + `active (exited)`, los 3 servicios arrancan al boot |
+| systemd (arranque al boot) | ⏳ **Decisión: NO auto-arranque** | Arranque MANUAL con `pipe_up`. Pendiente: `sudo systemctl disable` |
 
 ---
 
@@ -103,22 +103,23 @@ y sube los `*_compressed.mp4` a los grupos de `grupos.json`.
 
 ---
 
-## Paso 5 — Habilitar el auto-arranque al encender el PC
+## Paso 5 — (OPCIONAL) Desactivar el auto-arranque al encender el PC
 
-Habilita el servicio systemd (requiere `sudo`):
-
-```bash
-sudo systemctl enable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service
-```
-
-Comprobación opcional:
+El pipeline NO debe arrancar solo al boot (decisión). Si el servicio está
+ahora habilitado, desactívalo (requiere `sudo`):
 
 ```bash
-sudo systemctl start   twitch-stream-pipeline.service
-sudo systemctl status  twitch-stream-pipeline.service
+sudo systemctl disable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service
 ```
 
-Con esto, al encender el PC se levantan solos los 3 servicios del pipeline.
+Hecho esto, los 3 servicios solo se levantan a mano:
+
+```bash
+pipe_up                                    # arrancar todo sin systemd
+sudo systemctl start twitch-stream-pipeline.service   # (o vía systemd)
+```
+
+> Si algún día se quiere el auto-arranque al boot: `sudo systemctl enable ...`
 
 ---
 
@@ -127,7 +128,7 @@ Con esto, al encender el PC se levantan solos los 3 servicios del pipeline.
 - [x] `ls downloader_telegram/uploader.session` → existe y autenticada
 - [x] `grupos.json` → contiene `default` + 36 grupos reales (no placeholders)
 - [x] `docker ps` → `twitchrecorder`, `ffmpeg_monitor` y `telegram-uploader` arriba
-- [x] `systemctl is-enabled twitch-stream-pipeline.service` → responde `enabled`
+- [ ] `sudo systemctl is-enabled twitch-stream-pipeline.service` → debería responder `disabled` (+ `disable` si responde `enabled`)
 
 ---
 

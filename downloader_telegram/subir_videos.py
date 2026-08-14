@@ -35,6 +35,11 @@ GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", SCRIPT_DIR / "grupos.json")
 ENVIADOS_FILE = Path(os.environ.get("UPLOADER_ENVIADOS", SCRIPT_DIR / "enviados.json"))
 MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 PARTES_DIR = Path(os.environ.get("UPLOADER_PARTES", SCRIPT_DIR / "partes"))
+# Reenvío automático: cuando se sube un vídeo de la keyword indicada, además de
+# enviarlo a su(s) grupo(s), se REENVÍA (forward, no re-subida) al canal de solo
+# reenvío. Vacío ("") desactiva la función.
+FORWARD_CHANNEL = int(os.environ.get("UPLOADER_FORWARD_CHANNEL", "-1004359591062"))
+FORWARD_KEYWORD = os.environ.get("UPLOADER_FORWARD_KEYWORD", "diarios_boticaria")
 
 
 def cargar_o_generar_llave():
@@ -339,10 +344,16 @@ def detectar_episodios(archivo):
     if not episodios:
         return ""
     episodios = sorted(episodios)
-    if len(episodios) == 1:
-        rango = str(episodios[0])
-    else:
-        rango = f"{episodios[0]}-{episodios[-1]}"
+    grupos = []
+    inicio = prev = episodios[0]
+    for e in episodios[1:]:
+        if e == prev + 1:
+            prev = e
+        else:
+            grupos.append(str(inicio) if inicio == prev else f"{inicio}-{prev}")
+            inicio = prev = e
+    grupos.append(str(inicio) if inicio == prev else f"{inicio}-{prev}")
+    rango = ", ".join(grupos)
     if temporadas:
         rango = f"Temporada {min(temporadas)} · Episodio {rango}"
     return rango
@@ -357,7 +368,7 @@ def fotograma(archivo):
     return str(thumb) if r.returncode == 0 and thumb.exists() else None
 
 
-async def subir_archivo(client, archivo, grupos, caption_base):
+async def subir_archivo(client, archivo, grupos, caption_base, keyword=""):
     nombre = archivo.name
     try:
         if enviado(archivo):
@@ -365,6 +376,12 @@ async def subir_archivo(client, archivo, grupos, caption_base):
             return
     except Exception as e:
         log("WARN", f"Error al comprobar enviados: {e}")
+
+    # ¿Reenviar este vídeo al canal de solo-reenvío?
+    kw_norm = _normalizar_texto(keyword)
+    reenviar = bool(FORWARD_CHANNEL) and bool(FORWARD_KEYWORD) and FORWARD_KEYWORD in kw_norm
+    if reenviar:
+        log("INFO", f"{nombre}: keyword '{keyword}' → se reenviará a {FORWARD_CHANNEL}")
 
     try:
         tamano_mb = archivo.stat().st_size / 1024**2
@@ -395,15 +412,18 @@ async def subir_archivo(client, archivo, grupos, caption_base):
 
     subidos = 0
     for parte in partes:
+        enviado_msg = None
         for idx, grupo in enumerate(grupos, start=1):
             try:
-                await client.send_file(
+                msg = await client.send_file(
                     grupo, str(parte),
                     caption=caption_base,
                     video_note=False,
                     thumb=thumb,
                     progress_callback=lambda c, t: None,
                 )
+                if enviado_msg is None:
+                    enviado_msg = msg
                 log("OK", f"  → {grupo} ({idx}/{len(grupos)}) : {parte.name}")
                 subidos += 1
             except Exception as e:
@@ -412,6 +432,13 @@ async def subir_archivo(client, archivo, grupos, caption_base):
                     log("ERR", f"  → {grupo}: sesión no autorizada — comprueba credenciales/sesión: {e}")
                 else:
                     log("ERR", f"  → {grupo} ({parte.name}) falló: {e}")
+        if reenviar and enviado_msg is not None:
+            try:
+                # Reenvío nativo: instantáneo (copia en servidor, no re-subir)
+                await client.forward_messages(FORWARD_CHANNEL, messages=enviado_msg)
+                log("OK", f"  ↪ reenviado al canal {FORWARD_CHANNEL}: {parte.name}")
+            except Exception as e:
+                log("ERR", f"  ↪ falló el reenvío a {FORWARD_CHANNEL} ({parte.name}): {e}")
 
     if thumb:
         try:
@@ -512,7 +539,6 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
         try:
             for carpeta in carpetas:
                 for archivo in sorted(carpeta.glob("*_compressed.mp4")):
-                    caption_base = "🎬 Directo sendo sama"
                     keyword = keyword_from_filename(archivo.name)
                     destinos = grupos_para_keyword(keyword, default, grupos)
                     if not destinos:
@@ -524,11 +550,12 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         episodios = detectar_episodios(archivo)
                         log("INFO", f"{archivo.name}: OCR de episodios realizado")
                     if episodios:
-                        caption_base += f" — Episodio {episodios}"
+                        caption_base = str(episodios)
                         log("INFO", f"{archivo.name}: episodio(s): {episodios}")
                     else:
+                        caption_base = "🎬 Directo sendo sama"
                         log("WARN", f"{archivo.name}: sin episodios detectados")
-                    await subir_archivo(client, archivo, destinos, caption_base)
+                    await subir_archivo(client, archivo, destinos, caption_base, keyword)
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")
         if una_pasada:

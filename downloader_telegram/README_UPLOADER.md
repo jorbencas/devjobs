@@ -30,6 +30,8 @@ Todo es configurable con **variables de entorno** (en el bloque `environment` de
 | `UPLOADER_PARTES` | Carpeta de partes temporales | `partes/` |
 | `UPLOADER_CONFIG` / `UPLOADER_KEY` | Rutas de credenciales cifradas | `config.bin` / `secret.key` |
 | `UPLOADER_CARPETAS` | Carpetas a vigilar (separadas por `:`) | `/comprimidos` |
+| `UPLOADER_FORWARD_CHANNEL` | Canal de **solo-reenvío** (forward) donde se copia cada vídeo de la keyword (vacío `""` desactiva) | `-1004359591062` |
+| `UPLOADER_FORWARD_KEYWORD` | Keyword del directo que dispara el reenvío | `diarios_boticaria` |
 
 > También puedes crear/borrar un contenedor distinto cambiando `container_name:` en el `docker-compose.yml` (p. ej. un segundo `uploader` que vigile otra carpeta, con su propia `enviados.json`).
 
@@ -182,4 +184,23 @@ El script es robusto ante fallos de configuración o del entorno:
 TwitchRecorder → test/*_completed.mp4 → monitor_folder.sh → comprimidos/*_compressed.mp4 → [este servicio] → grupos de Telegram
 ```
 
-> Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (secciones *PIPELINE* y *AUTO-ARRANQUE*).
+> Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (secciones *PIPELINE* y *PIPELINE VÍA SYSTEMD*).
+
+---
+
+## Reenvío automático a un canal de solo-reenvío
+
+Cuando un vídeo es de la keyword `diarios_boticaria`, además de subirlo a su(s)
+grupo(s), el uploader lo **REENVÍA** (forward) al canal `-1004359591062`
+("Los diarios de la boticaria sendo"). Ese canal es **solo de reenvío**: NUNCA
+se sube contenido directamente, solo llegan forwards.
+
+- Se usa `forward_messages` (reenvío nativo de Telegram): es **instantáneo**
+  (copia en el servidor, sin re-subir el archivo). Se verá la atribución
+  "Reenviado de..." y el grupo/remitente original.
+- Se reenvía una vez por parte subida (si el vídeo se dividió por >2 GB, cada
+  parte se reenvía).
+- Si el reenvío falla, se registra el error pero **no** rompe la subida normal.
+- Configurable sin tocar código con `UPLOADER_FORWARD_CHANNEL` y
+  `UPLOADER_FORWARD_KEYWORD`; poner `UPLOADER_FORWARD_CHANNEL=""` desactiva la
+  función.

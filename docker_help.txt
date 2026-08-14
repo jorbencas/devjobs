@@ -11,7 +11,7 @@
         3B. downloader_telegram    3E. TwitchRecorder
         3C. hdfull-downloader      3F. ffmpeg-yt-dlp
   4. PIPELINE: directo sendo sama → Telegram (plogs, pipe_*)  [une 3 proyectos]
-  5. AUTO-ARRANQUE al encender el PC (systemd)
+  5. PIPELINE vía SYSTEMD (arranque MANUAL)
   6. MONTAR en otra máquina (Windows + WSL2)
   7. Utilidades (estado / disco)
 
@@ -244,12 +244,15 @@ test_videos_backup/      Grabaciones antiguas archivadas
 # ffmpeg-yt-dlp (pararían también al daemon del pipeline). Para parar los 3 usa pipe_down.
 
 ==============================================================================
-  5. AUTO-ARRANQUE AL ENCENDER EL PC (SYSTEMD)
+  5. PIPELINE VÍA SYSTEMD (ARRANQUE MANUAL)
 ==============================================================================
 
-Los 3 daemons del pipeline se levantan solos al boot. Instalar una vez (requiere sudo):
+Los 3 daemons del pipeline NO se levantan solos al boot (a propósito): los
+arrancas TÚ cuando quieras. El servicio systemd solo existe para gestionarlos
+desde systemd en lugar de con docker compose. Instalar/eliminar (requiere sudo):
 
-sudo systemctl enable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service
+sudo systemctl disable twitch-stream-pipeline.service   # si está habilitado: quita el boot
+sudo systemctl enable  /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service   # (opcional) auto-arranque
 
 Operación manual (alias de ~/.bashrc):
 pipe_sys_start        # Arrancar el pipeline
@@ -257,38 +260,80 @@ pipe_sys_stop         # Parar todo
 pipe_sys_status       # Ver estado
 
 # Nota: tras pipe_recreate/pipe_up los contenedores ya están arriba; systemctl
-# solo gestiona el arranque al boot. Detalle del servicio: ver README.md.
+# solo es una alternativa para gestionarlos. Detalle del servicio: ver README.md.
 
 ==============================================================================
   6. MONTAR EN OTRA MÁQUINA (Windows + WSL2)
-==============================================================================
+ ==============================================================================
 
-Un solo script hace el montaje completo: clona el repo, ajusta las rutas a la
-máquina nueva, crea carpetas, revisa secretos, build, systemd y aliases:
+ Un SOLO script hace todo el montaje: clona el repo, ajusta las rutas a tu
+ máquina, crea las carpetas de vídeo, revisa secretos, construye las imágenes,
+ instala el servicio systemd (sin habilitarlo al boot) y añade los alias. Es
+ IDEMPOTENTE: puedes lanzarlo las veces que quieras; solo hace lo que aún no
+ esté hecho.
 
-   bash <(curl -fsSL https://raw.githubusercontent.com/jorbencas/devjobs/main/servicios/bootstrap_instalar.sh)
+ --- Antes de nada en Windows (SOLO la primera vez) ---
 
-El script te pedirá confirmación antes de tocar rutas y te avisará qué secretos
-faltan (config.bin/secret.key, uploader.session, grupos.json). Re-lanzable: es
-idempotente y seguro.
+   1. Instala WSL + Ubuntu. En PowerShell como ADMINISTRADOR:
+        wsl --install -d Ubuntu
+      (si ya tenías WSL:  wsl --update && wsl --set-default-version 2)
+   2. Reinicia el PC si te lo pide. Al abrir Ubuntu crea tu usuario/contraseña.
+   3. Instala Docker Desktop (Windows) y actívalo:
+      Settings → Resources → WSL integration → activa tu distro (Ubuntu).
+      Espera a que ponga "Engine running".
+   NOTA: NO hace falta configurar systemd a mano. El script lo hace solo:
+   en WSL escribe systemd=true en /etc/wsl.conf y te avisa si toca reiniciar.
+   IMPORTANTE: el pipeline NO se arranca solo al encender el PC. Lo levantarás
+   a mano con  pipe_up  cuando quieras. El script también instala el servicio
+   systemd, pero SIN habilitarlo para el boot.
 
---- Paso 0: preparar WSL desde cero (SOLO la primera vez) ---
+ --- Ejecutar el script (DENTRO de Ubuntu) ---
 
-  1. Instala WSL + una distro (Ubuntu). En PowerShell como ADMINISTRADOR:
-       wsl --install -d Ubuntu
-     (si WSL ya estaba, para renovar:  wsl --update && wsl --set-default-version 2)
-  2. Reinicia el PC si te lo pide. Al abrir Ubuntu crea tu usuario/contraseña.
-  3. Activa SYSTEMD en la distro (necesario para el auto-arranque). Dentro de
-     Ubuntu crea/edita /etc/wsl.conf (con sudo):
-       [boot]
-       systemd=true
-     y reinicia WSL desde PowerShell:
-       wsl --shutdown
-  4. Instala Docker Desktop (Windows) y actívalo: Settings → Resources → WSL
-     integration → activa tu distro (Ubuntu). Espera a que diga "Engine running".
-  5. Vuelve a abrir Ubuntu y lanza el bootstrap de arriba. El propio script
-     comprueba Docker y, si detecta WSL sin systemd, te deja el /etc/wsl.conf
-     preparado para reiniciar.
+   Opción A — en una línea, sin descargar nada (RECOMENDADA):
+       bash <(curl -fsSL https://raw.githubusercontent.com/jorbencas/devjobs/main/servicios/bootstrap_instalar.sh)
+
+   Opción B — descargarlo y ejecutarlo como script:
+       cd ~
+       curl -fsSL -o bootstrap_instalar.sh https://raw.githubusercontent.com/jorbencas/devjobs/main/servicios/bootstrap_instalar.sh
+       chmod +x bootstrap_instalar.sh      # <- DARLE PERMISO DE EJECUCIÓN
+       ./bootstrap_instalar.sh
+
+   Permisos que debes tener:
+     - NO lo lances con sudo ni como root: usa tu usuario normal de Ubuntu.
+     - El script usa sudo INTERNAMENTE (para instalar el servicio systemd en
+       /etc/systemd/system y para escribir /etc/wsl.conf). Te pedirá tu
+       contraseña cuando lo necesite → tu usuario debe poder usar sudo.
+     - Opción A: NO necesita chmod (bash lee el contenido directamente).
+     - Opción B: sí necesita chmod +x para poder lanzarlo como ./bootstrap...
+
+   Qué hace el script, paso a paso (con confirmación en cada paso):
+     1/8 Comprueba Docker y WSL2; si falta algo te dice qué instalar y se para.
+     2/8 Clona el repo en ~/devjobs (o reutiliza el que ya exista; te pregunta).
+     3/8 Sustituye la ruta fija /home/jorge/... por la de TU máquina.
+     4/8 Crea las carpetas de vídeo (test_videos/test y Videos/comprimidos).
+     5/8 Revisa los secretos (config.bin/secret.key, uploader.session,
+          grupos.json) y te dice cuáles faltan y cómo crearlos.
+     6/8 Construye las imágenes Docker.
+     7/8 Instala el servicio systemd (pero SIN habilitarlo al boot: lo
+          arrancas a mano cuando quieras). En WSL sin systemd escribe
+          [boot] systemd=true en /etc/wsl.conf y te pide hacer:
+            wsl --shutdown        (desde PowerShell)
+          Tras reiniciar, vuelve a lanzar el script UNA vez más y termina.
+     8/8 Añade los alias del pipeline al ~/.bashrc.
+
+ --- Después de terminar ---
+
+   - Recarga los alias:                source ~/.bashrc
+   - Levanta el pipeline (a mano):     pipe_up
+     (o con systemd, también a mano:   sudo systemctl start twitch-stream-pipeline.service
+      — CUANDO quieras arrancarlo tú, NUNCA se inicia solo al encender el PC)
+   - Si algún día quieres el auto-arranque al boot: 
+        sudo systemctl enable twitch-stream-pipeline.service
+   - Ver los logs de los 3 servicios:  plogs
+   - Si no hay sesión de Telegram:     bash servicios/pipe_setup.sh
+     (pide teléfono + código de verificación, SOLO la primera vez)
+   - Ver los vídeos generados en Windows:
+     \\wsl$\<distro>\<tu_devjobs>\Videos\comprimidos
 
 ------------------------------------------------------------------------------
   7. UTILIDADES (estado / disco)

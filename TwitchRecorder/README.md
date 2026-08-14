@@ -291,7 +291,11 @@ cd ../ffmpeg-yt-dlp && docker compose up -d monitor
 cd ../downloader_telegram && docker compose up -d uploader
 ```
 
-**Auto-arranque al encender el PC:** los tres servicios se levantan solos vía un servicio systemd. Ver `servicios/twitch-stream-pipeline.service` en la raíz de `devjobs` y la sección *AUTO-ARRANQUE* en `docker_help.txt`.
+**Arranque MANUAL (no automático al boot):** los tres servicios NO se levantan
+solos al encender el PC (a propósito). Se arrancan a mano con `pipe_up` o
+`sudo systemctl start twitch-stream-pipeline.service`. Si algún día se quiere
+auto-arranque al boot: `sudo systemctl enable .../twitch-stream-pipeline.service`.
+Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
 
 > Documentación completa del pipeline en `README.md` de la raíz de `devjobs`.
 

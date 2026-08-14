@@ -28,4 +28,7 @@ services:
       # UPLOADER_API_HASH:
       # Intervalo entre pasadas (segundos)
       UPLOADER_INTERVALO: "60"
+      # Reenvío automático al canal de solo-reenvío (diarios de la boticaria)
+      # UPLOADER_FORWARD_CHANNEL: "-1004359591062"   # canal "Los diarios de la boticaria sendo"
+      # UPLOADER_FORWARD_KEYWORD: "diarios_boticaria" # keyword que dispara el reenvío
     command: python -u /app/subir_videos.py /comprimidos

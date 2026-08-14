@@ -80,4 +80,4 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 TwitchRecorder → test/*_KW_<keyword>_completed.mp4  →  [este servicio]  →  comprimidos/*_KW_<keyword>_compressed.mp4  →  uploader (Telegram)
 ```
 
-> Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (sección *PIPELINE* y *AUTO-ARRANQUE*).
+> Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (sección *PIPELINE* y *PIPELINE VÍA SYSTEMD*).
