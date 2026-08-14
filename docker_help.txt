@@ -11,7 +11,7 @@
         3B. downloader_telegram    3E. TwitchRecorder
         3C. hdfull-downloader      3F. ffmpeg-yt-dlp
   4. PIPELINE: directo sendo sama → Telegram (plogs, pipe_*)  [une 3 proyectos]
-  5. PIPELINE vía SYSTEMD (arranque MANUAL)
+  5. PIPELINE vía SYSTEMD (auto-arranque al BOOT)
   6. MONTAR en otra máquina (Windows + WSL2)
   7. Utilidades (estado / disco)
 
@@ -244,15 +244,16 @@ data/backups/            Grabaciones antiguas archivadas
 # ffmpeg-yt-dlp (pararían también al daemon del pipeline). Para parar los 3 usa pipe_down.
 
 ==============================================================================
-  5. PIPELINE VÍA SYSTEMD (ARRANQUE MANUAL)
+  5. PIPELINE VÍA SYSTEMD (AUTO-ARRANQUE AL BOOT)
 ==============================================================================
 
-Los 3 daemons del pipeline NO se levantan solos al boot (a propósito): los
-arrancas TÚ cuando quieras. El servicio systemd solo existe para gestionarlos
-desde systemd en lugar de con docker compose. Instalar/eliminar (requiere sudo):
+Los 3 daemons del pipeline (grabar → comprimir → subir) se levantan solos al
+encender el PC gracias al servicio systemd. Gestión (requiere sudo):
 
-sudo systemctl disable twitch-stream-pipeline.service   # si está habilitado: quita el boot
-sudo systemctl enable  /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service   # (opcional) auto-arranque
+sudo systemctl status   twitch-stream-pipeline.service   # estado
+sudo systemctl restart  twitch-stream-pipeline.service   # reiniciar
+sudo systemctl stop     twitch-stream-pipeline.service   # parar (hasta el boot)
+sudo systemctl disable  twitch-stream-pipeline.service   # quitar el auto-arranque
 
 Operación manual (alias de ~/.bashrc):
 pipe_sys_start        # Arrancar el pipeline
@@ -268,7 +269,7 @@ pipe_sys_status       # Ver estado
 
  Un SOLO script hace todo el montaje: clona el repo, ajusta las rutas a tu
  máquina, crea las carpetas de vídeo, revisa secretos, construye las imágenes,
- instala el servicio systemd (sin habilitarlo al boot) y añade los alias. Es
+ instala el servicio systemd (y lo habilita al boot) y añade los alias. Es
  IDEMPOTENTE: puedes lanzarlo las veces que quieras; solo hace lo que aún no
  esté hecho.
 
@@ -283,9 +284,9 @@ pipe_sys_status       # Ver estado
       Espera a que ponga "Engine running".
    NOTA: NO hace falta configurar systemd a mano. El script lo hace solo:
    en WSL escribe systemd=true en /etc/wsl.conf y te avisa si toca reiniciar.
-   IMPORTANTE: el pipeline NO se arranca solo al encender el PC. Lo levantarás
-   a mano con  pipe_up  cuando quieras. El script también instala el servicio
-   systemd, pero SIN habilitarlo para el boot.
+   IMPORTANTE: el pipeline se arranca SOLO al encender el PC (systemd habilitado).
+   Si lo prefieres a mano, usa `pipe_up` cuando quieras. El script instala el
+   servicio systemd habilitado para el boot.
 
  --- Ejecutar el script (DENTRO de Ubuntu) ---
 
@@ -324,11 +325,9 @@ pipe_sys_status       # Ver estado
  --- Después de terminar ---
 
    - Recarga los alias:                source ~/.bashrc
-   - Levanta el pipeline (a mano):     pipe_up
-     (o con systemd, también a mano:   sudo systemctl start twitch-stream-pipeline.service
-      — CUANDO quieras arrancarlo tú, NUNCA se inicia solo al encender el PC)
-   - Si algún día quieres el auto-arranque al boot: 
-        sudo systemctl enable twitch-stream-pipeline.service
+   - El pipeline se levanta SOLO al encender el PC (systemd habilitado).
+   - Para arrancarlo tú a mano:         pipe_up
+     (o con systemd:                    sudo systemctl start twitch-stream-pipeline.service)
    - Ver los logs de los 3 servicios:  plogs
    - Si no hay sesión de Telegram:     bash servicios/pipe_setup.sh
      (pide teléfono + código de verificación, SOLO la primera vez)

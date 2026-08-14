@@ -69,14 +69,14 @@ docker compose run --rm uploader python /app/subir_videos.py --list-chats [--fol
 - **Subida a Telegram:** [`downloader_telegram/README_UPLOADER.md`](downloader_telegram/README_UPLOADER.md)
 - **Grabación `_completed`:** [`TwitchRecorder/README.md`](TwitchRecorder/README.md)
 - **Comandos Docker y systemd:** [`docker_help.txt`](docker_help.txt)
-- **Servicio systemd (arranque MANUAL, no al boot):** [`servicios/twitch-stream-pipeline.service`](servicios/twitch-stream-pipeline.service)
+- **Servicio systemd (auto-arranque al boot):** [`servicios/twitch-stream-pipeline.service`](servicios/twitch-stream-pipeline.service)
 
-### Arranque del pipeline (MANUAL)
+### Arranque del pipeline (AUTO al boot)
 
-Los 3 servicios NO se levantan solos al encender el PC (a propósito): los
-arrancas tú cuando quieras con `pipe_up` (o vía systemd con `pipe_sys_start`).
-Si algún día quieres auto-arranque al boot:
-`sudo systemctl enable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service`
+Los 3 servicios se levantan solos al encender el PC (systemd habilitado).
+También puedes arrancarlos a mano con `pipe_up` (o vía systemd con `pipe_sys_start`).
+Para quitar el auto-arranque:
+`sudo systemctl disable twitch-stream-pipeline.service`
 Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
 
 ---

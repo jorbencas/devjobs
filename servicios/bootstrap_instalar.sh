@@ -11,7 +11,7 @@
 #    2) Clona / usa el repo devjobs.
 #    3) Sustituye la ruta fija /home/jorge/... por la de ESTA máquina.
 #    4) Crea las carpetas de videos.     5) Revisa los archivos secretos.
-#    6) Construye las imágenes.          7) Instala systemd (arranque MANUAL).
+#    6) Construye las imágenes.          7) Instala systemd (auto-arranque al boot).
 #    8) Añade los alias de ~/.bashrc.
 #
 #  Puedes cancelar en cualquier momento con Ctrl+C; es seguro volver a lanzarlo
@@ -152,8 +152,8 @@ docker compose -f "$DEVJOBS/TwitchRecorder/docker-compose.yml" build
 docker compose -f "$DEVJOBS/downloader_telegram/docker-compose.yml" build
 print_ok "Imágenes construidas"
 
-# --- 7) systemd (arranque manual, SIN auto-arranque al boot) ---
-print_info "7/8 Configurando systemd (arranque manual)..."
+# --- 7) systemd (arranque automático al boot) ---
+print_info "7/8 Configurando systemd (auto-arranque al boot)..."
 if systemctl --version >/dev/null 2>&1; then
     if [ "$DEVJOBS" != "$OLD_PATH" ]; then
         # El servicio usa rutas absolutas; asegurar que apunta a la real.
@@ -162,10 +162,10 @@ if systemctl --version >/dev/null 2>&1; then
     # Quitar cualquier envoltorio .env si el servicio no lo usa (compat.)
     sudo cp "$DEVJOBS/servicios/twitch-stream-pipeline.service" /etc/systemd/system/
     sudo systemctl daemon-reload
-    # SIN auto-arranque al encender el PC (se arranca a mano con pipe_up o
-    # "sudo systemctl start"). Si algún día se quiere al boot: habilitar con
-    #   sudo systemctl enable twitch-stream-pipeline.service
-    print_ok "Servicio systemd instalado (SIN auto-arranque al boot)."
+    # Auto-arranque al encender el PC: se habilita el servicio para que levante
+    # el pipeline (grabar → comprimir → subir) sin intervención.
+    sudo systemctl enable twitch-stream-pipeline.service
+    print_ok "Servicio systemd instalado y habilitado (auto-arranque al boot)."
 else
     print_warn "No hay systemd (¿estás en WSL sin systemd?)."
     # Si es WSL, lo dejamos preparado automáticamente (no duplica [boot]).
@@ -232,8 +232,8 @@ echo ""
 echo "  Código suelto:"
 if command -v systemctl >/dev/null 2>&1; then
     echo "    sudo systemctl start twitch-stream-pipeline.service   (levanta todo, a mano)"
-    echo "    (NO se arranca solo al boot. Para activarlo:"
-    echo "     sudo systemctl enable twitch-stream-pipeline.service)"
+    echo "    (Se levanta solo al boot. Detenerlo manualmente con:"
+    echo "     sudo systemctl stop twitch-stream-pipeline.service)"
 fi
 echo "    source ~/.bashrc && pipe_up        # levantar sin systemd"
 echo "    plogs                              # ver los logs de los 3 servicios"

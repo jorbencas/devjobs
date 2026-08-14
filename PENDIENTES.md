@@ -8,8 +8,7 @@ Cada paso requiere intervención manual (teléfono/código de Telegram o `sudo`)
 ## ⏱️ Mínimo imprescindible para probar esta noche
 
 ✅ **Ya está todo hecho**: sesión creada, `grupos.json` con los 36 grupos reales,
-y el uploader corriendo. DECISIÓN: el pipeline **NO arranca solo al encender el PC**
-(arranque manual con `pipe_up`). Solo queda (opcional) el `disable` del Paso 5.
+y el uploader corriendo (arranca solo al encender el PC vía systemd).
 
 **Prueba rápida:** copia un MP4 con extensión `_compressed.mp4` a
 `/home/jorge/dev/devjobs/data/comprimidos/` → en ~60 s se sube a los grupos.
@@ -29,7 +28,7 @@ y el uploader corriendo. DECISIÓN: el pipeline **NO arranca solo al encender el
 | `grupos.json` con IDs reales | ✅ Listo | 32 canales + aliases + `default` "Jorge videos" |
 | Ruteo por keyword (uploader) | ✅ Listo | Coincidencia flexible + alias + fallback |
 | Servicio `uploader` | ✅ Corriendo | Vigila `/comprimidos` cada 60 s |
-| systemd (arranque al boot) | ⏳ **Decisión: NO auto-arranque** | Arranque MANUAL con `pipe_up`. Pendiente: `sudo systemctl disable` |
+| systemd (arranque al boot) | ✅ **Auto-arranque activo** | El pipeline se levanta solo al encender el PC (service habilitado) |
 
 ---
 
@@ -103,23 +102,33 @@ y sube los `*_compressed.mp4` a los grupos de `grupos.json`.
 
 ---
 
-## Paso 5 — (OPCIONAL) Desactivar el auto-arranque al encender el PC
+## Paso 5 — Auto-arranque al boot (ACTIVO)
 
-El pipeline NO debe arrancar solo al boot (decisión). Si el servicio está
-ahora habilitado, desactívalo (requiere `sudo`):
+El pipeline se levanta solo al encender el PC. Verifica que esté habilitado y
+funcionando:
 
 ```bash
-sudo systemctl disable /home/jorge/dev/devjobs/servicios/twitch-stream-pipeline.service
+systemctl status twitch-stream-pipeline.service          # debe decir "Active" y "Enabled"
 ```
 
-Hecho esto, los 3 servicios solo se levantan a mano:
+Para detenerlo hasta el próximo arranque:
+
+```bash
+sudo systemctl stop twitch-stream-pipeline.service       # parar ahora (no reinicia en boot)
+```
+
+Para quitar definitivamente el auto-arranque (si algún día no lo quieres):
+
+```bash
+sudo systemctl disable twitch-stream-pipeline.service
+```
+
+Arrancarlo a mano:
 
 ```bash
 pipe_up                                    # arrancar todo sin systemd
 sudo systemctl start twitch-stream-pipeline.service   # (o vía systemd)
 ```
-
-> Si algún día se quiere el auto-arranque al boot: `sudo systemctl enable ...`
 
 ---
 
