@@ -12,7 +12,7 @@ y el uploader corriendo. DECISIÓN: el pipeline **NO arranca solo al encender el
 (arranque manual con `pipe_up`). Solo queda (opcional) el `disable` del Paso 5.
 
 **Prueba rápida:** copia un MP4 con extensión `_compressed.mp4` a
-`/home/jorge/dev/devjobs/Videos/comprimidos/` → en ~60 s se sube a los grupos.
+`/home/jorge/dev/devjobs/data/comprimidos/` → en ~60 s se sube a los grupos.
 
 ---
 
@@ -136,8 +136,8 @@ sudo systemctl start twitch-stream-pipeline.service   # (o vía systemd)
 
 | Concepto | Ruta |
 |----------|------|
-| Grabaciones terminadas | `/home/jorge/dev/devjobs/test_videos/test/` (`*_completed.mp4`) |
-| Videos comprimidos | `/home/jorge/dev/devjobs/Videos/comprimidos/` (`*_compressed.mp4`) |
+| Grabaciones terminadas | `/home/jorge/dev/devjobs/data/grabaciones/test/` (`*_completed.mp4`) |
+| Videos comprimidos | `/home/jorge/dev/devjobs/data/comprimidos/` (`*_compressed.mp4`) |
 | Grupos destino | `downloader_telegram/grupos.json` |
 | Sesión del uploader | `downloader_telegram/uploader.session` |
 | Servicio systemd | `servicios/twitch-stream-pipeline.service` |

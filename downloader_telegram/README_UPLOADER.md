@@ -6,7 +6,7 @@
 
 ## Qué hace
 
-1. Vigila `/home/jorge/dev/devjobs/Videos/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
+1. Vigila `/home/jorge/dev/devjobs/data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
 4. Registra los enviados en `enviados.json` y elimina el archivo local.

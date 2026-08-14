@@ -20,8 +20,8 @@ services:
       - ./uploader.session:/app/uploader.session
       - ./grupos.json:/app/grupos.json
       - ./enviados.json:/app/enviados.json
-      - ./partes:/app/partes
-      - /home/jorge/dev/devjobs/Videos/comprimidos:/comprimidos
+      - ../data/partes:/app/partes
+      - /home/jorge/dev/devjobs/data/comprimidos:/comprimidos
     environment:
       # Opcional: cambiar credenciales SIN tocar config.bin
       # UPLOADER_API_ID:

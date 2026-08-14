@@ -26,7 +26,7 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 │ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
 │  (grabar)     │    mover a test/  │  monitor *720p*    │      a 720p         │  uploader (subir) │
 └──────────────┘                    └──────────────────┘                      └──────────────────┘
-   /home/jorge/dev/devjobs/test_videos/test/  /home/jorge/dev/devjobs/Videos/comprimidos/  N grupos
+   /home/jorge/dev/devjobs/data/grabaciones/test/  /home/jorge/dev/devjobs/data/comprimidos/  N grupos
 ```
 
 | Pieza | Proyecto | Servicio | Qué hace |

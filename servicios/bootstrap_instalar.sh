@@ -106,8 +106,8 @@ fi
 
 # --- 4) Carpetas ---
 print_info "4/8 Creando carpetas de vídeo..."
-mkdir -p "$DEVJOBS/test_videos/test" "$DEVJOBS/Videos/comprimidos"
-print_ok "test_videos/test y Videos/comprimidos listas"
+mkdir -p "$DEVJOBS/data/grabaciones/test" "$DEVJOBS/data/comprimidos" "$DEVJOBS/data/backups" "$DEVJOBS/data/partes"
+print_ok "data: grabaciones/test, comprimidos, backups y partes listas"
 
 # --- 5) Secretos (config.bin, secret.key, uploader.session, .env, grupos.json) ---
 print_info "5/8 Revisando secretos..."

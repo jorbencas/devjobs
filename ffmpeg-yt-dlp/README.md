@@ -120,7 +120,7 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 
 | Flag | Default | Descripción |
 |------|---------|-------------|
-| `-o, --output DIR` | `Videos/comprimidos` | Directorio de salida |
+| `-o, --output DIR` | `data/comprimidos` | Directorio de salida |
 | `-c, --crf VALUE` | `28` | Calidad CRF (menor = mejor) |
 | `-p, --preset NAME` | `fast` | Preset de velocidad |
 | `--codec NAME` | `libx264` | Códec de vídeo |
@@ -139,7 +139,7 @@ docker compose logs -f monitor    # logs del monitor
 docker compose stop monitor       # parar solo el monitor
 ```
 
-Vigila `/home/jorge/dev/devjobs/test_videos/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `/home/jorge/dev/devjobs/Videos/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
+Vigila `/home/jorge/dev/devjobs/data/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `/home/jorge/dev/devjobs/data/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
 
 > Documentación completa del monitor: [ver `README_MONITOR.md`](README_MONITOR.md).
 

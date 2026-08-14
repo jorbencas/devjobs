@@ -61,3 +61,6 @@ test_videos/
 test_video/
 test_videos_backup/
 groups.json
+
+### Datos del pipeline (vídeos) ###
+data/

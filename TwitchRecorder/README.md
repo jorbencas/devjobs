@@ -78,7 +78,7 @@ Edita `config.json`:
 | `copy_to_test` | Si `true`, al terminar un directo mueve la grabación a `test_path` renombrada a `*_completed.mp4` |
 | `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
 
-> **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/test_videos:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/test_videos/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
+> **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/data/grabaciones:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/data/grabaciones/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 
 ---
 
@@ -131,7 +131,7 @@ docker compose build
 ```bash
 docker run --rm \
   -v ./config.json:/app/config.json:ro \
-  -v /home/jorge/dev/devjobs/test_videos:/recordings \
+  -v /home/jorge/dev/devjobs/data/grabaciones:/recordings \
   -e TZ=Europe/Madrid \
   twitchrecorder-run
 ```

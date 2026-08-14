@@ -169,7 +169,7 @@ Qué hace: descargador de vídeos de aula Moodle/Vimeo con Python puro.
 3E. TWITCHRECORDER  (2 modos)          — forma parte del pipeline (paso 1)
 ------------------------------------------------------------------------------
 Qué hace: grabador automático de directos de Twitch/YouTube/Kick. En el pipeline
-graba el directo y lo deja como `*_completed.mp4` en test_videos/test/.
+graba el directo y lo deja como `*_completed.mp4` en data/grabaciones/test/.
 
   DAEMON — producción (parte del pipeline)   contenedor: twitchrecorder
     tw_logs       Ver logs del grabador
@@ -183,7 +183,7 @@ graba el directo y lo deja como `*_completed.mp4` en test_videos/test/.
   TODO el proyecto
     tw_down       Parar todo
 
-Notas: config en `config.json` (channels, start_time). Salida → test_videos/test/.
+Notas: config en `config.json` (channels, start_time). Salida → data/grabaciones/test/.
 
 ------------------------------------------------------------------------------
 3F. FFMPEG-YT-DLP  (2 modos)           — forma parte del pipeline (paso 2)
@@ -235,9 +235,9 @@ pipe_setup             # login Telegram del uploader (teléfono + código)
 pipe_chats --creados   # ver tus canales/grupos con IDs → rellena grupos.json
 
 --- Carpetas ---
-test_videos/test/        Grabaciones terminadas (*_KW_<kw>_completed.mp4)
-Videos/comprimidos/      Videos listos para subir (*_KW_<kw>_compressed.mp4)
-test_videos_backup/      Grabaciones antiguas archivadas
+data/grabaciones/test/   Grabaciones terminadas (*_KW_<kw>_completed.mp4)
+data/comprimidos/        Videos listos para subir (*_KW_<kw>_compressed.mp4)
+data/backups/            Grabaciones antiguas archivadas
 
 # Config (grupos.json, credenciales, sesiones, ruteo por keyword): ver README_UPLOADER.md
 # NO uses `docker compose down` a secas en downloader_telegram / TwitchRecorder /
@@ -310,7 +310,7 @@ pipe_sys_status       # Ver estado
      1/8 Comprueba Docker y WSL2; si falta algo te dice qué instalar y se para.
      2/8 Clona el repo en ~/devjobs (o reutiliza el que ya exista; te pregunta).
      3/8 Sustituye la ruta fija /home/jorge/... por la de TU máquina.
-     4/8 Crea las carpetas de vídeo (test_videos/test y Videos/comprimidos).
+     4/8 Crea las carpetas de vídeo (data/grabaciones/test y data/comprimidos).
      5/8 Revisa los secretos (config.bin/secret.key, uploader.session,
           grupos.json) y te dice cuáles faltan y cómo crearlos.
      6/8 Construye las imágenes Docker.
