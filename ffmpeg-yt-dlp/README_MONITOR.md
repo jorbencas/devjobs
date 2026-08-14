@@ -10,6 +10,7 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Este servici
    que pueden incluir la keyword del directo: `*_KW_<keyword>_completed.mp4`).
 2. Detecta archivos que terminan en `*_completed.mp4`.
 3. Los comprime a **720p** (H.264/libx264, CRF 23, preset medium, AAC 128k) — misma config que el preset "default" de midu.sh, para máxima compatibilidad.
+   - **Garantía de tamaño <2 GB**: si el resultado de CRF 23 supera `TAMANO_MAX_MB` (default **1900 MB**, por el tope de Telegram), se re-codifica automáticamente en **2 pasadas** apuntando a ese tamaño. Así nunca supera 2 GB y no hay que partir el vídeo.
 4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
    en `/home/jorge/dev/devjobs/data/comprimidos`.
 5. Mueve el original a `$OUTPUT_DIR/.processed`.
@@ -70,7 +71,7 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 
 ### Variables de entorno
 
-`RESOLUTION`, `COMPLETED_ONLY`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`.
+`RESOLUTION`, `COMPLETED_ONLY`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`.
 
 ---
 

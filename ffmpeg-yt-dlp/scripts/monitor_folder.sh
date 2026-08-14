@@ -17,6 +17,7 @@ AUDIO_CODEC="${AUDIO_CODEC:-aac}"
 AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
 POLL_INTERVAL="${POLL_INTERVAL:-30}"
 RESOLUTION="${RESOLUTION:-}"
+TAMANO_MAX_MB="${TAMANO_MAX_MB:-1900}"
 COMPLETED_ONLY="${COMPLETED_ONLY:-false}"
 # Detección de episodios (corte de extremos + metadata para el uploader)
 OCR_STEP="${OCR_STEP:-180}"
@@ -99,6 +100,15 @@ compress_video() {
         duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input" 2>/dev/null | cut -d. -f1)
     fi
 
+    local slice_args=()
+    if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
+        slice_args=(-ss "$cut_inicio" -i "$input" -t "$duration")
+    else
+        slice_args=(-i "$input")
+    fi
+    local -a vf_args=()
+    [[ -n "$RESOLUTION" ]] && vf_args=(-vf "scale=-2:${RESOLUTION}")
+
     local ffmpeg_args=(-y)
     if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
         ffmpeg_args+=(-ss "$cut_inicio" -i "$input" -t "$duration")
@@ -107,15 +117,44 @@ compress_video() {
     fi
     ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
-    if [[ -n "$RESOLUTION" ]]; then
-        ffmpeg_args+=(-vf "scale=-2:${RESOLUTION}")
-    fi
+    ffmpeg_args+=("${vf_args[@]}")
     ffmpeg_args+=(-movflags +faststart)
     # -f mp4 explícito: el temporal acaba en .tmp y ffmpeg necesita el formato
     # para no fallar al elegir muxer por extensión.
     ffmpeg_args+=(-f mp4)
 
     if ffmpeg "${ffmpeg_args[@]}" "$tmp_output" 2>/dev/null; then
+        # ── Límite de tamaño (Telegram ~2 GB): si el CRF one-pass supera el tope,
+        #    se re-codifica en 2 pasadas apuntando a ese tamaño (garantía < 2 GB).
+        local size_bytes
+        size_bytes=$(stat -c%s "$tmp_output" 2>/dev/null || stat -f%z "$tmp_output" 2>/dev/null || echo 0)
+        local max_bytes=$(( TAMANO_MAX_MB * 1024 * 1024 ))
+        if [[ "$size_bytes" -gt "$max_bytes" && -n "$duration" && "$duration" -gt 0 ]]; then
+            log "⚠  $filename pesa $((size_bytes/1024/1024))MB (>${TAMANO_MAX_MB}MB). Re-codificando en 2 pasadas ≤ ${TAMANO_MAX_MB}MB..."
+            local abps=128000
+            case "$AUDIO_BITRATE" in
+                *k) abps=$(( ${AUDIO_BITRATE%k} * 1000 )) ;;
+                *M) abps=$(( ${AUDIO_BITRATE%M} * 1000000 )) ;;
+            esac
+            local audio_bytes=$(( duration * abps / 8 ))
+            local video_bytes=$(( max_bytes - audio_bytes ))
+            local video_bps=$(( video_bytes * 8 / duration ))
+            if [[ "$video_bps" -gt 0 ]]; then
+                ffmpeg "${slice_args[@]}" "${vf_args[@]}" -c:v "$CODEC" -b:v "$video_bps" \
+                    -preset "$PRESET" -pass 1 -an -f null - \
+                    2>/dev/null
+                if ffmpeg "${slice_args[@]}" "${vf_args[@]}" -c:v "$CODEC" -b:v "$video_bps" \
+                    -preset "$PRESET" -pass 2 \
+                    -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
+                    -movflags +faststart -f mp4 "$tmp_output" 2>/dev/null; then
+                    log "  ✓ 2 pasadas completadas → ${TAMANO_MAX_MB}MB"
+                else
+                    log "${RED}✗${NC} Falló la 2ª pasada; se mantiene el CRF one-pass."
+                fi
+                rm -f ffmpeg2pass-*.log ffmpeg2pass-*.log.mbtree
+            fi
+        fi
+
         mv "$tmp_output" "$output"
         local input_size output_size
         input_size=$(stat -c%s "$input" 2>/dev/null || stat -f%z "$input" 2>/dev/null || echo 0)
