@@ -27,6 +27,11 @@ Si un proyecto corre en 2 MODOS, cada modo tiene sus propios alias:
    *_manual_*                    → instancia para PROBAR a mano (normalmente --rm)
    *_down                        → parar TODO el proyecto (ambas instancias)
 
+Las herramientas MANUALES son CLIs interactivas (menú con teclado): se lanzan
+con `docker compose run --rm` (servicios con `stdin_open` + `tty`), así que
+EJECÚTALAS DESDE UNA TERMINAL REAL (no desde una sesión sin TTY ni scripts), y
+recarga los alias con `source ~/.bashrc` tras reinstalarlos.
+
 ==============================================================================
   1. DOCKER GENERAL
 ==============================================================================
@@ -193,8 +198,10 @@ convierte `*_completed.mp4` → `*_compressed.mp4`.
     ff_restart    Reiniciarlo
 
   MANUAL — midu interactivo
-    ff_midu            Lanzar midu.sh interactivo (SOLO el servicio downloader,
-                       no toca al monitor)     contenedor: yt_ffmpeg_downloader
+    ff_midu            Lanzar midu.sh INTERACTIVO (docker compose run --rm):
+                       asigna TTY + stdin para poder usar el menú.
+                       Usa SOLO el servicio downloader (no toca al monitor).
+                       contenedor: yt_ffmpeg_downloader
     ff_manual_logs     Ver logs del midu
     ff_manual_stop     Pararlo
 

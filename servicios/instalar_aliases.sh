@@ -62,7 +62,7 @@ $MARCA2
 # =====================================================================
 
 # ---------- pdfmanager (1 instancia) ----------
-alias pdf_run='docker compose -f $DEVJOBS/pdfmanager/docker-compose.yml up'
+alias pdf_run='docker compose -f $DEVJOBS/pdfmanager/docker-compose.yml run --rm pdfmanager'
 alias pdf_logs='docker compose -f $DEVJOBS/pdfmanager/docker-compose.yml logs -f'
 alias pdf_down='docker compose -f $DEVJOBS/pdfmanager/docker-compose.yml down'
 
@@ -109,7 +109,7 @@ alias ff_logs='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml logs 
 alias ff_stop='docker stop ffmpeg_monitor'
 alias ff_restart='docker restart ffmpeg_monitor'
 # MANUAL (midu, interactivo): SOLO el servicio downloader (no toca al monitor)
-alias ff_midu='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up downloader'
+alias ff_midu='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml run --rm downloader'
 alias ff_manual_stop='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml stop downloader'
 alias ff_manual_logs='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml logs -f downloader'
 # Preview Watcher (host/WSL, NO Docker):

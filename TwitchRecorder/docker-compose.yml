@@ -16,3 +16,5 @@ services:
       - /home/jorge/dev/devjobs/test_videos:/recordings
     environment:
       - TZ=Europe/Madrid
+    stdin_open: true
+    tty: true

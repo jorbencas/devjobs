@@ -8,3 +8,5 @@ services:
       - AULA_USER=${AULA_USER:-}
       - AULA_PASS=${AULA_PASS:-}
     restart: "no"
+    stdin_open: true
+    tty: true

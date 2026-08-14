@@ -11,6 +11,8 @@ services:
       - HDFULL_USER=${HDFULL_USER}
       - HDFULL_PASS=${HDFULL_PASS}
       - TZ=Europe/Madrid
+    stdin_open: true
+    tty: true
 
 volumes:
   profile:

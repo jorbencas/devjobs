@@ -9,7 +9,7 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Este servici
 1. Vigila una carpeta (por defecto `/home/jorge/dev/devjobs/test_videos/test`, donde TwitchRecorder deja los `*_completed.mp4`,
    que pueden incluir la keyword del directo: `*_KW_<keyword>_completed.mp4`).
 2. Detecta archivos que terminan en `*_completed.mp4`.
-3. Los comprime a **720p** (H.264, CRF 28, preset fast, AAC 128k).
+3. Los comprime a **720p** (H.264/libx264, CRF 23, preset medium, AAC 128k) — misma config que el preset "default" de midu.sh, para máxima compatibilidad.
 4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
    en `/home/jorge/dev/devjobs/Videos/comprimidos`.
 5. Mueve el original a `$OUTPUT_DIR/.processed`.
