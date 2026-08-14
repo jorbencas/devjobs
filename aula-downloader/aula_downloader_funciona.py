@@ -157,9 +157,15 @@ def main():
     urls = sys.argv[1:] if len(sys.argv) > 1 else []
 
     if urls:
-        # Non-interactive mode: URLs from arguments
-        username = os.environ.get('AULA_USER', 'REDACTED')
-        password = os.environ.get('AULA_PASS', 'REDACTED')
+        # Non-interactive mode: URLs from arguments.
+        # Credenciales SOLO desde variables de entorno (nunca hardcodeadas).
+        username = os.environ.get('AULA_USER')
+        password = os.environ.get('AULA_PASS')
+        if not username or not password:
+            styled_error("Modo no-interactivo requiere AULA_USER y AULA_PASS "
+                         "(variables de entorno).")
+            styled_info("Ejemplo: AULA_USER=... AULA_PASS=... python aula_downloader_funciona.py URL")
+            return
         styled_info(f"Modo no-interactivo: {len(urls)} URLs")
     else:
         # Interactive mode

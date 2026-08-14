@@ -5,6 +5,6 @@ services:
     volumes:
       - ./descargas:/app/descargas
     environment:
-      - AULA_USER=REDACTED
-      - AULA_PASS=REDACTED
-    restart: unless-stopped
+      - AULA_USER=${AULA_USER:-}
+      - AULA_PASS=${AULA_PASS:-}
+    restart: "no"
