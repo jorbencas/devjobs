@@ -69,8 +69,8 @@ def run_scheduler(dry_run: bool = False):
         log.info("Hora de inicio alcanzada")
 
     recorders = {}
-    for channel, platform_name in channels_with_platform:
-        recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
+    for channel, platform_name, url in channels_with_platform:
+        recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
 
     current_day = _get_today()
 
@@ -85,10 +85,10 @@ def run_scheduler(dry_run: bool = False):
 
         config = load_config()
         new_channels_with_platform = get_channels_with_platform(config)
-        for channel, platform_name in new_channels_with_platform:
+        for channel, platform_name, url in new_channels_with_platform:
             if channel not in recorders:
                 log.info(f"[{channel}] Nuevo canal detectado ({platform_name}), añadiendo...")
-                recorders[channel] = Recorder(channel, platform_name, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
+                recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
 
         all_offline = True
 

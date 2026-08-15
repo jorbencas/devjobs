@@ -63,6 +63,11 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
 
 
 def get_channels_with_platform(config: dict) -> list:
+    """Devuelve [(canal, platform, url)] por canal configurado.
+
+    `platform` puede ser un str ("twitch") o una lista de fuentes en orden de
+    prioridad (p. ej. [{"platform": "web", "url": "..."}, "kick", "twitch"]).
+    `url` es la URL opcional asociada al canal (p. ej. la web del streamer)."""
     channels = config.get("channels", [])
 
     if isinstance(channels, dict):
@@ -70,12 +75,14 @@ def get_channels_with_platform(config: dict) -> list:
         for name, info in channels.items():
             if isinstance(info, dict):
                 platform_name = info.get("platform", "twitch")
+                url = info.get("url", "")
             else:
                 platform_name = "twitch"
-            result.append((name, platform_name))
+                url = ""
+            result.append((name, platform_name, url))
         return result
 
-    return [(ch, "twitch") for ch in channels]
+    return [(ch, "twitch", "") for ch in channels]
 
 
 def save_config(config: dict, path: Path = CONFIG_PATH) -> None:

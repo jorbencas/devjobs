@@ -1,7 +1,11 @@
 {
     "channels": {
         "sendosama": {
-            "platform": "twitch"
+            "platform": [
+                { "platform": "web", "url": "https://watch.sendosama.net/" },
+                "twitch",
+                "kick"
+            ]
         }
     },
 

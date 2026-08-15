@@ -67,11 +67,43 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 | `--codec NAME` | Códec de vídeo | `libx264` |
 | `-r, --resolution N` | Escalar altura a `N`px (ej: `720`) | sin reescalar |
 | `--completed-only` | Procesar solo `*_completed.*` | off |
+| `--directo-completo` | **No cortar** inicio/fin del directo (mantener todo el vídeo) | off |
 | `--interval SEGS` | Segundos entre comprobaciones | `30` |
 
 ### Variables de entorno
 
-`RESOLUTION`, `COMPLETED_ONLY`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`.
+`RESOLUTION`, `COMPLETED_ONLY`, `DIRECTO_COMPLETO`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`, `OCR_STEP`, `CORTE_MARGEN`.
+
+---
+
+## Corte de inicio/fin del directo y `DIRECTO_COMPLETO`
+
+Por defecto, antes de comprimir el monitor detecta los **episodios** (OCR de la
+franja superior cada `OCR_STEP` segundos) y **recorta los extremos**: deja solo
+la ventana entre el primer y el último episodio (con un margen de `CORTE_MARGEN`
+segundos, default 300), descartando el pre-roll/espera y el final.
+
+Esa detección también genera la metadata `*_episodios.json` (p. ej.
+`"Episodio 1-4"`) que usa el uploader como pie/caption en Telegram.
+
+Con **`DIRECTO_COMPLETO=true`** (o el flag `--directo-completo`) el monitor
+**NO corta** el inicio/fin: se mantiene **todo el directo**. La detección de
+episodios sigue ejecutándose (la metadata `*_episodios.json` para el caption
+se sigue generando), pero el corte se ignora.
+
+El servicio Docker `monitor` lo trae activo de fábrica:
+
+```yaml
+environment:
+  - DIRECTO_COMPLETO=true
+```
+
+Para volver al comportamiento anterior (corte de extremos), ponlo a `false`
+(o elimina la línea) en `docker-compose.yml` y recrea el contenedor:
+
+```bash
+docker compose up -d --force-recreate monitor
+```
 
 ---
 

@@ -22,6 +22,9 @@ COMPLETED_ONLY="${COMPLETED_ONLY:-false}"
 # Detección de episodios (corte de extremos + metadata para el uploader)
 OCR_STEP="${OCR_STEP:-180}"
 CORTE_MARGEN="${CORTE_MARGEN:-300}"
+# directo_completo: si es true, NO se recortan el inicio/fin del directo
+# (se mantiene TODO el vídeo). Por defecto sigue el corte por episodios.
+DIRECTO_COMPLETO="${DIRECTO_COMPLETO:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Extensiones de vídeo soportadas
@@ -93,6 +96,13 @@ compress_video() {
         fi
     fi
 
+    # directo_completo: mantener todo el vídeo, ignorar el corte de extremos
+    if [[ "$DIRECTO_COMPLETO" == "true" ]]; then
+        cut_inicio=""
+        cut_fin=""
+        log "  DIRECTO_COMPLETO=true: se mantiene todo el directo (sin corte de extremos)"
+    fi
+
     # Obtener duración para calcular progreso
     if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
         duration=$(( cut_fin - cut_inicio ))
@@ -118,6 +128,13 @@ compress_video() {
     ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
     ffmpeg_args+=("${vf_args[@]}")
+    # Mapeo explícito (igual que midu.sh): solo vídeo + 1er audio, descartando
+    # pistas extra (subs/datos) que hacen que Telegram no reproduzca en línea.
+    local has_audio
+    has_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$input" 2>/dev/null | head -1)
+    ffmpeg_args+=(-map 0:v:0)
+    [[ -n "$has_audio" ]] && ffmpeg_args+=(-map 0:a:0)
+    ffmpeg_args+=(-map_metadata 0)
     ffmpeg_args+=(-movflags +faststart)
     # -f mp4 explícito: el temporal acaba en .tmp y ffmpeg necesita el formato
     # para no fallar al elegir muxer por extensión.
@@ -140,12 +157,15 @@ compress_video() {
             local video_bytes=$(( max_bytes - audio_bytes ))
             local video_bps=$(( video_bytes * 8 / duration ))
             if [[ "$video_bps" -gt 0 ]]; then
-                ffmpeg "${slice_args[@]}" "${vf_args[@]}" -c:v "$CODEC" -b:v "$video_bps" \
+                ffmpeg "${slice_args[@]}" "${vf_args[@]}" -map 0:v:0 -c:v "$CODEC" -b:v "$video_bps" \
                     -preset "$PRESET" -pass 1 -an -f null - \
                     2>/dev/null
-                if ffmpeg "${slice_args[@]}" "${vf_args[@]}" -c:v "$CODEC" -b:v "$video_bps" \
+                local pass2_map=(-map 0:v:0)
+                [[ -n "$has_audio" ]] && pass2_map+=(-map 0:a:0)
+                if ffmpeg "${slice_args[@]}" "${vf_args[@]}" "${pass2_map[@]}" -c:v "$CODEC" -b:v "$video_bps" \
                     -preset "$PRESET" -pass 2 \
                     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
+                    -map_metadata 0 \
                     -movflags +faststart -f mp4 "$tmp_output" 2>/dev/null; then
                     log "  ✓ 2 pasadas completadas → ${TAMANO_MAX_MB}MB"
                 else
@@ -199,6 +219,7 @@ show_help() {
     echo "  --codec NAME         Códec de vídeo (default: libx264)"
     echo "  -r, --resolution N   Escalar altura a N px, ej: 720 (default: sin reescalar)"
     echo "  --completed-only     Procesar solo archivos *_completed.* / *_compressed.*"
+    echo "  --directo-completo   No cortar inicio/fin del directo (mantener todo el vídeo)"
     echo "  --interval SEGS      Intervalo de polling en segundos (default: 30)"
     echo "  -h, --help           Mostrar ayuda"
     echo ""
@@ -216,6 +237,7 @@ while [[ $# -gt 0 ]]; do
         --codec)       CODEC="$2"; shift 2 ;;
         -r|--resolution) RESOLUTION="$2"; shift 2 ;;
         --completed-only) COMPLETED_ONLY="true"; shift ;;
+        --directo-completo) DIRECTO_COMPLETO="true"; shift ;;
         --interval)    POLL_INTERVAL="$2"; shift 2 ;;
         -h|--help)     show_help; exit 0 ;;
         -*)            echo -e "${RED}Opción desconocida: $1${NC}"; show_help; exit 1 ;;
@@ -231,6 +253,7 @@ log "Salida: $OUTPUT_DIR"
 log "CRF: $CRF | Preset: $PRESET | Códec: $CODEC"
 [[ -n "$RESOLUTION" ]] && log "Resolución: $RESOLUTION (escala)"
 [[ "$COMPLETED_ONLY" == "true" ]] && log "Solo archivos *_completed / *_compressed"
+[[ "$DIRECTO_COMPLETO" == "true" ]] && log "Directo completo: sin corte de inicio/fin"
 log "Polling cada ${POLL_INTERVAL}s"
 log "Presiona Ctrl+C para detener"
 echo ""

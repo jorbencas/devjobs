@@ -63,6 +63,43 @@ Edita `config.json`:
 | Twitch | `twitch` | Streamlink | `sendosama` |
 | YouTube | `youtube` | yt-dlp | `MrBeast` |
 | Kick | `kick` | yt-dlp | `adin` |
+| Web (URL propia) | `web` | yt-dlp | `watch.sendosama.net` |
+
+### Varias fuentes por canal (prioridad + fallback)
+
+`platform` admite un **str** (una sola fuente) o una **lista** de fuentes en orden de
+**prioridad**: se graba de la primera que esté en directo. Cada elemento es un str
+(plataforma) o un dict `{"platform": "web", "url": "..."}` para una web.
+
+```json
+"channels": {
+    "sendosama": {
+        "platform": [
+            { "platform": "web", "url": "https://watch.sendosama.net/" },
+            "twitch",
+            "kick"
+        ]
+    }
+}
+```
+
+En este ejemplo, si la web del streamer está emitiendo (su servidor, que muestra
+el directo real y los capítulos) se graba de ahí; si no, se prueba Twitch
+(lo normal) y luego Kick.
+
+> **Ojo — la web suele estar CAÍDA.** Es un servidor propio que Sendo enciende
+> solo cuando quiere mostrar los capítulos (normalmente emite en Twitch y la
+> web no responde). Por eso la comprobación web hace un pre-check HTTP rápido
+> (~4 s) y, si no responde, pasa directo a la siguiente fuente.
+
+### Autotest automático de la web
+
+La primera vez que se detecta la web **en directo**, el recorder ejecuta solo
+una prueba de captura (equivale a `yt-dlp -F`) y deja un informe en
+`<record_path>/web_probe.log` con los formatos encontrados y el veredicto
+`CAPTURABLE / NO CAPTURABLE`. Así se verifica el primer directo por la web sin
+tener que estar pendiente. Se vuelve a probar si la web se detecta caída y
+luego reaparece en directo.
 
 ### Campos de configuración
 
@@ -346,6 +383,7 @@ TwitchRecorder/
 │   ├── twitch.py         # Comprueba si un canal está en directo (Twitch)
 │   ├── youtube.py        # Comprueba si un canal está en directo (YouTube)
 │   ├── kick.py           # Comprueba si un canal está en directo (Kick)
+│   ├── web.py            # Comprueba una URL propia (yt-dlp genérico, ej. watch.sendosama.net)
 │   ├── recorder.py       # Graba el stream con Streamlink o yt-dlp
 │   ├── scheduler.py      # Controla horarios y comprobaciones
 │   ├── files.py          # Organiza archivos por fecha

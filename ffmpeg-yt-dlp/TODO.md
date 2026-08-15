@@ -35,7 +35,7 @@
 - [ ] Temp file cleanup
 
 ## Tests
-- [ ] Test por cada modo (33 modos)
+- [ ] Test por cada modo (33 modos + opción 34 de ayuda)
 - [ ] Test de descarga yt-dlp
 - [ ] Test de colisión
 - [ ] Test de checkpoint/resume

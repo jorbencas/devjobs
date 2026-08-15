@@ -213,7 +213,7 @@ GENERAL:
   --resume [FILE]        Continuar desde checkpoint
   --retry                Reintentar archivos fallidos al terminar
   -V, --version          Versión
-  -h, --help             Muestra esta ayuda
+  -h, --help, --ayuda    Muestra esta ayuda (o la opción 34 del menú interactivo)
 
 FLUJO RECOMENDADO:
   ./midu.sh -d "URL"                                    # 1. Descargar
@@ -433,7 +433,7 @@ while [[ $# -gt 0 ]]; do
 
         -v|--verbose)         VERBOSE=true; shift ;;
         -V|--version)         echo "midu.sh v${VERSION}"; exit 0 ;;
-        -h|--help)            show_help; exit 0 ;;
+        -h|--help|--ayuda)    show_help; exit 0 ;;
         -*)                   echo -e "${RED}✗${NC} Opción desconocida: $1"; show_help; exit 1 ;;
         *)                    INPUT_DIR="$1"; shift ;;
     esac
@@ -3039,13 +3039,13 @@ select_video_files() {
         return 0
     fi
 
-    echo -e "  ${DIM}Ejemplo: 1,3,5 o 1-5 o 'all' para todos${NC}"
+    echo -e "  ${DIM}Ejemplo: 1,3,5, 1-5, o 'all'/'a' para seleccionar todos${NC}"
     read -rp "  → Selecciona: " choice
     echo ""
 
     SELECTED_FILES=()
 
-    if [[ "$choice" == "all" || "$choice" == "a" ]]; then
+    if [[ "${choice,,}" == "all" || "${choice,,}" == "a" ]]; then
         SELECTED_FILES=("${all_files[@]}")
     elif [[ "$choice" =~ ^[0-9]+-[0-9]+$ ]]; then
         # Rango: 1-5
@@ -3116,6 +3116,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "${BOLD}═══════════════════════════════════════${NC}"
     echo ""
 
+    while true; do
     echo -e "    ${GREEN} 1)${NC} Descargar vídeo       ${DIM}— YouTube, Twitch, Kick, TikTok, +1000${NC}"
     echo -e "    ${GREEN} 2)${NC} Cortar vídeo          ${DIM}— Sin perder calidad${NC}"
     echo -e "    ${GREEN} 3)${NC} Convertir/comprimir   ${DIM}— Ajustar tamaño y calidad${NC}"
@@ -3149,8 +3150,9 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}31)${NC} Pipeline encadenado   ${DIM}— Varios pasos en uno: cortar+convertir+...${NC}"
     echo -e "    ${GREEN}32)${NC} Compose               ${DIM}— Seleccionar vídeo + varias pistas de audio + subtítulos${NC}"
     echo -e "    ${GREEN}33)${NC} HLS                   ${DIM}— Preparar vídeo para streaming (m3u8)${NC}"
+    echo -e "    ${GREEN}34)${NC} Ayuda                 ${DIM}— Ver todos los flags, modos y ejemplos${NC}"
     echo ""
-    read -rp "  → Selecciona [1-33]: " mode_val
+    read -rp "  → Selecciona [1-34] (h = ayuda, 0 = salir): " mode_val
     echo ""
 
     case "$mode_val" in
@@ -3187,8 +3189,24 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         31) MODE="chain" ;;
         32) MODE="compose" ;;
         33) MODE="hls" ;;
-        *)  echo -e "${RED}✗${NC} Opción no válida"; exit 1 ;;
+        34|h|help|H|"?"|"")
+            show_help
+            echo ""
+            read -rp "  → Pulsa Enter para volver al menú... " _
+            echo ""
+            MODE=""
+            ;;
+        0|q|salir|exit)
+            echo -e "${YELLOW}⚠${NC} Saliendo."
+            exit 0
+            ;;
+        *)  echo -e "${RED}✗${NC} Opción no válida: $mode_val"
+            MODE=""
+            ;;
     esac
+
+    [[ -n "$MODE" ]] && break
+    done
 
     # ══════════════════════════════════════════════════════════════════
     #  PASO 2: Directorio de entrada y selección de archivo

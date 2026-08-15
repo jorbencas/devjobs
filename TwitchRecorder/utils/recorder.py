@@ -66,10 +66,36 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
+def parse_sources(platform, url: str = "") -> list:
+    """Normaliza la config de fuentes de un canal a una lista ordenada por prioridad.
+
+    - `platform` puede ser un str ("twitch") o una lista donde cada elemento es
+      un str (plataforma) o un dict {"platform": ..., "url": ...} (para la
+      fuente "web" con su URL).
+    - Mantiene compatibilidad con la config antigua (platform como str).
+    Devuelve una lista de dicts {'platform', 'url'}.
+    """
+    if isinstance(platform, (list, tuple)):
+        sources = []
+        for s in platform:
+            if isinstance(s, str):
+                sources.append({"platform": s, "url": url or ""})
+            elif isinstance(s, dict):
+                sources.append({
+                    "platform": s.get("platform", "web"),
+                    "url": s.get("url", "") or (url or ""),
+                })
+        return sources or [{"platform": "twitch", "url": ""}]
+    return [{"platform": platform, "url": url or ""}]
+
+
 class Recorder:
-    def __init__(self, channel: str, platform_name: str, record_path: str, max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = ""):
+    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = ""):
         self.channel = channel
-        self.platform_name = platform_name
+        self.sources = parse_sources(platform_name, url)
+        self.platform_name = self.sources[0]["platform"]
+        self._active = None
+        self._probed_sources = set()
         self.record_path = Path(record_path)
         self.max_duration_hours = max_duration_hours
         self.max_duration_str = max_duration_str
@@ -82,25 +108,72 @@ class Recorder:
         self._current_file = None
         self._stop_event = threading.Event()
 
-    def is_live(self) -> bool:
-        if self.platform_name == "twitch":
+    def _is_source_live(self, src: dict) -> bool:
+        platform = src["platform"]
+        s_url = src.get("url", "")
+        if platform == "twitch":
             from utils.twitch import is_live
             return is_live(self.channel)
-        elif self.platform_name == "youtube":
+        elif platform == "youtube":
             from utils.youtube import is_live
             return is_live(self.channel)
-        elif self.platform_name == "kick":
+        elif platform == "kick":
             from utils.kick import is_live
             return is_live(self.channel)
+        elif platform == "web":
+            from utils.web import is_live
+            return is_live(s_url or self.channel)
+        return False
+
+    def _autoprobar_web(self, src: dict) -> None:
+        """Cuando la fuente activa es la web del streamer, ejecuta UNA vez la
+        prueba de captura (yt-dlp -F) y guarda el informe en record_path/web_probe.log.
+        Se re-activa si la web se detecta caída (para volver a probar en la
+        siguiente vez que esté activa)."""
+        platform = src["platform"]
+        s_url = src.get("url", "")
+        if platform != "web":
+            return
+        key = s_url or self.channel
+        if key in self._probed_sources:
+            return
+        self._probed_sources.add(key)
+        try:
+            from utils.web import probe
+            probe(key, out_dir=str(self.record_path))
+        except Exception as e:
+            log.warning(f"[{self.channel}] web.probe falló: {e}")
+
+    def is_live(self) -> bool:
+        # Prioridad: la primera fuente que esté en directo gana (ej. la web del
+        # streamer antes que kick/twitch).
+        for src in self.sources:
+            if not self._is_source_live(src):
+                # Si la web está caída, permitir re-probar cuando vuelva a estar activa
+                if src["platform"] == "web":
+                    self._probed_sources.discard(src.get("url", "") or self.channel)
+                continue
+            self._active = src
+            self.platform_name = src["platform"]
+            if src["platform"] == "web":
+                self._autoprobar_web(src)
+            else:
+                self._probed_sources.discard(src.get("url", "") or self.channel)
+            return True
         return False
 
     def get_stream_url(self) -> str:
-        if self.platform_name == "twitch":
+        src = self._active or self.sources[0]
+        platform = src["platform"]
+        s_url = src.get("url", "")
+        if platform == "twitch":
             return f"https://www.twitch.tv/{self.channel}"
-        elif self.platform_name == "youtube":
+        elif platform == "youtube":
             return f"https://www.youtube.com/@{self.channel}/live"
-        elif self.platform_name == "kick":
+        elif platform == "kick":
             return f"https://kick.com/{self.channel}"
+        elif platform == "web":
+            return s_url or self.channel
         return ""
 
     def get_live_title(self) -> str:
@@ -154,7 +227,8 @@ class Recorder:
             popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
         try:
-            if self.platform_name == "twitch":
+            src = self._active or self.sources[0]
+            if src["platform"] == "twitch":
                 self._start_streamlink(output_path, popen_kwargs)
             else:
                 self._start_ytdlp(output_path, popen_kwargs)

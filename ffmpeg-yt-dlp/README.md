@@ -41,7 +41,7 @@ docker compose build
 docker compose up
 ```
 
-Al ejecutar, `midu.sh` arranca un menú interactivo con 33 modos.
+Al ejecutar, `midu.sh` arranca un menú interactivo con 33 modos, la opción **`34) Ayuda`** (muestra la ayuda completa y vuelve al menú) y **`0`** para salir. En el selector también se aceptan `h`, `help` o `?` para ver la ayuda.
 
 ### Ejecutar midu.sh (CLI)
 
@@ -181,6 +181,20 @@ Vigila `/home/jorge/dev/devjobs/data/grabaciones/test` (donde TwitchRecorder dej
 | 32 | `compose` | Seleccionar vídeo + varias pistas de audio + subtítulos + codec por pista | `--compose` |
 | 33 | `hls` | Preparar vídeo para streaming HLS (m3u8) con múltiples calidades | `--hls` |
 
+### Ayuda en el menú interactivo
+
+Además de los 33 modos, el menú incluye la opción **`34) Ayuda`** (o escribir `h`/`help`/`?` en el selector), que muestra la ayuda completa con todos los flags y ejemplos y luego **vuelve al menú**. La opción **`0`** (o `q`/`salir`) sale limpiamente.
+
+El flag **`--ayuda`** (alias de `-h`/`--help`) muestra la misma ayuda desde la CLI.
+
+### Selección múltiple de archivos
+
+En los modos que aceptan varios archivos (p. ej. `convert`, `gif`, `normalize`), la selección soporta:
+
+- Lista: `1,3,5`
+- Rango: `1-5`
+- **Todos**: `all` o su atajo **`a`** (ambos también en mayúsculas)
+
 ### Pregunta al eliminar el original (modo convert)
 
 Al terminar cada conversión, `midu.sh` pregunta en pantalla **¿Eliminar el archivo ORIGINAL? `[s/N]`** (solo en terminal interactiva; en modo automatizado/daemon no pregunta y conserva el original). Responde `s` para borrarlo o `Enter`/`n` para conservarlo.
@@ -276,6 +290,7 @@ La GPU se detecta automáticamente y se aplica en **todos** los modos de edició
 | `--checkpoint FILE` | Guardar progreso para resume |
 | `--resume [FILE]` | Continuar desde checkpoint |
 | `--retry` | Reintentar archivos fallidos al terminar |
+| `-h, --help, --ayuda` | Muestra la ayuda completa y sale |
 
 ## Flags de descarga
 

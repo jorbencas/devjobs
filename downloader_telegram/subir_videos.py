@@ -8,8 +8,10 @@ entrar en conflicto con la sesion del menu interactivo (ultimate_session).
 Modos:
   --setup       Iniciar sesion una vez (genera uploader.session).
   --list-chats  Mostrar tus chats/grupos para configurar grupos.json.
+  --list-topics Listar los temas (series) de un grupo con foro.
   --autoupload  Vigilar CARPETAS/ y subir cada *_compressed.mp4 a los
-                grupos de grupos.json. (modo por defecto)
+                grupos de grupos.json (y a los temas de grupo_series).
+                (modo por defecto)
   --once        Procesar una sola pasada y salir (sin bucle).
 """
 
@@ -92,18 +94,23 @@ def cargar_grupos():
     Formato:
         {
             "default": <id_grupo_fallback>,
+            "grupo_series": <id_grupo_con_temas>,                  # opcional
+            "temas": [ {"nombre": "serie", "id": <topic>}, ... ],  # opcional
             "grupos": [ {"nombre": "prueba", "id": <id>}, ... ]
         }
 
-    Devuelve (default, grupos) donde:
+    Devuelve (default, grupos, grupo_series, temas) donde:
         - default: id del grupo al que se sube si ninguna keyword coincide
         - grupos: [{nombre, id}]
+        - grupo_series: id del grupo donde están los temas (series) o None
+        - temas: [{nombre, id}] con los IDs de tema (mensaje raíz del tema)
     """
     if not GRUPOS_FILE.exists():
         raise SystemExit(
             f"\n[x] No existe {GRUPOS_FILE}.\n"
-            "  → Rellena con 'default' y una lista 'grupos' [{nombre, id}].\n"
-            "  → Usa --list-chats para descubrir los IDs."
+            "  → Rellena con 'default', 'grupos' y opcionalmente "
+            "'grupo_series' + 'temas'.\n"
+            "  → Usa --list-chats / --list-topics para descubrir los IDs."
         )
     try:
         with open(GRUPOS_FILE, "r", encoding="utf-8") as f:
@@ -116,24 +123,41 @@ def cargar_grupos():
 
     grupos = data.get("grupos", [])
     default = data.get("default")
+    grupo_series = data.get("grupo_series")
+    temas = data.get("temas", [])
 
-    if not isinstance(grupos, list) or not grupos:
+    if not isinstance(grupos, list):
         raise SystemExit(
-            f"\n[x] {GRUPOS_FILE} está vacío o mal configurado.\n"
-            "  → Debe contener una lista 'grupos' con [{nombre, id}]."
+            f"\n[x] {GRUPOS_FILE} está mal configurado.\n"
+            "  → 'grupos' debe ser una lista [{nombre, id}]."
         )
 
     validos = []
     for g in grupos:
         if isinstance(g, dict) and g.get("nombre") and g.get("id"):
             validos.append({"nombre": str(g["nombre"]).lower(), "id": g["id"]})
-    if not validos:
+
+    temas_validos = []
+    if isinstance(temas, list):
+        for t in temas:
+            if isinstance(t, dict) and t.get("nombre") and t.get("id"):
+                temas_validos.append({"nombre": str(t["nombre"]).lower(), "id": t["id"]})
+
+    if not validos and not temas_validos:
         raise SystemExit(
-            f"\n[x] {GRUPOS_FILE} no tiene grupos válidos.\n"
-            "  → Cada entrada debe ser {'nombre': '...', 'id': <grupo>}."
+            f"\n[x] {GRUPOS_FILE} no tiene grupos ni temas válidos.\n"
+            "  → Cada entrada de 'grupos'/'temas' debe ser "
+            "{'nombre': '...', 'id': <id>}."
         )
 
-    return default, validos
+    if temas_validos and not grupo_series:
+        raise SystemExit(
+            f"\n[x] {GRUPOS_FILE}: definiste 'temas' pero falta 'grupo_series'.\n"
+            "  → Indica el id del grupo donde están los temas: "
+            "'grupo_series': <id>."
+        )
+
+    return default, validos, grupo_series, temas_validos
 
 
 def keyword_from_filename(filename: str) -> str:
@@ -162,33 +186,45 @@ def _normalizar_texto(s: str) -> str:
     return s
 
 
+def _entrada_coincide(nombre, kw):
+    """¿La keyword del directo coincide con el nombre de un grupo/tema?
+    Coincidencia flexible: el 'nombre' (o una palabra significativa del nombre)
+    debe aparecer en la keyword, aunque el directo repita letras (ej. 'cryyy')."""
+    nombre = _normalizar_texto(nombre)
+    if not nombre:
+        return False
+    # coincidencia por substring del nombre completo
+    if nombre in kw:
+        return True
+    # coincidencia por palabra significativa del nombre (>= 4 letras)
+    palabras = [p for p in nombre.split() if len(p) >= 4]
+    return bool(palabras and any(p in kw for p in palabras))
+
+
 def grupos_para_keyword(keyword, default, grupos):
     """Elige el(los) grupo(s) según la keyword del directo.
-    - Coincidencia flexible: el 'nombre' (o una palabra significativa del nombre)
-      debe aparecer en la keyword, aunque el directo repita letras (ej. 'cryyy').
+    - Coincidencia flexible con _entrada_coincide.
     - Si no coincide → el grupo 'default' (si existe)."""
     kw = _normalizar_texto(keyword)
     if kw:
-        coincidencias = []
-        for g in grupos:
-            nombre = _normalizar_texto(g["nombre"])
-            if not nombre:
-                continue
-            # coincidencia por substring del nombre completo
-            if nombre in kw:
-                coincidencias.append(g)
-                continue
-            # coincidencia por palabra significativa del nombre (>= 4 letras)
-            palabras = [p for p in nombre.split() if len(p) >= 4]
-            if palabras and any(p in kw for p in palabras):
-                coincidencias.append(g)
+        coincidencias = [g["id"] for g in grupos if _entrada_coincide(g["nombre"], kw)]
         if coincidencias:
-            return list(dict.fromkeys(g["id"] for g in coincidencias))
+            return list(dict.fromkeys(coincidencias))
 
     # Fallback al grupo por defecto
     if default:
         return [default]
     return []
+
+
+def temas_para_keyword(keyword, temas):
+    """Elige el(los) tema(s) (series del grupo con foro) según la keyword.
+    Misma coincidencia flexible que los grupos. Devuelve lista de topic IDs."""
+    kw = _normalizar_texto(keyword)
+    if not kw:
+        return []
+    coincidencias = [t["id"] for t in temas if _entrada_coincide(t["nombre"], kw)]
+    return list(dict.fromkeys(coincidencias))
 
 
 def cargar_enviados():
@@ -227,22 +263,46 @@ def marcar_enviado(archivo):
 
 
 def dividir_video(archivo):
-    """Divide un video >2GB en partes numeradas (ffmpeg -c copy, sin recompresión)."""
+    """Divide un video >2GB en partes numeradas (ffmpeg -c copy, sin recompresión).
+
+    Cada parte se genera con -movflags +faststart (moov al inicio) para que
+    Telegram pueda reproducirla en línea sin obligar a descargarla. NO se usa
+    -f segment: el muxer de segmentos ignora +faststart y deja el moov al final.
+    """
     log("PART", f"Dividiendo {archivo.name} (>2GB) para Telegram...")
     PARTES_DIR.mkdir(exist_ok=True)
     base = archivo.stem
-    ext = archivo.suffix[1:]
-    out_pattern = str(PARTES_DIR / f"{base}_part%02d.{ext}")
-    cmd = ["ffmpeg", "-y", "-i", str(archivo),
-           "-c", "copy", "-map", "0",
-           "-f", "segment", "-segment_time", "5400",
-           "-reset_timestamps", "1", out_pattern]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        log("ERR", f"Error dividiendo: {r.stderr[-400:]}")
+    ext = archivo.suffix[1:] or "mp4"
+    dur_out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nw=1:nk=1", str(archivo)],
+        capture_output=True, text=True)
+    try:
+        duracion = float(dur_out.stdout.strip())
+    except (ValueError, AttributeError):
+        duracion = 0.0
+    if not duracion or duracion <= 0:
+        log("ERR", f"No se pudo obtener duración de {archivo.name}; no se divide.")
         return []
-    partes = sorted(PARTES_DIR.glob(f"{base}_part*.{ext}"))
-    partes = [p for p in partes if p.stat().st_size > 1024 * 1024]
+    paso = 5400  # 90 minutos por parte
+    partes = []
+    idx = 1
+    inicio = 0.0
+    while inicio < duracion:
+        parte = PARTES_DIR / f"{base}_part{idx:02d}.{ext}"
+        cmd = ["ffmpeg", "-y", "-ss", str(int(inicio)), "-i", str(archivo),
+               "-t", str(paso), "-c", "copy", "-map", "0",
+               "-movflags", "+faststart", str(parte)]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            log("ERR", f"Error dividiendo: {r.stderr[-400:]}")
+            break
+        if not parte.exists() or parte.stat().st_size <= 1024 * 1024:
+            parte.unlink(missing_ok=True)
+            break
+        partes.append(parte)
+        idx += 1
+        inicio += paso
     return partes
 
 
@@ -368,7 +428,13 @@ def fotograma(archivo):
     return str(thumb) if r.returncode == 0 and thumb.exists() else None
 
 
-async def subir_archivo(client, archivo, grupos, caption_base, keyword=""):
+async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
+    """Sube 'archivo' a cada destino de 'destinos'.
+
+    Cada destino es una tupla (grupo, topico) donde:
+        - grupo: id del chat (o username)
+        - topico: id del tema (mensaje raíz) si es un grupo con foro, o None.
+    """
     nombre = archivo.name
     try:
         if enviado(archivo):
@@ -413,25 +479,27 @@ async def subir_archivo(client, archivo, grupos, caption_base, keyword=""):
     subidos = 0
     for parte in partes:
         enviado_msg = None
-        for idx, grupo in enumerate(grupos, start=1):
+        for idx, (grupo, topico) in enumerate(destinos, start=1):
+            ref = f" → tema {topico}" if topico else ""
             try:
                 msg = await client.send_file(
                     grupo, str(parte),
                     caption=caption_base,
                     video_note=False,
                     thumb=thumb,
+                    reply_to=topico,
                     progress_callback=lambda c, t: None,
                 )
                 if enviado_msg is None:
                     enviado_msg = msg
-                log("OK", f"  → {grupo} ({idx}/{len(grupos)}) : {parte.name}")
+                log("OK", f"  → {grupo}{ref} ({idx}/{len(destinos)}) : {parte.name}")
                 subidos += 1
             except Exception as e:
                 err = str(e)
                 if "auth" in err.lower() or "not authorized" in err.lower():
-                    log("ERR", f"  → {grupo}: sesión no autorizada — comprueba credenciales/sesión: {e}")
+                    log("ERR", f"  → {grupo}{ref}: sesión no autorizada — comprueba credenciales/sesión: {e}")
                 else:
-                    log("ERR", f"  → {grupo} ({parte.name}) falló: {e}")
+                    log("ERR", f"  → {grupo}{ref} ({parte.name}) falló: {e}")
         if reenviar and enviado_msg is not None:
             try:
                 # Reenvío nativo: instantáneo (copia en servidor, no re-subir)
@@ -446,11 +514,11 @@ async def subir_archivo(client, archivo, grupos, caption_base, keyword=""):
         except OSError:
             pass
 
-    if subidos >= len(grupos) * max(1, len(partes)) or subidos >= len(grupos):
-        # Se marcó como enviado si al menos llegó a todos los grupos de la 1ª parte
+    if subidos >= len(destinos) * max(1, len(partes)) or subidos >= len(destinos):
+        # Se marcó como enviado si al menos llegó a todos los destinos de la 1ª parte
         marcar_enviado(archivo)
     else:
-        log("WARN", f"{nombre}: no se completó la subida a todos los grupos. Se reintentará.")
+        log("WARN", f"{nombre}: no se completó la subida a todos los destinos. Se reintentará.")
 
 
 async def _conectar(client, pedir_login=False):
@@ -488,8 +556,8 @@ async def run_list_chats(api_id, api_hash, folder=None, creados=False):
     log("INFO", "Modo list-chats: mostrando tus chats/grupos.")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     await _conectar(client)
-    print("\nID\tTipo\tNombre\tCarpeta\t¿Creado por ti?")
-    print("-" * 80)
+    print("\nID\tTipo\tNombre\tCarpeta\t¿Creado por ti?\t¿Foro?")
+    print("-" * 90)
     count = 0
     async for d in client.iter_dialogs():
         fid = getattr(d, "folder_id", None)
@@ -503,15 +571,58 @@ async def run_list_chats(api_id, api_hash, folder=None, creados=False):
         if creados and not creado:
             continue
         tipo = "grupo" if getattr(d, "is_group", False) else ("canal" if getattr(d, "is_channel", False) else "usuario")
-        print(f"{d.id}\t{tipo}\t{d.name}\t{f_title}\t{'sí' if creado else 'no'}")
+        forum = "sí" if (ent is not None and getattr(ent, "forum", False)) else ""
+        print(f"{d.id}\t{tipo}\t{d.name}\t{f_title}\t{'sí' if creado else 'no'}\t{forum}")
         count += 1
     print(f"\n{count} chats mostrados.")
     print("Copia los IDs (negativos para grupos/canales) o @usernames a grupos.json.")
+    print("Los grupos con '¿Foro? = sí' admiten temas: usa --list-topics <id> para verlos.")
+    await client.disconnect()
+
+
+async def run_list_topics(api_id, api_hash, grupo):
+    """Lista los temas (series) de un grupo con foro activado."""
+    from datetime import datetime as dt
+
+    from telethon.tl.functions.channels import GetForumTopicsRequest
+
+    log("INFO", f"Modo list-topics: mostrando temas de {grupo}.")
+    client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+    try:
+        await _conectar(client)
+    except SystemExit:
+        await client.disconnect()
+        raise
+    try:
+        chat = await client.get_entity(grupo)
+    except Exception as e:
+        log("ERR", f"No se pudo resolver el grupo '{grupo}': {e}")
+        await client.disconnect()
+        return
+    try:
+        res = await client(GetForumTopicsRequest(
+            channel=chat,
+            offset_date=dt(1970, 1, 1),
+            offset_id=0,
+            offset_topic=0,
+            limit=100,
+        ))
+    except Exception as e:
+        log("ERR", f"'{grupo}' no es un grupo con temas (foro): {e}")
+        await client.disconnect()
+        return
+    print(f"\nTemas de {grupo}:")
+    print("ID\tTítulo")
+    print("-" * 60)
+    for t in res.topics:
+        print(f"{t.id}\t{t.title}")
+    print(f"\n{len(res.topics)} de {res.count} temas mostrados.")
+    print("Usa esos IDs en 'temas' de grupos.json (junto a 'grupo_series': id del grupo).")
     await client.disconnect()
 
 
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
-    default, grupos = cargar_grupos()
+    default, grupos, grupo_series, temas = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     try:
         await _conectar(client)
@@ -526,7 +637,8 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
             "    docker compose run --rm uploader python /app/subir_videos.py --setup"
         )
 
-    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}")
+    info_series = f", temas en {grupo_series}: {len(temas)}" if grupo_series else ""
+    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}{info_series}")
 
     def a_carpeta(p):
         pp = Path(p)
@@ -540,9 +652,11 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
             for carpeta in carpetas:
                 for archivo in sorted(carpeta.glob("*_compressed.mp4")):
                     keyword = keyword_from_filename(archivo.name)
-                    destinos = grupos_para_keyword(keyword, default, grupos)
+                    destinos = [(g, None) for g in grupos_para_keyword(keyword, default, grupos)]
+                    if grupo_series and temas:
+                        destinos += [(grupo_series, t) for t in temas_para_keyword(keyword, temas)]
                     if not destinos:
-                        log("WARN", f"{archivo.name}: sin keyword y sin grupo default. Se omite.")
+                        log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni tema. Se omite.")
                         continue
                     log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
                     episodios = episodios_desde_json(archivo)
@@ -571,6 +685,7 @@ def main():
     grupo = parser.add_mutually_exclusive_group()
     grupo.add_argument("--setup", action="store_true", help="Iniciar sesión una vez (crea uploader.session)")
     grupo.add_argument("--list-chats", action="store_true", help="Listar chats/grupos")
+    grupo.add_argument("--list-topics", metavar="GRUPO", help="Listar los temas (series) de un grupo con foro")
     parser.add_argument("--folder", help="Filtrar por nombre del chat o carpeta (archivado/principal) (--list-chats)")
     parser.add_argument("--creados", action="store_true", help="Solo chats que creaste tú (--list-chats)")
     parser.add_argument("--once", action="store_true", help="Una sola pasada y salir")
@@ -592,6 +707,9 @@ def main():
             return
         if args.list_chats:
             asyncio.run(run_list_chats(api_id, api_hash, args.folder, args.creados))
+            return
+        if args.list_topics:
+            asyncio.run(run_list_topics(api_id, api_hash, args.list_topics))
             return
         carpetas = [c for c in args.carpetas if c] or ["/comprimidos"]
         asyncio.run(run_autoupload(api_id, api_hash, carpetas, args.intervalo, args.once))

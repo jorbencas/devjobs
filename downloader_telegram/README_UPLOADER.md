@@ -64,7 +64,9 @@ Te pedirá teléfono + código. Crea `uploader.session` (solo se hace una vez).
 docker compose run --rm uploader python /app/subir_videos.py --list-chats
 ```
 
-Muestra `ID / Tipo / Nombre / Carpeta / ¿Creado por ti?` de tus chats. Copia los IDs (los grupos y canales suelen ser negativos) o los `@usernames`.
+Muestra `ID / Tipo / Nombre / Carpeta / ¿Creado por ti? / ¿Foro?` de tus chats. Copia los IDs (los grupos y canales suelen ser negativos) o los `@usernames`.
+
+> La columna **¿Foro?** indica si el grupo tiene **temas** activados (grupo con foro). Esos grupos pueden alojar las series como temas — mira la sección *Grupo con temas (series)* más abajo.
 
 Opciones de filtro para reducir la lista:
 
@@ -123,6 +125,48 @@ Si el directo no tiene título/keyword, se aplica el mismo fallback al `default`
 
 ---
 
+## Grupo con temas (series)
+
+Además de los canales, puedes hacer que cada vídeo se suba también al **tema de la serie** dentro de un **grupo con foro** (los temas de Telegram son las "series" que creaste). Se sube SIEMPRE al canal que corresponda **y además** al tema del grupo_series que coincida con la keyword. Así, si algún día migras todo del canal al grupo, solo quitas las entradas de `grupos` y el ruteo por temas sigue funcionando solo.
+
+### 1. Descubrir el grupo con foro y sus temas
+
+```bash
+# El grupo con foro sale con '¿Foro? = sí' en --list-chats
+docker compose run --rm uploader python /app/subir_videos.py --list-chats
+
+# Lista los temas (series) del grupo con foro
+docker compose run --rm uploader python /app/subir_videos.py --list-topics -100999888777
+```
+
+`--list-topics <grupo>` imprime `ID / Título` de cada tema. Esos `ID` son los que se ponen en `temas`.
+
+### 2. Configurar `grupos.json`
+
+```json
+{
+    "default": -100999888777,
+    "grupo_series": -100999888777,
+    "temas": [
+        { "nombre": "devil may cry", "id": 123 },
+        { "nombre": "resident evil", "id": 456 },
+        { "nombre": "sendo sama", "id": 789 }
+    ],
+    "grupos": [
+        { "nombre": "prueba", "id": -100111222333 },
+        { "nombre": "sendo", "id": -100444555666 }
+    ]
+}
+```
+
+- **`grupo_series`**: id del grupo con foro donde están los temas (obligatorio si defines `temas`).
+- **`temas`**: lista de `{ "nombre", "id" }`. `nombre` es la serie (misma coincidencia flexible que los grupos); `id` es el ID del tema que devuelve `--list-topics`.
+- `grupo_series` y `temas` son **opcionales**: si no los pones, todo funciona como antes (solo canales).
+
+El ruteo por tema usa **la misma coincidencia flexible** que los canales, y cada vídeo se sube al canal de la keyword **y** al tema de esa serie. Si la keyword no coincide con ningún tema, solo se sube al canal.
+
+---
+
 ## Ponerlo en marcha (modo automático)
 
 ```bash
@@ -137,6 +181,7 @@ El servicio corre con `restart: unless-stopped`, vigila `/comprimidos` cada 60 s
 |---|---|
 | Setup de sesión | `python /app/subir_videos.py --setup` |
 | Listar chats | `python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]` |
+| Listar temas (foro) | `python /app/subir_videos.py --list-topics <grupo>` |
 | Auto-upload (bucle) | `python /app/subir_videos.py --intervalo 60 /comprimidos` |
 | Una pasada y salir | `python /app/subir_videos.py --once /comprimidos` |
 
