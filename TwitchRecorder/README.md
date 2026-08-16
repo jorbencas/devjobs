@@ -69,13 +69,17 @@ Edita `config.json`:
 
 `platform` admite un **str** (una sola fuente) o una **lista** de fuentes en orden de
 **prioridad**: se graba de la primera que esté en directo. Cada elemento es un str
-(plataforma) o un dict `{"platform": "web", "url": "..."}` para una web.
+(plataforma) o un dict `{"platform": "web", "url": "..."}` para una web. Un dict
+puede llevar campos extra: **`channel`** (handle distinto al del canal, p. ej.
+el YouTube de Sendo es `@sendosenpai`) y **`descripcion`** (`true` → usar la
+descripción del directo como caption y omitir detección de episodios).
 
 ```json
 "channels": {
     "sendosama": {
         "platform": [
             { "platform": "web", "url": "https://watch.sendosama.net/" },
+            { "platform": "youtube", "descripcion": true },
             "twitch",
             "kick"
         ]
@@ -84,13 +88,75 @@ Edita `config.json`:
 ```
 
 En este ejemplo, si la web del streamer está emitiendo (su servidor, que muestra
-el directo real y los capítulos) se graba de ahí; si no, se prueba Twitch
-(lo normal) y luego Kick.
+el directo real y los capítulos) se graba de ahí; si no, se prueba el YouTube de
+Sendo (donde normalmente emite los **domingos**), luego Twitch (lo normal) y Kick.
 
 > **Ojo — la web suele estar CAÍDA.** Es un servidor propio que Sendo enciende
 > solo cuando quiere mostrar los capítulos (normalmente emite en Twitch y la
 > web no responde). Por eso la comprobación web hace un pre-check HTTP rápido
 > (~4 s) y, si no responde, pasa directo a la siguiente fuente.
+
+### Detección de episodios y corte: configurables por fuente
+
+Cada fuente puede llevar estas marcas opcionales (todas independientes):
+
+- **`"detectar": true/false`** — control de la **detección de episodios** (OCR
+  de la franja superior, que además genera el caption `Episodio 1-4`). Por
+  defecto (o `true`) la fuente **detecta**; con `false` el recorder lo comunica
+  al monitor (sidecar `{"detectar": false}`) y este no hace OCR.
+- **`"corte": true/false`** — control del **corte de extremos por fuente**. Con
+  `"corte": true` (o sin especificar) la fuente permite el corte por episodios.
+  Con `"corte": false` el monitor **no recorta** (aunque detecte). El flag
+  global `DIRECTO_COMPLETO` del monitor desactiva el corte para todo.
+- **`"descripcion": true`** — al grabar desde esa fuente, el recorder guarda la
+  **descripción del directo** (p. ej. la de YouTube) en un sidecar
+  `<grabado>_descripcion.json`. Ese sidecar le dice al monitor que **omita la
+  detección de episodios y el corte** de extremos (no hay franja de episodios
+  en YouTube) y que use la descripción como caption en Telegram.
+
+Detección y corte son **independientes**: se puede detectar sin cortar (sidecar
+`{"corte": false}` sin más) o cortar sin detectar (no tiene sentido, el corte
+necesita la detección).
+
+En la práctica, **solo sendosama en fuentes no-YouTube detecta episodios**
+(`"detectar": true` en web/twitch/kick); el resto de canales/fuentes no detecta
+ni corta:
+
+```json
+"sendosama": {
+    "platform": [
+        { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+        { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+        { "platform": "twitch", "detectar": true, "corte": true },
+        { "platform": "kick", "detectar": true, "corte": true }
+    ]
+}
+```
+
+Para canales como `midudev` o `mouredev` (que emiten en **YouTube y Twitch a la
+vez**) se configura **YouTube primero y Twitch como respaldo sin detección ni
+corte**:
+
+```json
+"midudev": {
+    "platform": [
+        { "platform": "youtube", "descripcion": true },
+        { "platform": "twitch", "detectar": false, "corte": false }
+    ]
+}
+```
+
+La lista es un **orden de prioridad** (retry): el recorder comprueba las fuentes
+en orden y graba **solo la primera que esté en directo**. Así, si el directo está
+en YouTube y Twitch a la vez, solo se graba YouTube (sin colisiones/duplicados);
+si YouTube está caído, cae a Twitch automáticamente. Lo mismo para `mouredev`.
+
+Si **a sendosama le cortan el directo en Twitch y se pasa a Kick**, el recorder
+detecta el cambio de plataforma a mitad de emisión: cierra la parte actual y abre
+una nueva grabando desde Kick (mismo nombre base + `__parte2`), y **al terminar
+el directo concatena todas las partes en un único archivo** (ffmpeg, re-codifica
+y normaliza resoluciones) antes de pasarlo al monitor. Así sale **un solo vídeo
+y un solo mensaje de Telegram**.
 
 ### Autotest automático de la web
 
@@ -114,6 +180,50 @@ luego reaparece en directo.
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
 | `copy_to_test` | Si `true`, al terminar un directo mueve la grabación a `test_path` renombrada a `*_completed.mp4` |
 | `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
+
+### Horarios por canal
+
+Cada canal puede **sobrescribir** los `days`/`start_time` globales con sus propios
+campos `days` y `start_time`. `start_time` acepta un **str** (misma hora todos
+los días) o un **dict** por día de la semana (en inglés, como `days`):
+
+```json
+"channels": {
+    "sendosama": {
+        "platform": [
+            { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+            { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+            { "platform": "twitch", "detectar": true, "corte": true },
+            { "platform": "kick", "detectar": true, "corte": true }
+        ],
+        "start_time": { "Sunday": "19:00" }
+    },
+    "midudev": {
+        "platform": [
+            { "platform": "youtube", "descripcion": true },
+            { "platform": "twitch", "detectar": false, "corte": false }
+        ],
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+        "start_time": "18:00"
+    },
+    "mouredev": {
+        "platform": [
+            { "platform": "youtube", "descripcion": true },
+            { "platform": "twitch", "detectar": false, "corte": false }
+        ],
+        "days": ["Thursday"],
+        "start_time": "18:00"
+    }
+}
+```
+
+Con esto:
+- `sendosama`: todos los días a las `21:30` (global), pero los **domingos a las `19:00`**.
+- `midudev`: lunes a jueves a las `18:00`.
+- `mouredev`: los jueves a las `18:00`.
+
+El scheduler espera a la hora más temprana del día y, a partir de ahí, graba cada
+canal solo en su día y cuando ya ha pasado su hora de inicio.
 
 > **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/data/grabaciones:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/data/grabaciones/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 

@@ -275,7 +275,6 @@ La GPU se detecta automáticamente y se aplica en **todos** los modos de edició
 | Flag | Descripción |
 |------|-------------|
 | `-n, --non-interactive` | Sin prompts, usa valores por defecto |
-| `-c, --save-config` | Guarda configuración en conf.json |
 | `-v, --verbose` | Muestra progreso línea por línea |
 | `--two-pass` | Two-pass encoding (mejor calidad con --max-gb) |
 | `--hw-accel` | Usar aceleración por hardware |

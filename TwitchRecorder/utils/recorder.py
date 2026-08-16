@@ -1,3 +1,4 @@
+import json
 import platform
 import re
 import shutil
@@ -22,7 +23,8 @@ def _normalize_keyword(text: str, max_len: int = 40) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     words = [w for w in text.split(" ") if w]
     # Intentar quedarse con las primeras palabras que sean 'informativas'
-    stop = {"de", "la", "el", "los", "las", "del", "en", "con", "y", "a", "para", "por", "es", "un", "una"}
+    stop = {"de", "la", "el", "los", "las", "del", "en", "con", "y", "a", "para", "por", "es", "un", "una",
+            "lo", "que", "se", "su", "al", "no", "mi", "me", "te", "le"}
     selected = [w for w in words if w not in stop][:2] or words[:2]
     return "_".join(selected)[:max_len]
 
@@ -73,18 +75,20 @@ def parse_sources(platform, url: str = "") -> list:
       un str (plataforma) o un dict {"platform": ..., "url": ...} (para la
       fuente "web" con su URL).
     - Mantiene compatibilidad con la config antigua (platform como str).
-    Devuelve una lista de dicts {'platform', 'url'}.
-    """
+    - Conserva campos extra del dict (ej. "channel" para un handle distinto al
+      del canal, o "descripcion": true para captions propios).
+    Devuelve una lista de dicts {'platform', 'url', ...}."""
     if isinstance(platform, (list, tuple)):
         sources = []
         for s in platform:
             if isinstance(s, str):
                 sources.append({"platform": s, "url": url or ""})
             elif isinstance(s, dict):
-                sources.append({
-                    "platform": s.get("platform", "web"),
-                    "url": s.get("url", "") or (url or ""),
-                })
+                source = dict(s)
+                source.setdefault("platform", "web")
+                if not source.get("url"):
+                    source["url"] = url or ""
+                sources.append(source)
         return sources or [{"platform": "twitch", "url": ""}]
     return [{"platform": platform, "url": url or ""}]
 
@@ -106,20 +110,22 @@ class Recorder:
         self.is_recording = False
         self.finished = False
         self._current_file = None
+        self._partes = []
         self._stop_event = threading.Event()
 
     def _is_source_live(self, src: dict) -> bool:
         platform = src["platform"]
         s_url = src.get("url", "")
+        canal = src.get("channel") or self.channel
         if platform == "twitch":
             from utils.twitch import is_live
-            return is_live(self.channel)
+            return is_live(canal)
         elif platform == "youtube":
             from utils.youtube import is_live
-            return is_live(self.channel)
+            return is_live(canal)
         elif platform == "kick":
             from utils.kick import is_live
-            return is_live(self.channel)
+            return is_live(canal)
         elif platform == "web":
             from utils.web import is_live
             return is_live(s_url or self.channel)
@@ -166,12 +172,13 @@ class Recorder:
         src = self._active or self.sources[0]
         platform = src["platform"]
         s_url = src.get("url", "")
+        canal = src.get("channel") or self.channel
         if platform == "twitch":
-            return f"https://www.twitch.tv/{self.channel}"
+            return f"https://www.twitch.tv/{canal}"
         elif platform == "youtube":
-            return f"https://www.youtube.com/@{self.channel}/live"
+            return f"https://www.youtube.com/@{canal}/live"
         elif platform == "kick":
-            return f"https://kick.com/{self.channel}"
+            return f"https://kick.com/{canal}"
         elif platform == "web":
             return s_url or self.channel
         return ""
@@ -181,14 +188,8 @@ class Recorder:
         Algunos canales de Twitch dejan el título genérico ("<canal> (live)") en
         el campo title, pero ponen el título real en la descripción. Si detectamos
         un título genérico, usamos la descripción como fuente del título."""
-        url = self.get_stream_url()
-        if not url:
-            return ""
-        try:
-            from yt_dlp import YoutubeDL
-            with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
-                info = ydl.extract_info(url, download=False)
-        except Exception:
+        info = self._fetch_live_info()
+        if not info:
             return ""
 
         title = info.get("title", "") or ""
@@ -198,6 +199,24 @@ class Recorder:
         if generic and desc:
             return desc
         return title
+
+    def _fetch_live_info(self) -> dict:
+        """Extrae la metadata del directo con yt-dlp (info dict). Devuelve {}
+        si falla o no hay URL."""
+        url = self.get_stream_url()
+        if not url:
+            return {}
+        try:
+            from yt_dlp import YoutubeDL
+            with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
+                return ydl.extract_info(url, download=False) or {}
+        except Exception:
+            return {}
+
+    def get_live_description(self) -> str:
+        """Descripción completa del directo (p. ej. la de YouTube). Se usa como
+        caption de Telegram para canales que no detectan episodios."""
+        return (self._fetch_live_info().get("description") or "").strip()
 
     def get_live_keyword(self) -> str:
         return _normalize_keyword(self.get_live_title())
@@ -214,6 +233,11 @@ class Recorder:
             output_path = self._current_file
         else:
             output_path = get_recording_path(self.channel, self.record_path, keyword)
+            # Cambio de plataforma a mitad del directo (p. ej. Twitch → Kick):
+            # se graba en una parte nueva con el MISMO nombre base + "__parteN".
+            if self._partes:
+                base = self._partes[0]
+                output_path = base.with_name(base.stem + f"__parte{len(self._partes) + 1}.mp4")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -236,10 +260,51 @@ class Recorder:
             self.is_recording = True
             self._current_file = output_path
             self._stop_event.clear()
+
+            # Sidecar de configuración del directo para el monitor: solo cuando
+            # la fuente NO usa los valores por defecto (descripción propia,
+            # sin detección de episodios y/o sin corte de extremos).
+            if src.get("descripcion") or src.get("detectar") is False or src.get("corte") is False:
+                self._guardar_sidecar(output_path, src)
+
             return True
         except Exception as e:
             log.error(f"[{self.channel}] Error al iniciar grabación: {e}")
             return False
+
+    def _guardar_sidecar(self, output_path: Path, src: dict) -> None:
+        """Guarda '<output>_descripcion.json' con la configuración del directo:
+        - "descripcion": descripción del directo (recortada al máximo de caption
+          de Telegram, 1024 chars). El monitor la usa como caption y omite la
+          detección de episodios/corte.
+        - "detectar": false cuando la fuente está configurada sin detección de
+          episodios (el monitor no hace OCR).
+        - "corte": false cuando la fuente está configurada sin corte de extremos
+          (el monitor no recorta, aunque el OCR siga disponible).
+        Detección y corte son independientes: se puede detectar sin cortar.
+        """
+        data = {}
+        if src.get("descripcion"):
+            desc = self.get_live_description()
+            if not desc:
+                log.warning(f"[{self.channel}] Sin descripción que guardar")
+            else:
+                data["descripcion"] = desc[:1024]
+        if src.get("detectar") is False:
+            data["detectar"] = False
+        if src.get("corte") is False:
+            data["corte"] = False
+        if not data:
+            return
+        try:
+            sidecar = output_path.with_name(output_path.stem + "_descripcion.json")
+            sidecar.write_text(
+                json.dumps(data, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            log.info(f"[{self.channel}] Sidecar guardado para el monitor: {data}")
+        except Exception as e:
+            log.warning(f"[{self.channel}] No se pudo guardar el sidecar: {e}")
 
     def _start_streamlink(self, output_path: Path, popen_kwargs: dict) -> None:
         from utils.twitch import get_best_quality
@@ -293,19 +358,119 @@ class Recorder:
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
             log.info(f"[{self.channel}] Grabación finalizada ({size})")
+            self._concatenar_partes()
             self._move_to_completed()
         else:
             log.info(f"[{self.channel}] Grabación finalizada")
+
+    def _add_parte_actual(self) -> None:
+        """Cierra la parte actual de un directo (cambio de plataforma a mitad de
+        emisión) y la guarda en self._partes para concatenarla al final."""
+        if self._current_file and self._current_file.exists():
+            self._partes.append(self._current_file)
+            log.info(f"[{self.channel}] Parte {len(self._partes)} cerrada: {self._current_file.name}")
+        self._current_file = None
+        self.process = None
+        self.is_recording = False
+
+    def _concatenar_partes(self) -> None:
+        """Une todas las partes de un directo que cambió de plataforma a mitad de
+        emisión en un único archivo (nombre base sin sufijo __parteN). Si algo
+        falla, se mantienen las partes por separado."""
+        partes = [p for p in (self._partes + [self._current_file]) if p and p.exists()]
+        if not self._partes or len(partes) < 2 or not self._current_file:
+            return
+        final = self._partes[0].with_name(self._partes[0].stem + ".mp4")
+        tmp = final.with_name(final.stem + "_tmp.mp4")
+        log.info(f"[{self.channel}] Concatenando {len(partes)} partes del directo...")
+        if not self._concatenar(partes, tmp):
+            log.warning(f"[{self.channel}] No se pudo concatenar; se mantienen las partes por separado")
+            return
+        # Primero colocar el concat en su nombre final y SOLO entonces borrar
+        # las partes (si algo falla antes, las partes siguen intactas).
+        try:
+            shutil.move(str(tmp), str(final))
+        except Exception as e:
+            log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
+            return
+        # Sidecar de descripción de la primera parte (si existe) → archivo final
+        for p in partes:
+            sc = p.with_name(p.stem + "_descripcion.json")
+            if sc.exists():
+                try:
+                    shutil.copy(sc, final.with_name(final.stem + "_descripcion.json"))
+                except Exception:
+                    pass
+                break
+        for p in partes:
+            sc = p.with_name(p.stem + "_descripcion.json")
+            for f in (p, sc):
+                try:
+                    if f.exists():
+                        f.unlink()
+                except Exception:
+                    pass
+        self._partes = []
+        self._current_file = final
+        log.info(f"[{self.channel}] Partes del directo unidas en {final.name}")
+
+    def _concatenar(self, partes: list, output: Path) -> bool:
+        """Concatena las partes con ffmpeg (concat filter + re-encode), escalando
+        cada entrada a la altura común más baja para que el filtro no falle."""
+        ffmpeg = shutil.which("ffmpeg")
+        ffprobe = shutil.which("ffprobe")
+        if not ffmpeg or not ffprobe:
+            log.warning(f"[{self.channel}] ffmpeg/ffprobe no disponibles, sin concatenar")
+            return False
+        try:
+            heights = []
+            for p in partes:
+                out = subprocess.check_output(
+                    [ffprobe, "-v", "error", "-select_streams", "v:0",
+                     "-show_entries", "stream=height", "-of", "csv=p=0", str(p)],
+                    stderr=subprocess.DEVNULL,
+                )
+                out = out.decode().strip()
+                if out:
+                    heights.append(int(out))
+            if not heights:
+                return False
+            h = min(heights)
+            n = len(partes)
+            filters = [f"[{i}:v]scale=-2:{h}[v{i}]" for i in range(n)]
+            vlabels = "".join(f"[v{i}]" for i in range(n))
+            alabels = "".join(f"[{i}:a]" for i in range(n))
+            filters.append(f"{vlabels}{alabels}concat=n={n}:v=1:a=1[vout][aout]")
+            cmd = [ffmpeg, "-y"]
+            for p in partes:
+                cmd += ["-i", str(p)]
+            cmd += [
+                "-filter_complex", ";".join(filters),
+                "-map", "[vout]", "-map", "[aout]",
+                "-c:v", "libx264", "-crf", "23", "-preset", "medium",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart", "-f", "mp4",
+                str(output),
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception as e:
+            log.warning(f"[{self.channel}] Error al concatenar: {e}")
+            return False
 
     def _move_to_completed(self) -> None:
         if not self.copy_to_test or not self.test_path or not self._current_file:
             return
         try:
             self.test_path.mkdir(parents=True, exist_ok=True)
-            dest = self.test_path / f"{self._current_file.stem}_completed.mp4"
-            shutil.move(str(self._current_file), str(dest))
-            log.info(f"[{self.channel}] Movida a test/ como {dest.name}")
+            orig = self._current_file
+            dest = self.test_path / f"{orig.stem}_completed.mp4"
+            sidecar = orig.with_name(orig.stem + "_descripcion.json")
+            shutil.move(str(orig), str(dest))
             self._current_file = dest
+            if sidecar.exists():
+                shutil.move(str(sidecar), dest.with_name(dest.stem + "_descripcion.json"))
+                log.info(f"[{self.channel}] Sidecar de descripción movido junto al completado")
         except Exception as e:
             log.error(f"[{self.channel}] Error moviendo a test/: {e}")
 
@@ -321,16 +486,31 @@ class Recorder:
                 return
 
             if self.process and self.process.poll() is not None:
+                prev_platform = self._active["platform"] if self._active else self.sources[0]["platform"]
                 if not self.is_live():
                     log.info(f"[{self.channel}] Directo finalizado")
                     self.stop()
                     return
 
-                log.warning(f"[{self.channel}] Conexión perdida, reconectando en {self.retry_interval}s...")
-                time.sleep(self.retry_interval)
+                new_platform = self._active["platform"] if self._active else prev_platform
+                if new_platform != prev_platform:
+                    # Cambio de plataforma a mitad del directo (p. ej. le cortan
+                    # en Twitch y se va a Kick): se cierra la parte actual y se
+                    # abre una nueva (mismo nombre base + "__parteN") desde la
+                    # nueva plataforma. Al terminar el directo se concatenan.
+                    log.warning(
+                        f"[{self.channel}] Cambio de plataforma {prev_platform} → {new_platform}: "
+                        f"cerrando parte actual y empezando nueva desde {new_platform}"
+                    )
+                    self._add_parte_actual()
+                    if not self._stop_event.is_set() and self.is_live():
+                        self.start()
+                else:
+                    log.warning(f"[{self.channel}] Conexión perdida, reconectando en {self.retry_interval}s...")
+                    time.sleep(self.retry_interval)
 
-                if not self._stop_event.is_set() and self.is_live():
-                    log.info(f"[{self.channel}] Reconectado, reanudando grabación")
-                    self.start()
+                    if not self._stop_event.is_set() and self.is_live():
+                        log.info(f"[{self.channel}] Reconectado, reanudando grabación")
+                        self.start()
 
             time.sleep(5)

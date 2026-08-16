@@ -70,7 +70,35 @@ compress_video() {
     local cut_inicio=""
     local cut_fin=""
     local duration
-    if command -v python3 >/dev/null 2>&1 && command -v tesseract >/dev/null 2>&1 \
+    # Sidecar '*_descripcion.json' del recorder (config por fuente). Campos:
+    #   {"descripcion": "..."}  → caption propio (p. ej. YouTube): se omite la
+    #                             detección de episodios y el corte de extremos.
+    #   {"detectar": false}     → fuente SIN detección de episodios (sin OCR).
+    #   {"corte": false}        → fuente SIN corte de extremos (aunque detecte).
+    # Detección y corte son independientes. Sin sidecar → por defecto se detecta
+    # (OCR) y se puede cortar. DIRECTO_COMPLETO=true desactiva el corte global.
+    local sc_desc=""
+    local sc_detectar="true"
+    local sc_corte="true"
+    local desc_sidecar="${input%.*}_descripcion.json"
+    if [[ -f "$desc_sidecar" ]]; then
+        sc_desc=$(python3 -c "import sys,json;print(json.load(open('$desc_sidecar')).get('descripcion',''))" 2>/dev/null)
+        sc_detectar=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('detectar',True)).lower())" 2>/dev/null)
+        sc_corte=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('corte',True)).lower())" 2>/dev/null)
+    fi
+
+    local skip_detectar="false"
+    if [[ -n "$sc_desc" ]]; then
+        cp "$desc_sidecar" "$det_json" 2>/dev/null
+        log "  Descripción propia del canal: se omite detección y corte de episodios"
+        skip_detectar="true"
+    elif [[ "$sc_detectar" != "true" ]]; then
+        log "  Fuente sin detección de episodios (config): se omite OCR y corte"
+        rm -f "$det_json"
+        skip_detectar="true"
+    fi
+
+    if [[ "$skip_detectar" != "true" ]] && command -v python3 >/dev/null 2>&1 && command -v tesseract >/dev/null 2>&1 \
        && [[ -f "$SCRIPT_DIR/detectar_episodios.py" ]]; then
         local det
         det=$(python3 "$SCRIPT_DIR/detectar_episodios.py" "$input" "$OCR_STEP" "$CORTE_MARGEN" 2>/dev/null)
@@ -96,7 +124,13 @@ compress_video() {
         fi
     fi
 
-    # directo_completo: mantener todo el vídeo, ignorar el corte de extremos
+    # Corte de extremos: por fuente (sidecar) y por flag global DIRECTO_COMPLETO.
+    # La detección (OCR) ya se hizo arriba de forma independiente.
+    if [[ "$sc_corte" != "true" ]]; then
+        cut_inicio=""
+        cut_fin=""
+        [[ -z "$sc_desc" ]] && log "  Fuente sin corte (config): se mantiene el vídeo completo"
+    fi
     if [[ "$DIRECTO_COMPLETO" == "true" ]]; then
         cut_inicio=""
         cut_fin=""
@@ -190,6 +224,9 @@ compress_video() {
         mkdir -p "$PROCESSED_DIR"
         mv "$input" "$PROCESSED_DIR/$filename"
         log "  Original movido a: $PROCESSED_DIR/$filename"
+        # El sidecar de descripción ya se copió al episodios.json; se limpia
+        # para no re-procesarlo en el futuro.
+        rm -f "$desc_sidecar"
 
         return 0
     else

@@ -111,6 +111,7 @@ docker compose run --rm uploader python /app/subir_videos.py --list-chats --fold
 - No exige el nombre exacto del grupo. Compara normalizado (sin mayúsculas/tildes, espacios colapsados) y acepta:
   - **Substring** del nombre completo: `devil may cryyy` → grupo `"devil may cry"`.
   - **Palabra significativa** del nombre (≥4 letras): `resident evily` → grupo `"resident evil"`; `sendo sama` → `"sendo"`.
+  - **Prefijo (singular/plural)**: `pelicula_el` → tema `"peliculas"`.
 - Solo falla (y va al `default`) cuando el nombre del grupo no aparece en absoluto en el título (p. ej. un typo de letras como `residnet evil`).
 
 **Aliases (una misma palabra puede apuntar al mismo canal):** varias entradas de `grupos` pueden compartir `id`. Ejemplos configurados:
@@ -164,6 +165,41 @@ docker compose run --rm uploader python /app/subir_videos.py --list-topics -1009
 - `grupo_series` y `temas` son **opcionales**: si no los pones, todo funciona como antes (solo canales).
 
 El ruteo por tema usa **la misma coincidencia flexible** que los canales, y cada vídeo se sube al canal de la keyword **y** al tema de esa serie. Si la keyword no coincide con ningún tema, solo se sube al canal.
+
+**Películas:** si el contenido detectado es una película (el OCR/metadata genera `Película · TÍTULO`), el vídeo se enruta **también** al tema que coincida con "película" (p. ej. un tema llamado `"peliculas"`), aunque el título del directo no mencione la palabra. Así basta añadir el tema:
+
+```json
+"temas": [
+    { "nombre": "peliculas", "id": 123 },
+    { "nombre": "devil may cry", "id": 456 }
+]
+```
+
+El caption de la película será `Película · TÍTULO` (el nombre lo saca el OCR de la franja del directo).
+
+---
+
+## Jerarquía de la descripción (caption) en Telegram
+
+El texto (pie) que acompaña a cada vídeo en Telegram se elige en este orden:
+
+1. **Metadata del monitor** (`<video>_episodios.json`): la que genera el monitor
+   junto al comprimido. Puede ser:
+   - La **descripción propia del canal** (p. ej. la de YouTube) si el recorder la
+     guardó con `"descripcion": true` (canales como `midudev`/`mouredev`, o Sendo
+     los domingos). Se usa tal cual.
+   - El **rango de episodios** detectado por OCR (p. ej. `Episodio 1-4`,
+     `Temporada 2 · Episodio 1-4`). En el **caption mostrado se quita la palabra
+     "Episodio(s)"**: `Episodio 1-4` → `1-4`, `Temporada 2 · Episodio 1-4` →
+     `Temporada 2 · 1-4`. (El enrutado a temas sigue usando el texto completo.)
+2. **OCR del propio uploader**: si no hay metadata, hace su propia detección de
+   episodios/temporada/película sobre el vídeo (mismo tratamiento del caption).
+3. **Por defecto**: `🎬 Directo de <canal>` (el canal se saca del nombre del
+   archivo; antes estaba fijo "sendo sama").
+
+Si un vídeo **supera los 2 GB** (límite de Telegram) y el uploader lo parte en
+varias partes, cada parte añade el sufijo `(n/total)` al caption: `1-4 (1/2)` y
+`1-4 (2/2)`.
 
 ---
 

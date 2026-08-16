@@ -173,6 +173,14 @@ def keyword_from_filename(filename: str) -> str:
     return ""
 
 
+def canal_from_filename(filename: str) -> str:
+    """Extrae el canal del nombre del archivo (primer token, ej.
+    'midudev_2026-08-16_18-00-00_..._compressed.mp4' → 'midudev')."""
+    base = Path(filename).stem
+    canal = base.split("_", 1)[0]
+    return canal or ""
+
+
 def _normalizar_texto(s: str) -> str:
     """Normaliza para comparar: minúsculas, sin tildes, sin signos,
     espacios colapsados y quita una 'y' extra al final (ej. 'cry' vs 'cryy')."""
@@ -189,7 +197,8 @@ def _normalizar_texto(s: str) -> str:
 def _entrada_coincide(nombre, kw):
     """¿La keyword del directo coincide con el nombre de un grupo/tema?
     Coincidencia flexible: el 'nombre' (o una palabra significativa del nombre)
-    debe aparecer en la keyword, aunque el directo repita letras (ej. 'cryyy')."""
+    debe aparecer en la keyword, aunque el directo repita letras (ej. 'cryyy').
+    También tolera singular/plural y prefijos ('peliculas' ↔ 'pelicula')."""
     nombre = _normalizar_texto(nombre)
     if not nombre:
         return False
@@ -198,7 +207,14 @@ def _entrada_coincide(nombre, kw):
         return True
     # coincidencia por palabra significativa del nombre (>= 4 letras)
     palabras = [p for p in nombre.split() if len(p) >= 4]
-    return bool(palabras and any(p in kw for p in palabras))
+    if any(p in kw for p in palabras):
+        return True
+    # coincidencia por prefijo (singular/plural): 'pelicula' ↔ 'peliculas'
+    for p in palabras:
+        for kw_word in kw.split():
+            if len(kw_word) >= 4 and (kw_word.startswith(p) or p.startswith(kw_word)):
+                return True
+    return False
 
 
 def grupos_para_keyword(keyword, default, grupos):
@@ -320,6 +336,19 @@ def episodios_desde_json(archivo):
         return data.get("descripcion", "") or data.get("rango", "") or ""
     except (OSError, json.JSONDecodeError):
         return ""
+
+
+def caption_sin_episodio(texto):
+    """Caption de Telegram sin la palabra 'Episodio(s)' cuando el texto ES un
+    rango de episodios (p. ej. 'Episodio 1-4' → '1-4', 'Temporada 2 · Episodio 1-4'
+    → 'Temporada 2 · 1-4'). No toca descripciones libres (p. ej. las de YouTube),
+    que podrían contener 'episodio' como palabra normal."""
+    if not texto:
+        return texto
+    import re
+    if not re.match(r"(?i)^\s*(temporada\s*\d+\s*[·\-\|]\s*)?episodio(s)?\s*\d", texto):
+        return texto
+    return re.sub(r"\s+", " ", re.sub(r"(?i)\bepisodio(s)?\b", "", texto)).strip()
 
 
 def detectar_episodios(archivo):
@@ -477,14 +506,20 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
         return
 
     subidos = 0
-    for parte in partes:
+    total_partes = len(partes)
+    for i, parte in enumerate(partes, start=1):
+        # Si el vídeo se parte (por superar 2 GB), cada parte indica cuál es:
+        # p. ej. '1-4 (1/2)' y '1-4 (2/2)'.
+        cap = caption_base
+        if total_partes > 1:
+            cap = f"{caption_base} ({i}/{total_partes})"
         enviado_msg = None
         for idx, (grupo, topico) in enumerate(destinos, start=1):
             ref = f" → tema {topico}" if topico else ""
             try:
                 msg = await client.send_file(
                     grupo, str(parte),
-                    caption=caption_base,
+                    caption=cap,
                     video_note=False,
                     thumb=thumb,
                     reply_to=topico,
@@ -655,20 +690,29 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                     destinos = [(g, None) for g in grupos_para_keyword(keyword, default, grupos)]
                     if grupo_series and temas:
                         destinos += [(grupo_series, t) for t in temas_para_keyword(keyword, temas)]
+                        episodios = episodios_desde_json(archivo)
+                        if not episodios:
+                            episodios = detectar_episodios(archivo)
+                            log("INFO", f"{archivo.name}: OCR de episodios realizado")
+                        # Si el contenido detectado es una película, enrutar también
+                        # al tema que coincida (p. ej. 'peliculas'), aunque la keyword
+                        # del título no la mencione.
+                        if episodios:
+                            destinos += [(grupo_series, t) for t in temas_para_keyword(str(episodios), temas)]
+                        destinos = list(dict.fromkeys(destinos))
                     if not destinos:
                         log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni tema. Se omite.")
                         continue
                     log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
-                    episodios = episodios_desde_json(archivo)
-                    if not episodios:
-                        episodios = detectar_episodios(archivo)
-                        log("INFO", f"{archivo.name}: OCR de episodios realizado")
                     if episodios:
-                        caption_base = str(episodios)
-                        log("INFO", f"{archivo.name}: episodio(s): {episodios}")
+                        # Routing con el texto completo; el caption se muestra
+                        # sin la palabra 'Episodio' (p. ej. '1-4').
+                        caption_base = caption_sin_episodio(str(episodios))
+                        log("INFO", f"{archivo.name}: episodio(s): {episodios} → caption '{caption_base}'")
                     else:
-                        caption_base = "🎬 Directo sendo sama"
-                        log("WARN", f"{archivo.name}: sin episodios detectados")
+                        canal = canal_from_filename(archivo.name)
+                        caption_base = f"🎬 Directo de {canal}" if canal else "🎬 Directo"
+                        log("WARN", f"{archivo.name}: sin episodios ni descripción, caption por defecto")
                     await subir_archivo(client, archivo, destinos, caption_base, keyword)
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")

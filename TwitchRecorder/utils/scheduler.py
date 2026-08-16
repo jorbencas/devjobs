@@ -7,28 +7,51 @@ from utils.logger import log
 from utils.recorder import Recorder
 
 
-def is_scheduled_day(config: dict) -> bool:
-    today = datetime.now().strftime("%A")
-    return today in config.get("days", [])
+def _parse_minutes(t: str) -> int:
+    h, m = map(int, t.split(":"))
+    return h * 60 + m
 
 
-def is_after_start_time(config: dict) -> bool:
+def is_after_time(t: str) -> bool:
     now = datetime.now()
-    start = config.get("start_time", "19:55")
-    h, m = map(int, start.split(":"))
-    return now.hour * 60 + now.minute >= h * 60 + m
+    return now.hour * 60 + now.minute >= _parse_minutes(t)
 
 
-def _seconds_until_start(config: dict) -> int:
+def _seconds_until_time(t: str) -> int:
     now = datetime.now()
-    start = config.get("start_time", "19:55")
-    h, m = map(int, start.split(":"))
-    start_minutes = h * 60 + m
     now_minutes = now.hour * 60 + now.minute
-    diff = start_minutes - now_minutes
+    diff = _parse_minutes(t) - now_minutes
     if diff <= 0:
         return 0
     return diff * 60
+
+
+def _dias_para(extra: dict, config: dict) -> list:
+    dias = extra.get("days") or config.get("days", [])
+    if isinstance(dias, str):
+        dias = [dias]
+    return list(dias)
+
+
+def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:
+    st = extra.get("start_time") or config.get("start_time", "19:55")
+    if isinstance(st, dict):
+        return st.get(day) or st.get("*") or config.get("start_time", "19:55")
+    return st
+
+
+def _programados_hoy(config: dict, channels: list) -> dict:
+    """Devuelve {canal: {start_time, extra}} de los canales con emisión hoy."""
+    today = datetime.now().strftime("%A")
+    out = {}
+    for channel, platform_name, url, extra in channels:
+        if today not in _dias_para(extra, config):
+            continue
+        out[channel] = {
+            "start_time": _hora_inicio_para(extra, config, today),
+            "extra": extra,
+        }
+    return out
 
 
 def _get_today() -> str:
@@ -47,34 +70,37 @@ def run_scheduler(dry_run: bool = False):
     test_path = config.get("test_path", "")
 
     log.info("=== TwitchRecorder iniciado ===")
-    log.info(f"Canales: {[ch for ch, _ in channels_with_platform]}")
+    log.info(f"Canales: {[ch for ch, _, _, _ in channels_with_platform]}")
     log.info(f"Comprobando cada {check_interval}s")
     if dry_run:
         log.info("Modo DRY-RUN activo")
 
-    if not is_scheduled_day(config):
-        log.info("Hoy no es día programado. Saliendo.")
-        return
+    recorders = {}
+    for channel, platform_name, url, extra in channels_with_platform:
+        recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
 
-    if not is_after_start_time(config):
-        remaining = _seconds_until_start(config)
+    # Esperar a la hora de inicio más temprana de los canales de hoy
+    progs = _programados_hoy(config, channels_with_platform)
+    if not progs:
+        log.info("Hoy no hay canales programados. Saliendo.")
+        return
+    earliest = min(p["start_time"] for p in progs.values())
+    if not is_after_time(earliest):
+        remaining = _seconds_until_time(earliest)
         mins, secs = divmod(remaining, 60)
-        log.info(f"Aún no es hora de inicio. Esperando {mins}m {secs:02d}s para start_time...")
-        while not is_after_start_time(config):
+        log.info(f"Hoy: {progs}")
+        log.info(f"Aún no es hora de inicio (primera emisión a las {earliest}). Esperando {mins}m {secs:02d}s...")
+        while not is_after_time(earliest):
             time.sleep(10)
-            remaining = _seconds_until_start(config)
+            remaining = _seconds_until_time(earliest)
             if remaining > 0 and remaining % 60 < 10:
                 mins, secs = divmod(remaining, 60)
                 log.info(f"Esperando {mins}m {secs:02d}s...")
         log.info("Hora de inicio alcanzada")
 
-    recorders = {}
-    for channel, platform_name, url in channels_with_platform:
-        recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
-
     current_day = _get_today()
 
-    while is_scheduled_day(config):
+    while True:
         today = _get_today()
         if today != current_day:
             log.info("Nuevo día detectado, reiniciando grabadores...")
@@ -85,10 +111,17 @@ def run_scheduler(dry_run: bool = False):
 
         config = load_config()
         new_channels_with_platform = get_channels_with_platform(config)
-        for channel, platform_name, url in new_channels_with_platform:
+        for channel, platform_name, url, extra in new_channels_with_platform:
             if channel not in recorders:
                 log.info(f"[{channel}] Nuevo canal detectado ({platform_name}), añadiendo...")
                 recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
+        channels_with_platform = new_channels_with_platform
+
+        progs = _programados_hoy(config, channels_with_platform)
+        if not progs:
+            log.info("Ningún canal programado para hoy. Esperando al próximo día...")
+            time.sleep(check_interval)
+            continue
 
         all_offline = True
 
@@ -96,6 +129,13 @@ def run_scheduler(dry_run: bool = False):
             if recorder.is_recording or recorder.finished:
                 all_offline = False
                 continue
+
+            prog = progs.get(channel)
+            if not prog:
+                continue  # no programado hoy
+
+            if not is_after_time(prog["start_time"]):
+                continue  # aún no es su hora de inicio
 
             if recorder.is_live():
                 all_offline = False
@@ -117,9 +157,6 @@ def run_scheduler(dry_run: bool = False):
             log.info("Todos los canales offline. Esperando...")
 
         time.sleep(check_interval)
-
-        if not is_scheduled_day(config):
-            break
 
     for recorder in recorders.values():
         if recorder.is_recording:

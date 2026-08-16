@@ -2,10 +2,28 @@
     "channels": {
         "sendosama": {
             "platform": [
-                { "platform": "web", "url": "https://watch.sendosama.net/" },
-                "twitch",
-                "kick"
-            ]
+                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+                { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+                { "platform": "twitch", "detectar": true, "corte": true },
+                { "platform": "kick", "detectar": true, "corte": true }
+            ],
+            "start_time": { "Sunday": "19:00" }
+        },
+        "midudev": {
+            "platform": [
+                { "platform": "youtube", "descripcion": true },
+                { "platform": "twitch", "detectar": false, "corte": false }
+            ],
+            "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+            "start_time": "18:00"
+        },
+        "mouredev": {
+            "platform": [
+                { "platform": "youtube", "descripcion": true },
+                { "platform": "twitch", "detectar": false, "corte": false }
+            ],
+            "days": ["Thursday"],
+            "start_time": "18:00"
         }
     },
 

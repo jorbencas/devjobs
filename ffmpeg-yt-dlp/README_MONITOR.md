@@ -91,19 +91,60 @@ Con **`DIRECTO_COMPLETO=true`** (o el flag `--directo-completo`) el monitor
 episodios sigue ejecutándose (la metadata `*_episodios.json` para el caption
 se sigue generando), pero el corte se ignora.
 
-El servicio Docker `monitor` lo trae activo de fábrica:
+> **Estado actual:** el servicio Docker `monitor` lo trae **activo de fábrica**
+> (`DIRECTO_COMPLETO=true`) porque de momento no se quiere cortar nada.
+> Para reactivar el corte de extremos, ponlo a `false` (o elimina la línea) en
+> `docker-compose.yml` y recrea el contenedor:
+>
+> ```yaml
+> environment:
+>   - DIRECTO_COMPLETO=true
+> ```
+>
+> ```bash
+> docker compose up -d --force-recreate monitor
+> ```
 
-```yaml
-environment:
-  - DIRECTO_COMPLETO=true
-```
+> El **corte por canal/fuente** se controla en la config de TwitchRecorder con el
+> flag `"corte"` por fuente (ver README de TwitchRecorder): `"corte": false`
+> desactiva el corte de esa fuente aunque `DIRECTO_COMPLETO` esté a `false`.
+> Además, las fuentes con sidecar `*_descripcion.json` (ver sección siguiente)
+> **nunca** se recortan, independientemente de este flag.
 
-Para volver al comportamiento anterior (corte de extremos), ponlo a `false`
-(o elimina la línea) en `docker-compose.yml` y recrea el contenedor:
+---
 
-```bash
-docker compose up -d --force-recreate monitor
-```
+## Configuración del directo por fuente (`*_descripcion.json`)
+
+El recorder deja junto al vídeo un sidecar **`<video>_descripcion.json`** según la
+config de la fuente desde la que se grabó. Los campos que puede traer:
+
+| Campo | Efecto en el monitor |
+|---|---|
+| `descripcion` | Usa ese texto como caption y **omite detección y corte** (típico YouTube) |
+| `detectar: false` | **Omite la detección (OCR)** de episodios |
+| `corte: false` | **Omite el corte** de extremos (aunque detecte) |
+
+**Detección y corte son independientes.** Sin sidecar → comportamiento normal:
+**OCR + corte**. Además, `DIRECTO_COMPLETO=true` desactiva el corte globalmente
+(sigue haciendo OCR para el caption).
+
+Casos reales:
+
+- **sendosama en Twitch/Kick/web** (sin sidecar) → OCR + corte de episodios.
+- **sendosama en YouTube** (sidecar `{"descripcion": "..."}`) → caption de la
+  descripción, sin detección ni corte.
+- **midudev/mouredev en Twitch** (sidecar `{"detectar": false, "corte": false}`)
+  → sin OCR ni corte; el uploader usa `🎬 Directo de <canal>`.
+- **Futuro: canal que detecte pero no corte** (sidecar `{"corte": false}`) →
+  se hace OCR para el caption `Episodio 1-4` pero se mantiene el vídeo completo.
+
+> **Cambio de plataforma a mitad del directo** (p. ej. sendosama se pasa de
+> Twitch a Kick): el recorder concatena las partes en un único archivo antes de
+> pasarlo al monitor, así que llega **un solo vídeo** y el OCR/corte se aplican
+> sobre el directo completo.
+
+El sidecar se elimina tras comprimir. Si no hay sidecar, se usa la detección por
+OCR (sección anterior).
 
 ---
 

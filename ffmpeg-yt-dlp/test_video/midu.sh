@@ -88,6 +88,10 @@ MODO DESCARGA:
   -d, --download URL     Descargar vídeo de URL (YouTube, Twitch, Kick, etc)
   -ds, --dl-start TIME   Inicio descarga parcial (ej: 00:05:00)
   -de, --dl-end TIME     Fin descarga parcial (ej: 00:10:00)
+  -dq, --dl-quality Q    Calidad: best|1080|720|480|audio-only (default: best)
+  -df, --dl-format FMT   Formato de salida: mp4|mkv|webm|best (default: mp4)
+  --playlist             Descargar la playlist/vídeo completo de la URL
+  --dl-subs-only         Solo descargar subtítulos (sin vídeo)
 
 MODO CORTE (lossless, sin re-encoding):
   --cut                  Cortar vídeo por tiempo
@@ -150,6 +154,8 @@ AUDIO:
 
 CONCATENAR:
   --concat FILE...       Unir varios archivos en uno solo
+  --concat-smart FILE...  Unir normalizando (re-encode automático)
+  --crossfade SEGUNDOS   Fundido cruzado entre vídeos al unir (ej: 1)
 
 WATCH:
   --watch                Monitorear carpeta, convertir automáticamente
@@ -180,6 +186,14 @@ REMUX (cambiar contenedor sin re-encoding):
 
 REORDENAR PISTAS:
   --tracks ORDER         Reordenar pistas (ej: "v:0,a:1,s:0" o "a:2,a:0,v:0")
+
+COMPOSE / HLS / CADENA:
+  --compose              Vídeo personalizado (elige pistas vídeo/audio/subs)
+  --hls                  Convierte el vídeo a segmentos HLS (.m3u8)
+  --chain 'OPS'          Cadena de operaciones en un solo paso
+                         (ej: --chain 'cut=00:01:00:00:05:00' 'convert=720')
+                         Operaciones: cut, convert, rotate, fade, reverse, denoise, sharpen
+  --preview              Abre el primer vídeo con el reproductor del sistema
 
 SELECCIÓN DE AUDIO:
   --audio-lang LANG      Seleccionar pista de audio por idioma (ej: spa, eng)
