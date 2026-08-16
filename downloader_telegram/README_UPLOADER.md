@@ -218,6 +218,7 @@ El servicio corre con `restart: unless-stopped`, vigila `/comprimidos` cada 60 s
 | Setup de sesión | `python /app/subir_videos.py --setup` |
 | Listar chats | `python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]` |
 | Listar temas (foro) | `python /app/subir_videos.py --list-topics <grupo>` |
+| Crear temas (foro) | `python /app/subir_videos.py --create-topics <grupo:Tít1,Tít2,...>` |
 | Auto-upload (bucle) | `python /app/subir_videos.py --intervalo 60 /comprimidos` |
 | Una pasada y salir | `python /app/subir_videos.py --once /comprimidos` |
 

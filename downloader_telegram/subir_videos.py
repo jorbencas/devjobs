@@ -671,6 +671,40 @@ async def run_list_topics(api_id, api_hash, grupo):
     await client.disconnect()
 
 
+async def run_create_topics(api_id, api_hash, grupo, titulos):
+    """Crea temas (series) nuevos en un grupo con foro."""
+    from telethon.tl.functions.messages import CreateForumTopicRequest
+    log("INFO", f"Creando {len(titulos)} temas en {grupo}.")
+    client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+    await _conectar(client)
+    try:
+        target = int(grupo)
+    except (TypeError, ValueError):
+        target = None
+    chat = None
+    async for d in client.iter_dialogs():
+        if target is not None and getattr(d, "id", None) == target:
+            chat = getattr(d, "entity", None)
+            break
+    if chat is None:
+        log("ERR", f"No se encontró el grupo '{grupo}' en los diálogos.")
+        await client.disconnect()
+        return
+    for i, titulo in enumerate(titulos):
+        try:
+            res = await client(CreateForumTopicRequest(
+                peer=chat,
+                title=titulo,
+                random_id=int(asyncio.get_event_loop().time() * 1000) + i,
+            ))
+            tid = getattr(res.updates[0], "message", None)
+            tid = getattr(tid, "id", None)
+            log("OK", f"Tema creado: {titulo} (id={tid})")
+        except Exception as e:
+            log("ERR", f"Fallo al crear '{titulo}': {e}")
+    await client.disconnect()
+
+
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
     default, grupos, grupo_series, temas = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
@@ -745,6 +779,7 @@ def main():
     grupo.add_argument("--setup", action="store_true", help="Iniciar sesión una vez (crea uploader.session)")
     grupo.add_argument("--list-chats", action="store_true", help="Listar chats/grupos")
     grupo.add_argument("--list-topics", metavar="GRUPO", help="Listar los temas (series) de un grupo con foro")
+    grupo.add_argument("--create-topics", metavar="GRUPO:TÍT1,TÍT2,...", help="Crear temas en un grupo con foro")
     parser.add_argument("--folder", help="Filtrar por nombre del chat o carpeta (archivado/principal) (--list-chats)")
     parser.add_argument("--creados", action="store_true", help="Solo chats que creaste tú (--list-chats)")
     parser.add_argument("--once", action="store_true", help="Una sola pasada y salir")
@@ -769,6 +804,11 @@ def main():
             return
         if args.list_topics:
             asyncio.run(run_list_topics(api_id, api_hash, args.list_topics))
+            return
+        if args.create_topics:
+            grupo, _, titulos = args.create_topics.partition(":")
+            lista = [t.strip() for t in titulos.split(",") if t.strip()]
+            asyncio.run(run_create_topics(api_id, api_hash, grupo, lista))
             return
         carpetas = [c for c in args.carpetas if c] or ["/comprimidos"]
         asyncio.run(run_autoupload(api_id, api_hash, carpetas, args.intervalo, args.once))
