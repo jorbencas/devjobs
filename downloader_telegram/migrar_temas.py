@@ -61,7 +61,7 @@ async def run(api_id, api_hash, pares, ejecutar):
             continue
 
         nenv = 0
-        async for msg in client.iter_messages(source_ent):
+        async for msg in client.iter_messages(source_ent, reverse=True):
             if not (msg.media and getattr(msg, "document", None)):
                 continue
             try:
@@ -125,13 +125,41 @@ async def run_deshacer(api_id, api_hash, pares, ventana_min):
     await client.disconnect()
 
 
+async def run_renombrar(api_id, api_hash, pares):
+    """Renombra temas del foro: pares TEMA_ID:NUEVO_NOMBRE."""
+    from telethon.tl.functions.messages import EditForumTopicRequest
+    default, grupos, grupo_series, temas = cargar_grupos()
+    if not grupo_series:
+        raise SystemExit("[x] No hay grupo_series en grupos.json.")
+    client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+    await _conectar(client)
+    foro_ent = None
+    async for d in client.iter_dialogs():
+        if getattr(d, "id", None) == grupo_series:
+            foro_ent = getattr(d, "entity", None)
+            break
+    if foro_ent is None:
+        raise SystemExit(f"[x] No se encontró el foro {grupo_series}.")
+    for spec in pares:
+        tid_s, _, nuevo = spec.partition(":")
+        tid = int(tid_s)
+        try:
+            await client(EditForumTopicRequest(peer=foro_ent, topic_id=tid, title=nuevo))
+            log("ok", f"Tema {tid} renombrado a '{nuevo}'")
+        except Exception as e:
+            log("x", f"Fallo al renombrar {tid}: {e}")
+    await client.disconnect()
+
+
 def main():
     p = argparse.ArgumentParser(description="Migrar canales concretos a temas del foro")
-    p.add_argument("--migrar", action="append", required=True, metavar="TEMA_ID:ORIGEN",
-                   help="Par tema->origen, repetible")
+    p.add_argument("--migrar", action="append", metavar="TEMA_ID:ORIGEN",
+                   help="Par tema->origen, repetible (para --migrar / --deshacer)")
     p.add_argument("--ejecutar", action="store_true", help="Re-subida real (sin borrar); por defecto informa")
     p.add_argument("--deshacer", action="store_true",
                    help="Borra en esos temas las re-subidas de tu propia cuenta en la ventana")
+    p.add_argument("--renombrar", action="append", metavar="TEMA_ID:NUEVO_NOMBRE",
+                   help="Renombra un tema (repetible)")
     p.add_argument("--ventana", type=int, default=60, help="Minutos hacia atrás a revisar (deshacer)")
     args = p.parse_args()
     try:
@@ -139,9 +167,15 @@ def main():
     except Exception as e:
         print(f"[x] {e}")
         return
-    if args.deshacer:
+    if args.renombrar:
+        asyncio.run(run_renombrar(api_id, api_hash, args.renombrar))
+    elif args.deshacer:
+        if not args.migrar:
+            raise SystemExit("[x] --deshacer requiere --migrar TEMA_ID:ORIGEN")
         asyncio.run(run_deshacer(api_id, api_hash, args.migrar, args.ventana))
     else:
+        if not args.migrar:
+            raise SystemExit("[x] Indica --migrar TEMA_ID:ORIGEN")
         asyncio.run(run(api_id, api_hash, args.migrar, args.ejecutar))
 
 
