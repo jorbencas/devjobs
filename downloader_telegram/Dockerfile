@@ -17,5 +17,6 @@ RUN pip install --no-cache-dir \
 COPY test_download_protected_content_telegram.py .
 COPY test_string.py .
 COPY subir_videos.py .
+COPY migrar_temas.py .
 
 CMD ["python", "-u", "test_download_protected_content_telegram.py"]
