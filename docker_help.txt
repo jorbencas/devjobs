@@ -227,12 +227,15 @@ grupos de Telegram. Ejecuta/paras los 3 DAEMONS a la vez:
   pipe_setup            Login Telegram del uploader (teléfono+código, UNA vez)
   pipe_chats [args]     Listar chats: [--creados] [--folder <texto>]
   pipe_chats_sendo      Solo la carpeta "sendo"
+  pipe_topics <grupo>   Listar los temas (series) de un grupo con foro → rellena "temas"
+  pipe_once             Una sola pasada del uploader (sube lo pendiente y sale)
   pipe_test [kw] [ruta] Probar subida de un video
   pipe_sys_start/stop/status   Arrancar/parar/ver estado (systemd)
 
 --- Setup inicial (SOLO la primera vez) ---
 pipe_setup             # login Telegram del uploader (teléfono + código)
 pipe_chats --creados   # ver tus canales/grupos con IDs → rellena grupos.json
+pipe_topics <grupo>    # si el grupo es un foro: lista los temas (series) → rellena "temas"
 
 --- Carpetas ---
 data/grabaciones/test/   Grabaciones terminadas (*_KW_<kw>_completed.mp4)
