@@ -619,7 +619,7 @@ async def run_list_topics(api_id, api_hash, grupo):
     """Lista los temas (series) de un grupo con foro activado."""
     from datetime import datetime as dt
 
-    from telethon.tl.functions.channels import GetForumTopicsRequest
+    from telethon.tl.functions.messages import GetForumTopicsRequest
 
     log("INFO", f"Modo list-topics: mostrando temas de {grupo}.")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
@@ -629,14 +629,29 @@ async def run_list_topics(api_id, api_hash, grupo):
         await client.disconnect()
         raise
     try:
-        chat = await client.get_entity(grupo)
-    except Exception as e:
-        log("ERR", f"No se pudo resolver el grupo '{grupo}': {e}")
+        target = int(grupo)
+    except (TypeError, ValueError):
+        target = None
+
+    chat = None
+    async for d in client.iter_dialogs():
+        ent = getattr(d, "entity", None)
+        if ent is None:
+            continue
+        if target is not None:
+            if getattr(d, "id", None) == target:
+                chat = ent
+                break
+        elif (d.name or "").strip().lower() == str(grupo).strip().lower():
+            chat = ent
+            break
+    if chat is None:
+        log("ERR", f"No se encontró el grupo '{grupo}' en los diálogos de la sesión.")
         await client.disconnect()
         return
     try:
         res = await client(GetForumTopicsRequest(
-            channel=chat,
+            peer=chat,
             offset_date=dt(1970, 1, 1),
             offset_id=0,
             offset_topic=0,
