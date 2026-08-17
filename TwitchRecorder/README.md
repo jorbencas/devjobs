@@ -285,16 +285,19 @@ docker compose up -d
 
 El contenedor se reinicia solo si el PC se reinicia (`restart: unless-stopped`).
 
-### Ejecutar una vez (test)
-
-```bash
-docker compose run --rm run
-```
+> **Importante:** no uses `docker compose run` para lanzar el grabador. El servicio
+> `run` (una instancia adicional con `--rm`) ya no existe en el compose:
+> levantarlo creaba una segunda instancia del contenedor grabando a la vez que la
+> principal, y como ambas comparten `config.json`, un mismo canal podía emitir
+> dos vídeos duplicados (p. ej. uno por YouTube y otro por Twitch del mismo
+> directo). Levanta siempre el servicio canónico con `docker compose up -d`; el
+> `container_name: twitchrecorder` fijo impide que haya dos contenedores con el
+> mismo nombre.
 
 ### Dry-run (sin grabar)
 
 ```bash
-docker compose run --rm run --dry-run
+docker compose run --rm twitchrecorder --dry-run
 ```
 
 Detecta el directo pero no graba. Ideal para verificar que la config funciona.
@@ -326,7 +329,7 @@ docker run --rm \
   -v ./config.json:/app/config.json:ro \
   -v /home/jorge/dev/devjobs/data/grabaciones:/recordings \
   -e TZ=Europe/Madrid \
-  twitchrecorder-run
+  twitchrecorder
 ```
 
 ---

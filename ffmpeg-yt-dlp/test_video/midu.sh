@@ -350,8 +350,8 @@ while [[ $# -gt 0 ]]; do
         -df|--dl-format)  DOWNLOAD_FORMAT="$2"; shift 2 ;;
         --playlist)       DOWNLOAD_PLAYLIST=true; shift ;;
         --dl-subs-only)   DOWNLOAD_SUBS_ONLY=true; shift ;;
-        -ao|--audio-out) MODE="audio-only"; URL="$2"; shift 2 ;;
-        -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 ;;
+        -ao|--audio-out) MODE="audio-only"; URL="${2:-}"; shift 2 2>/dev/null || shift ;;
+        -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 2>/dev/null || shift ;;
         -ma|--merge-audio) MODE="merge-audio"; AUDIO_INPUT="$2"; shift 2 ;;
         -sl|--sub-soft)    SUBTITLE_SOFT="$2"; shift 2 ;;
         -sh|--sub-hard)    SUBTITLE_HARD="$2"; shift 2 ;;
@@ -1016,7 +1016,7 @@ stabilize_video() {
 
     # Paso 1: Detectar movimientos
     echo -e "  ${DIM}Paso 1/2: Analizando movimientos...${NC}"
-    if ! ffmpeg -y -i "$file" -vf "vidstabdetect=shakiness=$shakiness:input=$transforms" -f null - 2>/dev/null; then
+    if ! ffmpeg -y -i "$file" -vf "vidstabdetect=shakiness=$shakiness:result=$transforms" -f null - 2>/dev/null; then
         echo -e "${RED}✗${NC} Error en la detección de estabilización"
         rm -f "$transforms"
         return 1
@@ -1106,25 +1106,40 @@ censor_video() {
 
     echo -e "${BOLD}► Censurando:${NC} $file"
 
-    # Construir filtro de blur para cada región
-    local vf_parts=()
-    local idx=0
-    for region in "${CENSOR_REGIONS[@]}"; do
-        local x="${region%%:*}"
-        local rest="${region#*:}"
-        local y="${rest%%:*}"
-        rest="${rest#*:}"
-        local w="${rest%%:*}"
-        local h="${rest##*:}"
-        vf_parts+=("boxblur=20:20:enable='between(t,0,999999)':x=$x:y=$y:w=$w:h=$h")
-        ((idx++))
+    # Construir filtro: split del vídeo, recorta cada región, la desenfoca
+    # y la superpone de nuevo. Soporta una o varias regiones.
+    local n=${#CENSOR_REGIONS[@]}
+    local g="[0:v]split=$n"
+    local bfilter=""
+    for ((k=0; k<n; k++)); do
+        g+="[m$k]"
     done
-
-    local vf=$(IFS=','; echo "${vf_parts[*]}")
+    for ((k=0; k<n; k++)); do
+        local reg="${CENSOR_REGIONS[$k]}"
+        local rx="${reg%%:*}"; local rr="${reg#*:}"
+        local ry="${rr%%:*}"; rr="${rr#*:}"
+        local rw="${rr%%:*}"; local rh="${rr##*:}"
+        bfilter+="[m$k]crop=$rw:$rh:$rx:$ry,boxblur=lr=20:cr=4[b$k];"
+    done
+    g+=";"
+    local ochain=""
+    for ((k=0; k<n; k++)); do
+        local reg="${CENSOR_REGIONS[$k]}"
+        local rx="${reg%%:*}"; local rr="${reg#*:}"
+        local ry="${rr%%:*}"; rr="${rr#*:}"
+        local rw="${rr%%:*}"; local rh="${rr##*:}"
+        if [[ "$k" -eq 0 ]]; then
+            ochain+="[0:v][b$k]overlay=$rx:$ry[o$k]"
+        else
+            ochain+="[o$((k-1))][b$k]overlay=$rx:$ry[o$k]"
+        fi
+        [[ "$k" -lt $((n-1)) ]] && ochain+=";"
+    done
+    local vf="$g$bfilter$ochain;[o$((n-1))]null[outv]"
 
     local enc_args
     enc_args=$(get_video_encoder_args "fast")
-    if ffmpeg -y -i "$file" -vf "$vf" $enc_args -c:a copy -movflags +faststart "$output_file" 2>/dev/null; then
+    if ffmpeg -y -i "$file" -filter_complex "$vf" -map "[outv]" $enc_args -map 0:a? -c:a copy -movflags +faststart "$output_file" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
@@ -1222,7 +1237,7 @@ reverse_video() {
 
     local enc_args
     enc_args=$(get_video_encoder_args "fast")
-    if ffmpeg -y -i "$file" -vf "reverse" -af "areverse" $enc_args -c:a copy -movflags +faststart "$output_file" 2>/dev/null; then
+    if ffmpeg -y -i "$file" -vf "reverse" -af "areverse" $enc_args -c:a aac -b:a "${AUDIO_BITRATE}" -movflags +faststart "$output_file" 2>/dev/null; then
         local out_size
         out_size=$(stat -c%s "$output_file" 2>/dev/null || stat -f%z "$output_file" 2>/dev/null || echo 0)
         local out_mb=$((out_size / 1024 / 1024))
@@ -2027,6 +2042,46 @@ ask_preview() {
     return 0
 }
 
+# ── Confirmar eliminación de originales convertidos (fin de lote) ─────
+# Muestra la lista numerada de originales registrados en $ORIGINALES_LOG
+# (los que siguen existiendo) y deja elegir cuáles borrar.
+
+confirmar_eliminacion_originales() {
+    local orig_list=()
+    local perm_list=()
+    if [[ -n "${ORIGINALES_LOG:-}" && -s "$ORIGINALES_LOG" ]]; then
+        mapfile -t orig_list < "$ORIGINALES_LOG"
+        for _o in "${orig_list[@]}"; do
+            [[ -f "$_o" ]] && perm_list+=("$_o")
+        done
+    fi
+    if [[ "${#perm_list[@]}" -gt 0 && -t 0 ]]; then
+        echo ""
+        echo -e "${BOLD}  Archivos ORIGINALES que se convirtieron (aún guardados):${NC}"
+        for i in "${!perm_list[@]}"; do
+            _sz=$(stat -c%s "${perm_list[$i]}" 2>/dev/null || echo 0)
+            _mb=$((_sz / 1024 / 1024))
+            printf '  %s)  %s  (%sMB)\n' "$((i + 1))" "${perm_list[$i]}" "$_mb"
+        done
+        echo -e "  ${DIM}Elige los que quieras BORRAR (números separados por espacios, ej: 1 3 5).${NC}"
+        echo -e "  ${DIM}Enter = no borrar nada.${NC}"
+        read -rp "  ¿Eliminar? [números]: " sel </dev/tty
+        if [[ -n "$sel" ]]; then
+            for n in $sel; do
+                if [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#perm_list[@]} )); then
+                    _target="${perm_list[n - 1]}"
+                    rm -f "$_target"
+                    echo -e "  ${CYAN}Eliminado: $_target${NC}"
+                fi
+            done
+        else
+            echo -e "  ${DIM}Nada eliminado. Originales conservados.${NC}"
+        fi
+    elif [[ -t 0 && "${#orig_list[@]}" -gt 0 ]]; then
+        echo -e "  ${DIM}(Sin originales pendientes de borrar)${NC}"
+    fi
+}
+
 # ── Reintentar archivos fallidos ─────────────────────────────────────
 
 retry_failed_files() {
@@ -2053,12 +2108,26 @@ retry_failed_files() {
         return 0
     fi
 
+    local _retry_log=""
+    if [[ -t 0 ]]; then
+        _retry_log=$(mktemp /tmp/midu_orig_XXXXXX)
+        ORIGINALES_LOG="$_retry_log"
+    else
+        ORIGINALES_LOG=""
+    fi
+
     for file in "${failed_files[@]}"; do
         if [[ -f "$file" ]]; then
             echo -e "${BOLD}► Reintentando:${NC} $file"
             convertir_archivo "$file" "$output_dir"
         fi
     done
+
+    if [[ -n "$_retry_log" ]]; then
+        confirmar_eliminacion_originales
+        rm -f "$_retry_log"
+        ORIGINALES_LOG=""
+    fi
 }
 
 # ── Descargar vídeo de URL ────────────────────────────────────────────
@@ -2319,9 +2388,12 @@ concat_videos() {
     if files_are_concat_compatible "${files[@]}"; then
         echo -e "  ${DIM}Archivos compatibles, usando stream copy...${NC}"
         local list_file
-        list_file=$(mktemp /tmp/concat_list_XXXXXX.txt)
+        list_file=$(mktemp /tmp/concat_list_XXXXXX)
         for f in "${files[@]}"; do
-            local escaped_f="${f//\'/\'\\\'\'}"
+            local abs_f="$f"
+            # Rutas absolutas para que -safe 0 resuelva bien desde /tmp
+            [[ "$abs_f" != /* ]] && abs_f="$(cd "$(dirname "$abs_f")" 2>/dev/null && pwd)/$(basename "$abs_f")"
+            local escaped_f="${abs_f//\'/\'\\\'\'}"
             echo "file '$escaped_f'" >> "$list_file"
         done
 
@@ -2353,17 +2425,41 @@ concat_videos() {
     done
 
     local n=${#files[@]}
-    local v_streams="" a_streams=""
+    # Escalar todos a la resolución/fps del primer vídeo para que concat funcione
+    local ref_w ref_h ref_fps
+    ref_w=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "${files[0]}" 2>/dev/null)
+    ref_h=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "${files[0]}" 2>/dev/null)
+    ref_fps=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 "${files[0]}" 2>/dev/null)
+    [[ -z "$ref_w" || -z "$ref_h" ]] && { ref_w=640; ref_h=360; }
+    local v_streams="" a_streams="" norm_chain=""
+    local ref_ar ref_ch
+    if [[ "$has_audio" == true ]]; then
+        ref_ar=$(ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 "${files[0]}" 2>/dev/null)
+        ref_ch=$(ffprobe -v error -select_streams a:0 -show_entries stream=channel_layout -of csv=p=0 "${files[0]}" 2>/dev/null)
+        [[ -z "$ref_ar" ]] && ref_ar=44100
+        [[ -z "$ref_ch" ]] && ref_ch=stereo
+    fi
     for ((i=0; i<n; i++)); do
         v_streams+="[${i}:v:0]"
         [[ "$has_audio" == true ]] && a_streams+="[${i}:a:0]"
+        norm_chain+="[${i}:v:0]scale=$ref_w:$ref_h:force_original_aspect_ratio=decrease,pad=$ref_w:$ref_h:(ow-iw)/2:(oh-ih)/2"
+        [[ -n "$ref_fps" && "$ref_fps" != "0/0" ]] && norm_chain+=",fps=$ref_fps"
+        norm_chain+=",setsar=1,format=yuv420p[n$i];"
+        [[ "$has_audio" == true ]] && norm_chain+="[${i}:a:0]aformat=sample_rates=$ref_ar:channel_layouts=$ref_ch[${i}:a];"
     done
 
     local filter_complex=""
+    local concat_inputs_v="" concat_inputs_a=""
+    for ((i=0; i<n; i++)); do
+        concat_inputs_v+="[n$i]"
+        [[ "$has_audio" == true ]] && concat_inputs_a+="[${i}:a]"
+    done
     if [[ "$has_audio" == true ]]; then
-        filter_complex="${v_streams}${a_streams}concat=n=${n}:v=1:a=1[outv][outa]"
+        # concat de vídeo y de audio por separado evita el "Error linking filters"
+        # (concat con v=1:a=1 exige timebase idéntica entre ambas ramas).
+        filter_complex="${norm_chain}${concat_inputs_v}concat=n=${n}:v=1[outv];${concat_inputs_a}concat=n=${n}:v=0:a=1[outa]"
     else
-        filter_complex="${v_streams}concat=n=${n}:v=1[outv]"
+        filter_complex="${norm_chain}${concat_inputs_v}concat=n=${n}:v=1[outv]"
     fi
 
     local enc_args
@@ -5182,7 +5278,7 @@ convertir_archivo() {
     duration_fmt=$(format_time "$effective_duration")
 
     local remux="false"
-    if can_remux "$file" && [[ "${VIDEO_CODEC:-h264}" == "h264" ]] && [[ -z "$MAX_SIZE" ]] && [[ -z "$START_TIME" ]] && [[ -z "$END_TIME" ]] && [[ -z "$SUBTITLE_HARD" ]] && [[ -z "$SPEED" ]]; then
+    if can_remux "$file" && [[ "${VIDEO_CODEC:-h264}" == "h264" ]] && [[ -z "$MAX_SIZE" ]] && [[ -z "$START_TIME" ]] && [[ -z "$END_TIME" ]] && [[ -z "$SUBTITLE_SOFT" ]] && [[ -z "$SUBTITLE_HARD" ]] && [[ -z "$SPEED" ]]; then
         remux="true"
     fi
 
@@ -5339,7 +5435,14 @@ convertir_archivo() {
         fi
     fi
     if [[ -n "$SUBTITLE_SOFT" ]]; then
-        ffmpeg_args+=(-map 1:s:0 -c:s copy)
+        ffmpeg_args+=(-map 1:s:0)
+        # srt (subrip) no es mapeable con -c copy en contenedores MP4/MOV;
+        # hay que trans-muxear a mov_text. En MKV el subrip copy sí funciona.
+        if [[ "${SUBTITLE_SOFT##*.}" != "srt" || "$out_ext" != "mp4" || "$remux" == "true" ]]; then
+            ffmpeg_args+=(-c:s copy)
+        else
+            ffmpeg_args+=(-c:s mov_text)
+        fi
     fi
     ffmpeg_args+=(-map_metadata 0 -movflags +faststart)
     ffmpeg_args+=("$tmp_file")
@@ -5481,19 +5584,11 @@ convertir_archivo() {
 
     emit_log "$job_log" "  ${GREEN}OK${NC}: ${orig_mb}MB → ${out_mb}MB (${ratio}%)"
 
-    # ── Preguntar si eliminar el archivo original (solo interactivo) ─────
-    if [[ -t 0 || -e /dev/tty ]] && [[ "$file" != "$output_file" ]]; then
-        echo ""
-        echo -e "${BOLD}  Conversión completada${NC} → $output_file"
-        local resp=""
-        read -rp "  ¿Eliminar el archivo ORIGINAL ($(basename "$file"), ${orig_mb}MB)? [s/N]: " resp </dev/tty
-        if [[ "$resp" =~ ^[Ss]$ ]]; then
-            rm -f "$file"
-            emit_log "$job_log" "  ${CYAN}Archivo original eliminado: $(basename "$file")${NC}"
-        else
-            echo -e "  ${DIM}Original conservado.${NC}"
+    # ── Registrar el original convertido (se decide eliminarlo al final) ──
+    if [[ "$file" != "$output_file" && -f "$file" ]]; then
+        if [[ -n "${ORIGINALES_LOG:-}" ]]; then
+            echo "$file" >> "$ORIGINALES_LOG"
         fi
-        echo ""
     fi
 
     if [[ -n "$MAX_SIZE_MB" ]]; then
@@ -5530,6 +5625,8 @@ BATCH_START=$(date +%s)
 
 # ── Panel de progreso por archivo ──────────────────────────────────────
 PROG_DIR=$(mktemp -d /tmp/midu_prog_XXXXXX)
+ORIGINALES_LOG="$PROG_DIR/originales.txt"
+: > "$ORIGINALES_LOG"
 panel_lines=0
 prev_panel_lines=0
 declare -A PID_IDX
@@ -5645,7 +5742,6 @@ for pid in "${active_threads[@]}"; do
     finish_job_display "$pid" "$estimate_out"
 done
 clear_panel
-rm -rf "$PROG_DIR"
 
 BATCH_END=$(date +%s)
 BATCH_ELAPSED=$((BATCH_END - BATCH_START))
@@ -5654,6 +5750,11 @@ BATCH_FMT=$(format_time "$BATCH_ELAPSED")
 echo ""
 echo -e "${BOLD}► Completado:${NC} ${GREEN}$procesados OK${NC}, ${RED}$fallidos fallos${NC} de $total archivos."
 echo -e "${DIM}Tiempo total: $BATCH_FMT${NC}"
+
+# ── Lista de originales convertidos y selección para eliminar ─────────
+confirmar_eliminacion_originales
+
+rm -rf "$PROG_DIR"
 
 # Notificación
 if [[ "$NOTIFY" == true ]]; then
@@ -6079,8 +6180,6 @@ build_compose_command() {
         echo -e "  Subtítulos: ${CYAN}${COMPOSE_SUB_IDXS[*]}${NC}"
     fi
     echo -e "  Salida:    ${CYAN}$COMPOSE_OUT_NAME${NC}"
-    echo ""
-    echo -e "  ${DIM}ffmpeg ${ffmpeg_args[*]}${NC}"
     echo ""
 
     "${ffmpeg_args[@]}"

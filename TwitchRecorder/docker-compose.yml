@@ -8,13 +8,3 @@ services:
       - /home/jorge/dev/devjobs/data/grabaciones:/recordings
     environment:
       - TZ=Europe/Madrid
-
-  run:
-    build: .
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - /home/jorge/dev/devjobs/data/grabaciones:/recordings
-    environment:
-      - TZ=Europe/Madrid
-    stdin_open: true
-    tty: true

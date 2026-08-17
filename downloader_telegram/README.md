@@ -50,6 +50,25 @@ python test_download_protected_content_telegram.py
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 
+#### `enviados.json` — registro de lo ya subido
+
+`config/enviados.json` es la **memoria de "ya subido"** del daemon uploader:
+una lista con las **rutas absolutas** de cada `*_compressed.mp4` que ya se subió a
+Telegram. Cada archivo se añade al terminar de subir (`marcar_enviado`) y se usa
+como guarda: antes de subir, el uploader comprueba `enviado(archivo)` — si ya está
+en la lista, lo **salta** (no re-subiría aunque el `.mp4` volviera a aparecer, por
+ej. tras reiniciar el contenedor).
+
+> **Limpieza:** el archivo se **poda automáticamente**: solo conserva las
+> **últimas 15 subidas** (las entradas más antiguas se descartan al añadir una
+> nueva). El límite es configurable con `UPLOADER_MAX_ENVIADOS` (default `15`;
+> `0` = sin límite). Si además quieres limpiarlo a mano (p. ej. para forzar una
+> re-subida), borra las entradas o haz `[]`. No ejecutes el daemon mientras lo
+> editas. Cada proyecto se lleva su propio registro.
+
+> Es **exclusivo del daemon uploader**. El CLI (`tg_toolbox.py`) lleva su propio
+> tracking en `data/logs/sync_cli.json` y **no toca** `enviados.json`.
+
 ### Cambiar credenciales o carpetas (sin tocar el código)
 
 Todo es configurable con **variables de entorno** (en el bloque `environment` del servicio `uploader`):
@@ -67,6 +86,7 @@ Todo es configurable con **variables de entorno** (en el bloque `environment` de
 | `UPLOADER_CARPETAS` | Carpetas a vigilar (separadas por `:`) | `/comprimidos` |
 | `UPLOADER_FORWARD_CHANNEL` | Canal de **solo-reenvío** (forward) donde se copia cada vídeo de la keyword (vacío `""` desactiva) | `-1004359591062` |
 | `UPLOADER_FORWARD_KEYWORD` | Keyword del directo que dispara el reenvío | `diarios_boticaria` |
+| `UPLOADER_MAX_ENVIADOS` | Máx. entradas que conserva `enviados.json` (poda automática; `0` = sin límite) | `15` |
 
 > También puedes crear/borrar un contenedor distinto cambiando `container_name:` en el `docker-compose.yml` (p. ej. un segundo `uploader` que vigile otra carpeta, con su propia `enviados.json`).
 
@@ -226,19 +246,20 @@ borraron (estaban vacíos, no había nada que migrar).
 
 El texto (pie) que acompaña a cada vídeo en Telegram se elige en este orden:
 
-1. **Metadata del monitor** (`<video>_episodios.json`): la que genera el monitor
-   junto al comprimido. Puede ser:
-   - La **descripción propia del canal** (p. ej. la de YouTube) si el recorder la
-     guardó con `"descripcion": true` (canales como `midudev`/`mouredev`, o Sendo
-     los domingos). Se usa tal cual.
-   - El **rango de episodios** detectado por OCR (p. ej. `Episodio 1-4`,
-     `Temporada 2 · Episodio 1-4`). En el **caption mostrado se quita la palabra
-     "Episodio(s)"**: `Episodio 1-4` → `1-4`, `Temporada 2 · Episodio 1-4` →
-     `Temporada 2 · 1-4`. (El enrutado a temas sigue usando el texto completo.)
-2. **OCR del propio uploader**: si no hay metadata, hace su propia detección de
-   episodios/temporada/película sobre el vídeo (mismo tratamiento del caption).
-3. **Por defecto**: `🎬 Directo de <canal>` (el canal se saca del nombre del
-   archivo; antes estaba fijo "sendo sama").
+1. **Rango de episodios** (metadata del monitor `<video>_episodios.json` generada
+   por OCR, o el OCR propio del uploader si no hay metadata): `Episodio 1-4`,
+   `Temporada 2 · Episodio 1-4`. En el **caption mostrado se quita la palabra
+   "Episodio(s)"**: `Episodio 1-4` → `1-4`, `Temporada 2 · Episodio 1-4` →
+   `Temporada 2 · 1-4`. (El enrutado a temas sigue usando el texto completo.)
+   También se usa si la metadata es una **película**: `Película · TÍTULO`.
+2. **Por defecto**: `🎬 Directo de <canal>` (el canal se saca del nombre del
+   archivo). Esto incluye cuando la metadata es una **descripción libre** del
+   canal (p. ej. la de YouTube con `"descripcion": true`): se **ignora** la
+   descripción y se usa el **nombre** del canal.
+
+> **Las descripciones propias del canal (p. ej. YouTube) NO se usan como caption.**
+> Solo los rangos de episodios/película se muestran; todo lo demás cae al nombre
+> del canal (`🎬 Directo de <canal>`).
 
 Si un vídeo **supera los 2 GB** (límite de Telegram) y el uploader lo parte en
 varias partes, cada parte añade el sufijo `(n/total)` al caption: `1-4 (1/2)` y

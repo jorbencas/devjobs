@@ -328,6 +328,14 @@ def marcar_enviado(archivo):
     lista = cargar_enviados()
     if str(archivo) not in lista:
         lista.append(str(archivo))
+    # Poda automática: mantener solo las N últimas subidas (default 15) para que
+    # enviados.json no crezca indefinidamente. El límite es configurable con
+    # UPLOADER_MAX_ENVIADOS (0 = sin límite).
+    max_enviados = int(os.environ.get("UPLOADER_MAX_ENVIADOS", "15"))
+    if max_enviados > 0 and len(lista) > max_enviados:
+        podados = lista[:len(lista) - max_enviados]
+        lista = lista[len(lista) - max_enviados:]
+        log("LIMP", f"enviados.json podado: {len(podados)} entrada(s) antigua(s) eliminadas")
     guardar_enviados(lista)
     if archivo.exists():
         try:
@@ -464,6 +472,17 @@ def caption_sin_episodio(texto):
     if not re.match(r"(?i)^\s*(temporada\s*\d+\s*[·\-\|]\s*)?episodio(s)?\s*\d", texto):
         return texto
     return re.sub(r"\s+", " ", re.sub(r"(?i)\bepisodio(s)?\b", "", texto)).strip()
+
+
+def es_rango_episodios(texto):
+    """True si el texto describre un rango de episodios/temporada (p. ej.
+    'Episodio 1-4', 'Temporada 2 · Episodio 1-4'). False para descripciones
+    libres (p. ej. la propia del canal de YouTube). Se usa para decidir si la
+    metadata sirve como caption o cae al nombre del canal."""
+    if not texto:
+        return False
+    import re
+    return bool(re.match(r"(?i)^\s*(temporada\s*\d+\s*[·\-\|]\s*)?episodio(s)?\s*\d", texto))
 
 
 def detectar_episodios(archivo):
@@ -920,15 +939,17 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni foro. Se omite.")
                         continue
                     log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
-                    if episodios:
+                    if episodios and es_rango_episodios(str(episodios)):
                         # Routing con el texto completo; el caption se muestra
                         # sin la palabra 'Episodio' (p. ej. '1-4').
                         caption_base = caption_sin_episodio(str(episodios))
                         log("INFO", f"{archivo.name}: episodio(s): {episodios} → caption '{caption_base}'")
                     else:
+                        # Descripción libre (p. ej. la de YouTube) o sin metadata:
+                        # se usa el NOMBRE del canal, no la descripción propia.
                         canal = canal or canal_from_filename(archivo.name)
                         caption_base = f"🎬 Directo de {canal}" if canal else "🎬 Directo"
-                        log("WARN", f"{archivo.name}: sin episodios ni descripción, caption por defecto")
+                        log("WARN", f"{archivo.name}: caption por defecto (descripción no usada)")
                     await subir_archivo(client, archivo, destinos, caption_base, keyword)
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")
