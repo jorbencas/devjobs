@@ -1,5 +1,6 @@
 import json
 import platform
+from datetime import datetime
 import re
 import shutil
 import subprocess
@@ -94,10 +95,11 @@ def parse_sources(platform, url: str = "") -> list:
 
 
 class Recorder:
-    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = ""):
+    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None):
         self.channel = channel
         self.sources = parse_sources(platform_name, url)
         self.platform_name = self.sources[0]["platform"]
+        self.dias_plataforma = dias_plataforma or {}
         self._active = None
         self._probed_sources = set()
         self.record_path = Path(record_path)
@@ -150,9 +152,31 @@ class Recorder:
         except Exception as e:
             log.warning(f"[{self.channel}] web.probe falló: {e}")
 
+    def _reordenar_por_dia(self) -> None:
+        """Fija las plataformas a usar según el día (p.ej. siendo: domingo YT/Twitch,
+        resto de días sin YouTube). El mapa REPLACE la lista de fuentes: solo se
+        usan las plataformas indicadas, en ese orden."""
+        if not self.dias_plataforma:
+            return
+        day = datetime.now().strftime("%A")
+        order = self.dias_plataforma.get(day) or self.dias_plataforma.get("*")
+        if not order:
+            return
+        by_platform = {}
+        for src in self.sources:
+            by_platform.setdefault(src["platform"], []).append(src)
+        ordered = []
+        for plat in order:
+            ordered.extend(by_platform.pop(plat, []))
+        # Las plataformas NO listadas se descartan (no se usan ese día).
+        if ordered:
+            self.sources = ordered
+
     def is_live(self) -> bool:
         # Prioridad: la primera fuente que esté en directo gana (ej. la web del
-        # streamer antes que kick/twitch).
+        # streamer antes que kick/twitch). Según el día se puede priorizar otra
+        # plataforma (ej. siendo → youtube el domingo).
+        self._reordenar_por_dia()
         for src in self.sources:
             if not self._is_source_live(src):
                 # Si la web está caída, permitir re-probar cuando vuelva a estar activa
@@ -285,6 +309,9 @@ class Recorder:
         """
         data = {}
         if src.get("descripcion"):
+            titulo = self.get_live_title()
+            if titulo:
+                data["titulo"] = titulo[:1024]
             desc = self.get_live_description()
             if not desc:
                 log.warning(f"[{self.channel}] Sin descripción que guardar")

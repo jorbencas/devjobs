@@ -26,11 +26,15 @@ def _seconds_until_time(t: str) -> int:
     return diff * 60
 
 
+ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
 def _dias_para(extra: dict, config: dict) -> list:
-    dias = extra.get("days") or config.get("days", [])
+    dias = extra.get("days") or config.get("days")
     if isinstance(dias, str):
         dias = [dias]
-    return list(dias)
+    # Si no se indica nada, se entiende que emite todos los días.
+    return list(dias) if dias else ALL_DAYS
 
 
 def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:
@@ -114,7 +118,7 @@ def run_scheduler(dry_run: bool = False):
         for channel, platform_name, url, extra in new_channels_with_platform:
             if channel not in recorders:
                 log.info(f"[{channel}] Nuevo canal detectado ({platform_name}), añadiendo...")
-                recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
+                recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path, extra.get("dias_plataforma"))
         channels_with_platform = new_channels_with_platform
 
         progs = _programados_hoy(config, channels_with_platform)

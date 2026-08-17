@@ -136,7 +136,7 @@ fi
 # grupos.json: imprescindible (NO está en gitignore → suele venir del repo).
 if [ ! -f "$DL/grupos.json" ]; then
     print_err "Falta $DL/grupos.json (destinos de subida)."
-    echo "  Crea el archivo con el 'default' y tus grupos (ver README_UPLOADER.md)"
+    echo "  Crea el archivo con el 'default' y tus grupos (ver downloader_telegram/README.md, sección 'Uploader a Telegram')"
     echo "  o rellénalo tras el build con:  bash servicios/pipe_chats.sh --creados"
 fi
 

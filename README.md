@@ -26,8 +26,54 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 │ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
 │  (grabar)     │    mover a test/  │  monitor *720p*    │      a 720p         │  uploader (subir) │
 └──────────────┘                    └──────────────────┘                      └──────────────────┘
-   /home/jorge/dev/devjobs/data/grabaciones/test/  /home/jorge/dev/devjobs/data/comprimidos/  N grupos
+   data/grabaciones/test/          data/comprimidos/                          N grupos
 ```
+
+### Flujo completo (paso a paso)
+
+1. **Grabar** — `TwitchRecorder` (`twitchrecorder`) comprueba si el canal está en
+   directo (según `config.json`) y graba con calidad original. Si el canal define
+   varias fuentes, coge la primera que esté online. Si cambia de plataforma a
+   medio directo (p. ej. Twitch→Kick), concatena las partes en un solo archivo.
+2. **Keyword** — lee el **título/descripción** del directo y lo incrusta en el
+   nombre: `sendosama_2026-08-13_20-15-00_KW_<keyword>_completed.mp4`. La keyword
+   viaja intacta por todo el pipeline.
+3. **Cola de espera** (`data/grabaciones/test/`): si `copy_to_test: true`, al
+   terminar el directo TwitchRecorder **mueve** la grabación a esta carpeta como
+   `*_completed.mp4`. Es el punto de entrada del compresor.
+   *(Sidecar opcional `*_descripcion.json`: describe la fuente; ver "Configuración
+   por fuente" en el README de ffmpeg-yt-dlp.)*
+4. **Comprimir** — `ffmpeg-yt-dlp` (`monitor`) vigila esa carpeta cada 30 s,
+   detecta los `*_completed.mp4` y los convierte a **720p** (con garantía <2 GB).
+   Detecta episodios por OCR (genera `*_episodios.json` con el caption) y deja el
+   resultado como `*_compressed.mp4` en `data/comprimidos/`, moviendo el original
+   a `comprimidos/.processed`.
+5. **Subir** — `downloader_telegram` (`uploader`) vigila `data/comprimidos/` y
+   por cada `*_compressed.mp4` no enviado extrae el **canal** y la **keyword**,
+   elige el destino (tema de foro por canal/keyword, o grupo), sube el vídeo con
+   su caption, y al terminar **borra todo el residuo** (el `.mp4`, el sidecar
+   `*_episodios.json`, el original de `.processed`, los `log_*.txt` y las partes
+   si se dividió por >2 GB). Registra lo enviado en `enviados.json`.
+
+Resultado: un directo grabado a las 21:00 aparece ya comprimido y subido a su
+tema/serie sin que tengas que hacer nada.
+
+### Carpetas del pipeline
+
+| Carpeta | Contenido | Quién escribe / lee |
+|---|---|---|
+| `data/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder` escribe |
+| `data/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder` escribe / `monitor` lee |
+| `data/comprimidos/` | `*_compressed.mp4` listos | `monitor` escribe / `uploader` lee |
+| `data/comprimidos/.processed/` | Originales ya comprimidos | `monitor` escribe / `uploader` limpia tras subir |
+| `data/backups/` | Backups de config del CLI | `tg_toolbox.py` (export/import) |
+
+> **Detalle:** la carpeta `test/` es solo la **bandeja de espera** entre el
+> recorder y el compresor (ficamos claros: no es para probar nada, es el punto de
+> entrada del monitor). Si TwitchRecorder está parado vacía; al grabar un directo
+> se llena temporalmente hasta que el monitor la procesa.
+
+### Las 3 piezas
 
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
@@ -55,18 +101,20 @@ cd ../downloader_telegram && docker compose up -d uploader
 
 ```bash
 # 1. Sesión del uploader (una sola vez, pide teléfono + código)
-cd downloader_telegram && docker compose run --rm uploader python /app/subir_videos.py --setup
+cd downloader_telegram && docker compose run --rm uploader python /app/app/subir_videos.py --setup
 
 # 2. Descubrir los IDs de tus grupos
-docker compose run --rm uploader python /app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]
+docker compose run --rm uploader python /app/app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]
 
 # 3. Rellenar grupos.json con 'default' + [{nombre, id}] (ruteo por keyword)
 ```
 
 ### Documentación detallada
 
-- **Monitoreo de compresión:** [`ffmpeg-yt-dlp/README_MONITOR.md`](ffmpeg-yt-dlp/README_MONITOR.md)
-- **Subida a Telegram:** [`downloader_telegram/README_UPLOADER.md`](downloader_telegram/README_UPLOADER.md)
+- **Monitoreo de compresión:** [`ffmpeg-yt-dlp/README.md`](ffmpeg-yt-dlp/README.md) (sección *Monitor de carpeta*)
+- **Subida a Telegram:** [`downloader_telegram/README.md`](downloader_telegram/README.md) (sección *Uploader a Telegram*)
+- **CLI de Telegram (toolbox):** [`downloader_telegram/README.md`](downloader_telegram/README.md) (sección *CLI consolidada*)
+- **Detección de episodios / corte:** [`ffmpeg-yt-dlp/README.md`](ffmpeg-yt-dlp/README.md) (secciones *Corte de inicio/fin* y *Configuración por fuente*)
 - **Grabación `_completed`:** [`TwitchRecorder/README.md`](TwitchRecorder/README.md)
 - **Comandos Docker y systemd:** [`docker_help.txt`](docker_help.txt)
 - **Servicio systemd (auto-arranque al boot):** [`servicios/twitch-stream-pipeline.service`](servicios/twitch-stream-pipeline.service)
@@ -109,10 +157,16 @@ cd aula-downloader && docker compose build && docker compose run --rm aula_downl
 
 ```bash
 docker_help   # Muestra todos los comandos Docker y de cada proyecto
-# Pipeline completo de una vez: pipe_up (parar: pipe_down)
+# Pipeline completo de una vez:
+#   pipe_up (encender los 3 daemons)  pipe_down (parar los 3)  pipe_ps (estado)
+#   plogs    (logs de los 3 a la vez, con color)
+#   pipe_recreate (aplica cambios de CONFIG) | pipe_rebuild (cambios de CÓDIGO)
+#   pipe_setup   (login Telegram uploader, una vez) | pipe_once (una pasada)
+#   pipe_chats [--creados] · pipe_topics <grupo> · pipe_test [kw] [ruta]
+#   pipe_sys_start / pipe_sys_stop / pipe_sys_status  (systemd)
 # Logs en directo por proyecto/instancia:
 #   ff_logs (monitor)  ff_manual_logs (midu)  tw_logs  tg_logs  pdf_logs
-# Logs de los 3 daemons del pipeline de una vez (con color): plogs
+#   (con *_-stop / *_-restart para parar/reiniciar ese daemon individual)
 # Estado de los contenedores: pipe_ps (pipeline) | docker ps
 ```
 

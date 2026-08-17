@@ -151,7 +151,15 @@ compress_video() {
         slice_args=(-i "$input")
     fi
     local -a vf_args=()
-    [[ -n "$RESOLUTION" ]] && vf_args=(-vf "scale=-2:${RESOLUTION}")
+    if [[ -n "$RESOLUTION" ]]; then
+        # Reescalado opcional: scale con force_original_aspect_ratio=decrease +
+        # pad a WxH exacto (no distorsiona, rellena con barras). W = H*16/9.
+        # Por defecto (sin -r) se mantiene la resolución original.
+        local pad_w pad_h
+        pad_h="$RESOLUTION"
+        pad_w=$(( RESOLUTION * 16 / 9 ))
+        vf_args=(-vf "scale=${pad_w}:${pad_h}:force_original_aspect_ratio=decrease,pad=${pad_w}:${pad_h}:(ow-iw)/2:(oh-ih)/2")
+    fi
 
     local ffmpeg_args=(-y)
     if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
@@ -159,7 +167,8 @@ compress_video() {
     else
         ffmpeg_args+=(-i "$input")
     fi
-    ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET")
+    local threads="${THREADS:-4}"
+    ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET" -threads "$threads")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
     ffmpeg_args+=("${vf_args[@]}")
     # Mapeo explícito (igual que midu.sh): solo vídeo + 1er audio, descartando
@@ -192,12 +201,12 @@ compress_video() {
             local video_bps=$(( video_bytes * 8 / duration ))
             if [[ "$video_bps" -gt 0 ]]; then
                 ffmpeg "${slice_args[@]}" "${vf_args[@]}" -map 0:v:0 -c:v "$CODEC" -b:v "$video_bps" \
-                    -preset "$PRESET" -pass 1 -an -f null - \
+                    -preset "$PRESET" -threads "$threads" -pass 1 -an -f null - \
                     2>/dev/null
                 local pass2_map=(-map 0:v:0)
                 [[ -n "$has_audio" ]] && pass2_map+=(-map 0:a:0)
                 if ffmpeg "${slice_args[@]}" "${vf_args[@]}" "${pass2_map[@]}" -c:v "$CODEC" -b:v "$video_bps" \
-                    -preset "$PRESET" -pass 2 \
+                    -preset "$PRESET" -threads "$threads" -pass 2 \
                     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
                     -map_metadata 0 \
                     -movflags +faststart -f mp4 "$tmp_output" 2>/dev/null; then
@@ -254,7 +263,8 @@ show_help() {
     echo "  -c, --crf VALUE      Calidad CRF (default: 28, menor = mejor)"
     echo "  -p, --preset NAME    Preset de velocidad (default: fast)"
     echo "  --codec NAME         Códec de vídeo (default: libx264)"
-    echo "  -r, --resolution N   Escalar altura a N px, ej: 720 (default: sin reescalar)"
+    echo "  -r, --resolution N   Escalar a altura N px con pad 16:9, ej: 720 (default: sin reescalar)"
+    echo "  -t, --threads N      Hilos ffmpeg (default: 4)"
     echo "  --completed-only     Procesar solo archivos *_completed.* / *_compressed.*"
     echo "  --directo-completo   No cortar inicio/fin del directo (mantener todo el vídeo)"
     echo "  --interval SEGS      Intervalo de polling en segundos (default: 30)"
@@ -273,6 +283,7 @@ while [[ $# -gt 0 ]]; do
         -p|--preset)   PRESET="$2"; shift 2 ;;
         --codec)       CODEC="$2"; shift 2 ;;
         -r|--resolution) RESOLUTION="$2"; shift 2 ;;
+        -t|--threads)    THREADS="$2"; shift 2 ;;
         --completed-only) COMPLETED_ONLY="true"; shift ;;
         --directo-completo) DIRECTO_COMPLETO="true"; shift ;;
         --interval)    POLL_INTERVAL="$2"; shift 2 ;;

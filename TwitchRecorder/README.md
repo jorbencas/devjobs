@@ -46,8 +46,6 @@ Edita `config.json`:
         "adin": { "platform": "kick" }
     },
     "record_path": "/recordings",
-    "days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
-    "start_time": "21:30",
     "check_every": 30,
     "max_duration": "24:00:00",
     "retry_interval": 60,
@@ -55,6 +53,11 @@ Edita `config.json`:
     "test_path": "/recordings/test"
 }
 ```
+
+> **Nota:** ya **no** hay un `days` ni un `start_time` globales. Cada canal
+> configura los suyos (ver [Horarios por canal](#horarios-por-canal)); si un canal
+> no indica `days`, se graba **todos los días**, y si no indica `start_time`,
+> se usa la hora por defecto `19:55`.
 
 ### Plataformas soportadas
 
@@ -95,6 +98,36 @@ Sendo (donde normalmente emite los **domingos**), luego Twitch (lo normal) y Kic
 > solo cuando quiere mostrar los capítulos (normalmente emite en Twitch y la
 > web no responde). Por eso la comprobación web hace un pre-check HTTP rápido
 > (~4 s) y, si no responde, pasa directo a la siguiente fuente.
+
+### Prioridad de plataforma por día (`dias_plataforma`)
+
+Puedes cambiar qué plataformas y en qué **orden** se prueban **según el día de la
+semana**. Se define a nivel de canal con `dias_plataforma`, un dict con la clave
+`"*"` (días no listados) y/o el nombre de un día en inglés:
+
+```json
+"sendosama": {
+    "platform": [
+        { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+        { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+        { "platform": "twitch", "detectar": true, "corte": true },
+        { "platform": "kick", "detectar": true, "corte": true }
+    ],
+    "dias_plataforma": {
+        "Sunday":     ["youtube", "twitch", "web", "kick"],
+        "*":          ["web", "twitch", "kick"]
+    }
+}
+```
+
+Para el día de la semana actual, el recorder busca primero la clave del día; si no
+existe, usa `"*"`. Las cadenas de la lista deben coincidir con el `platform` o el
+`"platform"` de cada fuente del canal (**web/twitch/kick/youtube**).
+
+> **Sustituyen, no reordenan.** A diferencia de `platform`, la lista del día
+> **descarta** las fuentes que no aparecen y usa ese orden. Ej.: los **domingos**
+> se prioriza **YouTube** (donde Sendo normalmente emite) y se cae a Twitch/web/kick;
+> el **resto de días** se omite YouTube por completo (`web → twitch → kick`).
 
 ### Detección de episodios y corte: configurables por fuente
 
@@ -173,19 +206,26 @@ luego reaparece en directo.
 |---|---|
 | `channels` | Diccionario con canales. Cada uno indica su plataforma: `twitch`, `youtube` o `kick` |
 | `record_path` | Ruta dentro del contenedor donde se guardan los vídeos |
-| `days` | Días de la semana en los que se comprueba si hay directo |
-| `start_time` | Hora mínima para empezar a comprobar (no desperdicia recursos antes) |
 | `check_every` | Cada cuántos segundos se comprueba si el canal está en directo |
 | `max_duration` | Duración máxima de grabación en formato `HH:MM:SS` |
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
 | `copy_to_test` | Si `true`, al terminar un directo mueve la grabación a `test_path` renombrada a `*_completed.mp4` |
 | `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
 
+**Campos por canal** (dentro de `channels.<canal>`):
+
+| Campo del canal | Descripción |
+|---|---|
+| `platform` | Fuente o lista de fuentes en orden de prioridad (ver arriba) |
+| `days` | Días de la semana en los que comprobar si hay directo. Por defecto **todos los días** |
+| `start_time` | Hora mínima para empezar a comprobar. `str` o `dict` por día con comodín `"*"`. Por defecto `19:55` |
+| `dias_plataforma` | Dict `{día: [plataformas]}` que reordena/sustituye las fuentes por día (ver arriba) |
+
 ### Horarios por canal
 
-Cada canal puede **sobrescribir** los `days`/`start_time` globales con sus propios
-campos `days` y `start_time`. `start_time` acepta un **str** (misma hora todos
-los días) o un **dict** por día de la semana (en inglés, como `days`):
+No existen `days`/`start_time` globales: **cada canal configura los suyos**.
+`start_time` acepta un **str** (misma hora todos los días) o un **dict** por día de
+la semana (en inglés) con la clave especial `"*"` como comodín:
 
 ```json
 "channels": {
@@ -196,7 +236,11 @@ los días) o un **dict** por día de la semana (en inglés, como `days`):
             { "platform": "twitch", "detectar": true, "corte": true },
             { "platform": "kick", "detectar": true, "corte": true }
         ],
-        "start_time": { "Sunday": "19:00" }
+        "dias_plataforma": {
+            "Sunday": ["youtube", "twitch", "web", "kick"],
+            "*": ["web", "twitch", "kick"]
+        },
+        "start_time": { "Sunday": "19:00", "*": "21:30" }
     },
     "midudev": {
         "platform": [
@@ -218,12 +262,14 @@ los días) o un **dict** por día de la semana (en inglés, como `days`):
 ```
 
 Con esto:
-- `sendosama`: todos los días a las `21:30` (global), pero los **domingos a las `19:00`**.
+- `sendosama`: **todos los días** (sin `days`) a las `21:30` (comodín `"*"`), pero los **domingos a las `19:00`**.
 - `midudev`: lunes a jueves a las `18:00`.
 - `mouredev`: los jueves a las `18:00`.
 
 El scheduler espera a la hora más temprana del día y, a partir de ahí, graba cada
-canal solo en su día y cuando ya ha pasado su hora de inicio.
+canal solo en su día y cuando ya ha pasado su hora de inicio. Si un canal no define
+`days`, graba todos los días; si no define `start_time`, usa el valor por defecto
+`19:55`.
 
 > **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/data/grabaciones:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/data/grabaciones/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 
@@ -291,19 +337,21 @@ docker run --rm \
 Docker arranca
     │
     ▼
-¿Hoy es día programado?
+¿Hoy es día programado para el canal?
+    │              (si el canal no define `days`, es todos los días)
     │
     NO → Espera al siguiente día
     │
     SÍ
     ▼
-¿Ya es hora de start_time?
+¿Ya es hora de su start_time?
+    │              (per-canal, comodín "*" / por defecto 19:55)
     │
     NO → Espera (sin consumir CPU)
     │
     SÍ
     ▼
-¿El canal está en directo?
+¿El canal está en directo (alguna fuente del día, según `dias_plataforma`)?
     │
     NO → Espera check_every segundos
     │
@@ -414,37 +462,22 @@ sendosama_2026-08-13_20-15-00_KW_prueba.mp4
 > TwitchRecorder usa la **descripción** como fuente del título, para que el
 > keyword sea el correcto (ej. `diarios_boticaria` y no `sendosama_live`).
 
-Esa keyword viaja intacta por todo el pipeline (`*_completed.mp4` → `*_compressed.mp4`). El servicio `uploader` la usa para decidir a qué grupo de Telegram subir el vídeo: **al grupo cuyo `nombre` coincida con la keyword**, o al `default` si no hay coincidencia. Ver `downloader_telegram/README_UPLOADER.md`.
+Esa keyword viaja intacta por todo el pipeline (`*_completed.mp4` → `*_compressed.mp4`). El servicio `uploader` la usa para decidir a qué grupo de Telegram subir el vídeo: **al grupo cuyo `nombre` coincida con la keyword**, o al `default` si no hay coincidencia. Ver `downloader_telegram/README.md` (sección *Uploader a Telegram*).
 
 ---
 
 ## Pipeline completo: grabar → comprimir → subir a Telegram
 
-TwitchRecorder es la **primera pieza** de un pipeline automático. Las tres piezas:
+TwitchRecorder es la **primera pieza** de un pipeline automático de 3 partes
+(`TwitchRecorder` → `ffmpeg-yt-dlp.monitor` → `downloader_telegram.uploader`).
+Aquí solo se documenta **el papel de esta pieza** — el flujo completo, el arranque
+y las carpetas están en el `README.md` de la **raíz de `devjobs`** (sección *PIPELINE*).
 
-| Pieza | Proyecto | Hace |
-|---|---|---|
-| 1. Grabar | `TwitchRecorder` | Graba el directo y deja `*_completed.mp4` en `test/` |
-| 2. Comprimir | `ffmpeg-yt-dlp` (servicio `monitor`) | Convierte a 720p → `comprimidos/*_compressed.mp4` |
-| 3. Subir | `downloader_telegram` (servicio `uploader`) | Sube a los grupos de Telegram |
+**Papel de TwitchRecorder:** graba el directo y lo deja como `*_completed.mp4` en
+`test/` (solo si `copy_to_test: true`), renombrado con la keyword del directo
+(`*_KW_<keyword>_completed.mp4`). De ahí lo coge el `monitor` para comprimir.
 
-**Arranque del pipeline:**
-```bash
-# TwitchRecorder (esta carpeta)
-docker compose up -d twitchrecorder
-# ffmpeg-yt-dlp
-cd ../ffmpeg-yt-dlp && docker compose up -d monitor
-# downloader_telegram
-cd ../downloader_telegram && docker compose up -d uploader
-```
-
-**Arranque MANUAL (no automático al boot):** los tres servicios NO se levantan
-solos al encender el PC (a propósito). Se arrancan a mano con `pipe_up` o
-`sudo systemctl start twitch-stream-pipeline.service`. Si algún día se quiere
-auto-arranque al boot: `sudo systemctl enable .../twitch-stream-pipeline.service`.
-Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
-
-> Documentación completa del pipeline en `README.md` de la raíz de `devjobs`.
+> Documentación completa del flujo y arranque: `README.md` de la raíz de `devjobs`.
 
 ---
 
@@ -506,7 +539,10 @@ TwitchRecorder/
 
 ```dockerfile
 FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && curl -fsSL https://deno.land/install.sh | sh \
+    && ln -s /root/.deno/bin/deno /usr/local/bin/deno \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -516,7 +552,11 @@ ENTRYPOINT ["python", "-u", "main.py"]
 CMD []
 ```
 
-**`python:3.12-slim`** en lugar de `python:3.12` completa (~150MB vs ~900MB). **`-u`** en el CMD desactiva el buffer de Python para ver logs en tiempo real.
+**`python:3.12-slim`** en lugar de `python:3.12` completa (~150MB vs ~900MB). **`-u`**
+en el CMD desactiva el buffer de Python para ver logs en tiempo real. Además se
+instala **`deno`**: lo usa `yt-dlp` como runtime JavaScript dinámico en YouTube
+(con el binario estático de yt-dlp y sin runtime, la detección/grabación de YouTube
+se queda colgada a la espera de que un plugin procese el JS; con `deno` no hay atasco).
 
 ---
 

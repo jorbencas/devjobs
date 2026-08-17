@@ -28,13 +28,18 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 from telethon import TelegramClient, events
+from telethon.tl.types import (
+    DocumentAttributeFilename,
+    DocumentAttributeVideo,
+)
 
 SCRIPT_DIR = Path(__file__).parent
-CONFIG_FILE = Path(os.environ.get("UPLOADER_CONFIG", SCRIPT_DIR / "config.bin"))
-KEY_FILE = Path(os.environ.get("UPLOADER_KEY", SCRIPT_DIR / "secret.key"))
-SESION_UPLOADER = os.environ.get("UPLOADER_SESION", str(SCRIPT_DIR / "uploader.session"))
-GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", SCRIPT_DIR / "grupos.json"))
-ENVIADOS_FILE = Path(os.environ.get("UPLOADER_ENVIADOS", SCRIPT_DIR / "enviados.json"))
+REPO_DIR = SCRIPT_DIR.parent
+CONFIG_FILE = Path(os.environ.get("UPLOADER_CONFIG", REPO_DIR / "config" / "config.bin"))
+KEY_FILE = Path(os.environ.get("UPLOADER_KEY", REPO_DIR / "config" / "secret.key"))
+SESION_UPLOADER = os.environ.get("UPLOADER_SESION", str(REPO_DIR / "sessions" / "uploader.session"))
+GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", REPO_DIR / "config" / "grupos.json"))
+ENVIADOS_FILE = Path(os.environ.get("UPLOADER_ENVIADOS", REPO_DIR / "config" / "enviados.json"))
 MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 PARTES_DIR = Path(os.environ.get("UPLOADER_PARTES", SCRIPT_DIR / "partes"))
 # Reenvío automático: cuando se sube un vídeo de la keyword indicada, además de
@@ -93,17 +98,26 @@ def cargar_grupos():
 
     Formato:
         {
-            "default": <id_grupo_fallback>,
-            "grupo_series": <id_grupo_con_temas>,                  # opcional
-            "temas": [ {"nombre": "serie", "id": <topic>}, ... ],  # opcional
-            "grupos": [ {"nombre": "prueba", "id": <id>}, ... ]
+            "default": <id_grupo_fallback>,        # opcional, red de seguridad
+            "grupos": [ {"nombre": "prueba", "id": <id>}, ... ],  # chats sueltos
+            "foros": [                              # grupos/foros con temas
+                {
+                    "id": <id_chat_con_foro>,
+                    "nombre": "sendo",
+                    "general": <id_tema_general>,   # tema al que van los no matcheados
+                    "temas": [ {"nombre": "serie", "id": <topic>}, ... ]
+                },
+                ...
+            ]
         }
 
-    Devuelve (default, grupos, grupo_series, temas) donde:
+    Backward-compatible: si se definen 'grupo_series' + 'temas' (formato antiguo)
+    se envuelven como un único foro (catch-all).
+
+    Devuelve (default, grupos, foros) donde:
         - default: id del grupo al que se sube si ninguna keyword coincide
-        - grupos: [{nombre, id}]
-        - grupo_series: id del grupo donde están los temas (series) o None
-        - temas: [{nombre, id}] con los IDs de tema (mensaje raíz del tema)
+        - grupos: [{nombre, id}] (chats sueltos)
+        - foros: [{id, nombre, general, temas}] o [] si no hay
     """
     if not GRUPOS_FILE.exists():
         raise SystemExit(
@@ -123,8 +137,7 @@ def cargar_grupos():
 
     grupos = data.get("grupos", [])
     default = data.get("default")
-    grupo_series = data.get("grupo_series")
-    temas = data.get("temas", [])
+    foros_raw = data.get("foros")
 
     if not isinstance(grupos, list):
         raise SystemExit(
@@ -137,27 +150,52 @@ def cargar_grupos():
         if isinstance(g, dict) and g.get("nombre") and g.get("id"):
             validos.append({"nombre": str(g["nombre"]).lower(), "id": g["id"]})
 
-    temas_validos = []
-    if isinstance(temas, list):
-        for t in temas:
-            if isinstance(t, dict) and t.get("nombre") and t.get("id"):
-                temas_validos.append({"nombre": str(t["nombre"]).lower(), "id": t["id"]})
+    foros = []
+    if foros_raw:
+        for f in foros_raw:
+            if not isinstance(f, dict) or not f.get("id"):
+                continue
+            temas_f = []
+            for t in (f.get("temas") or []):
+                if isinstance(t, dict) and t.get("nombre") and t.get("id"):
+                    temas_f.append({"nombre": str(t["nombre"]).lower(), "id": t["id"]})
+            foros.append({
+                "id": f["id"],
+                "nombre": str(f.get("nombre") or f["id"]),
+                "general": f.get("general"),
+                "temas": temas_f,
+            })
+    else:
+        # Backward-compatible: formato antiguo grupo_series + temas
+        grupo_series = data.get("grupo_series")
+        temas = data.get("temas", [])
+        temas_validos = []
+        if isinstance(temas, list):
+            for t in temas:
+                if isinstance(t, dict) and t.get("nombre") and t.get("id"):
+                    temas_validos.append({"nombre": str(t["nombre"]).lower(), "id": t["id"]})
+        if temas_validos and not grupo_series:
+            raise SystemExit(
+                f"\n[x] {GRUPOS_FILE}: definiste 'temas' pero falta 'grupo_series'.\n"
+                "  → Indica el id del grupo donde están los temas: "
+                "'grupo_series': <id>."
+            )
+        if grupo_series:
+            foros.append({
+                "id": grupo_series,
+                "nombre": str(grupo_series),
+                "general": None,
+                "temas": temas_validos,
+            })
 
-    if not validos and not temas_validos:
+    if not validos and not foros:
         raise SystemExit(
-            f"\n[x] {GRUPOS_FILE} no tiene grupos ni temas válidos.\n"
-            "  → Cada entrada de 'grupos'/'temas' debe ser "
-            "{'nombre': '...', 'id': <id>}."
+            f"\n[x] {GRUPOS_FILE} no tiene grupos ni foros/temas válidos.\n"
+            "  → Cada entrada debe ser {'nombre': '...', 'id': <id>} y/o "
+            "'foros' con sus temas."
         )
 
-    if temas_validos and not grupo_series:
-        raise SystemExit(
-            f"\n[x] {GRUPOS_FILE}: definiste 'temas' pero falta 'grupo_series'.\n"
-            "  → Indica el id del grupo donde están los temas: "
-            "'grupo_series': <id>."
-        )
-
-    return default, validos, grupo_series, temas_validos
+    return default, validos, foros
 
 
 def keyword_from_filename(filename: str) -> str:
@@ -243,6 +281,26 @@ def temas_para_keyword(keyword, temas):
     return list(dict.fromkeys(coincidencias))
 
 
+def match_tema_foro(foro, *textos):
+    """Primer tema del foro que coincide con cualquiera de los textos (canal,
+    keyword...). Devuelve el topic ID o None si ninguno coincide."""
+    for texto in textos:
+        if not texto:
+            continue
+        m = temas_para_keyword(texto, foro.get("temas") or [])
+        if m:
+            return m[0]
+    return None
+
+
+def foro_objetivo(foros, canal):
+    """Elige el foro por defecto (catch-all) para un vídeo cuyo canal no
+    ha coincidido con ningún tema. Usa el primer foro de la lista (o None)."""
+    if not foros:
+        return None
+    return foros[0]
+
+
 def cargar_enviados():
     if not ENVIADOS_FILE.exists():
         return []
@@ -276,6 +334,63 @@ def marcar_enviado(archivo):
             os.remove(archivo)
         except OSError as e:
             log("WARN", f"No se pudo eliminar el archivo ya subido: {e}")
+    limpiar_restos(archivo)
+
+
+def limpiar_restos(archivo):
+    """Tras subir un archivo, elimina TODOS sus restos de /comprimidos:
+    1) el sidecar '<nombre>_episodios.json' generado por el monitor,
+    2) el original de .processed (ya subido a Telegram),
+    3) los logs completos (log_*.txt): residuos de procesamiento,
+    4) las partes divididas en PARTES_DIR (si el vídeo >2GB).
+    Objetivo: al terminar la subida no debe quedar nada residual.
+    """
+    base = archivo.stem.replace("_compressed", "")
+
+    sidecar = archivo.with_name(base + "_episodios.json")
+    for resto, nombre in ((sidecar, "sidecar"),):
+        try:
+            if resto.exists():
+                resto.unlink()
+                log("LIMP", f"Eliminado {nombre}: {resto.name}")
+        except OSError as e:
+            log("WARN", f"No se pudo eliminar {nombre} {resto.name}: {e}")
+
+    # 3) Borrar el original de .processed (ya subido)
+    proc_dir = archivo.parent / ".processed"
+    try:
+        if proc_dir.exists():
+            candidatos = [p for p in proc_dir.glob("*")
+                          if p.is_file() and p.name.startswith(base)]
+            for p in candidatos:
+                try:
+                    p.unlink()
+                    log("LIMP", f"Eliminado .processed: {p.name}")
+                except OSError as e:
+                    log("WARN", f"No se pudo eliminar .processed {p.name}: {e}")
+    except OSError as e:
+        log("WARN", f"No se pudo acceder a {proc_dir}: {e}")
+
+    # 3) Borrar los logs completos (residuos del procesamiento)
+    for log_file in archivo.parent.glob("log_*.txt"):
+        try:
+            log_file.unlink()
+            log("LIMP", f"Eliminado log: {log_file.name}")
+        except OSError as e:
+            log("WARN", f"No se pudo eliminar log {log_file.name}: {e}")
+
+    # 4) Borrar las partes divididas del vídeo (si >2GB)
+    try:
+        if PARTES_DIR.exists():
+            for p in PARTES_DIR.glob(f"{base}_part*"):
+                try:
+                    p.unlink()
+                    log("LIMP", f"Eliminada parte: {p.name}")
+                except OSError as e:
+                    log("WARN", f"No se pudo eliminar parte {p.name}: {e}")
+    except OSError as e:
+        log("WARN", f"No se pudo acceder a {PARTES_DIR}: {e}")
+
 
 
 def dividir_video(archivo):
@@ -333,7 +448,7 @@ def episodios_desde_json(archivo):
     try:
         with open(meta, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("descripcion", "") or data.get("rango", "") or ""
+        return data.get("titulo", "") or data.get("descripcion", "") or data.get("rango", "") or ""
     except (OSError, json.JSONDecodeError):
         return ""
 
@@ -457,6 +572,42 @@ def fotograma(archivo):
     return str(thumb) if r.returncode == 0 and thumb.exists() else None
 
 
+def atributos_video(archivo):
+    """Genera los attributes de vídeo correctos para send_file usando ffprobe.
+
+    Sin 'hachoir' instalado, Telethon no analiza el archivo y envía
+    w=1/h=1/duration=0 con supports_streaming=False → Telegram lo muestra
+    como documento ilegible. Con estos attributes explícitos (duración y
+    dimensiones reales + supports_streaming=True) se reproduce en línea.
+    """
+    r = subprocess.run(
+        ["ffprobe", "-v", "error",
+         "-select_streams", "v:0",
+         "-show_entries", "stream=width,height,duration:format=duration",
+         "-of", "json", str(archivo)],
+        capture_output=True, text=True)
+    w = h = 1
+    duracion = 0.0
+    try:
+        data = json.loads(r.stdout)
+        stream = data.get("streams", [{}])[0]
+        w = int(stream.get("width") or 1)
+        h = int(stream.get("height") or 1)
+        dur = stream.get("duration") or data.get("format", {}).get("duration")
+        duracion = float(dur) if dur else 0.0
+    except (ValueError, TypeError, IndexError):
+        pass
+    return [
+        DocumentAttributeVideo(
+            duration=int(round(duracion)),
+            w=w, h=h,
+            round_message=False,
+            supports_streaming=True,
+        ),
+        DocumentAttributeFilename(archivo.name),
+    ]
+
+
 async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
     """Sube 'archivo' a cada destino de 'destinos'.
 
@@ -522,6 +673,7 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
                     caption=cap,
                     video_note=False,
                     thumb=thumb,
+                    attributes=atributos_video(parte),
                     reply_to=topico,
                     progress_callback=lambda c, t: None,
                 )
@@ -706,7 +858,7 @@ async def run_create_topics(api_id, api_hash, grupo, titulos):
 
 
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
-    default, grupos, grupo_series, temas = cargar_grupos()
+    default, grupos, foros = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     try:
         await _conectar(client)
@@ -721,8 +873,8 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
             "    docker compose run --rm uploader python /app/subir_videos.py --setup"
         )
 
-    info_series = f", temas en {grupo_series}: {len(temas)}" if grupo_series else ""
-    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}{info_series}")
+    info_foros = f", foros: {[f['nombre'] for f in foros]}" if foros else ""
+    log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}{info_foros}")
 
     def a_carpeta(p):
         pp = Path(p)
@@ -734,23 +886,38 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
     while True:
         try:
             for carpeta in carpetas:
-                for archivo in sorted(carpeta.glob("*_compressed.mp4")):
+                for archivo in sorted(carpeta.glob("*_compressed.*")):
+                    if archivo.suffix.lower() not in (".mp4", ".mkv", ".webm", ".mov", ".avi"):
+                        continue
                     keyword = keyword_from_filename(archivo.name)
+                    canal = canal_from_filename(archivo.name)
                     destinos = [(g, None) for g in grupos_para_keyword(keyword, default, grupos)]
-                    if grupo_series and temas:
-                        destinos += [(grupo_series, t) for t in temas_para_keyword(keyword, temas)]
-                        episodios = episodios_desde_json(archivo)
+                    episodios = episodios_desde_json(archivo)
+
+                    if foros:
                         if not episodios:
                             episodios = detectar_episodios(archivo)
                             log("INFO", f"{archivo.name}: OCR de episodios realizado")
-                        # Si el contenido detectado es una película, enrutar también
-                        # al tema que coincida (p. ej. 'peliculas'), aunque la keyword
-                        # del título no la mencione.
-                        if episodios:
-                            destinos += [(grupo_series, t) for t in temas_para_keyword(str(episodios), temas)]
+                        # El tema del foro actúa como clave (sin lista canales):
+                        #  1) Si el canal del archivo coincide con un tema → ese
+                        #     foro/tema (p.ej. 'midudev' → tema 'midu').
+                        #  2) Si no, al foro por defecto (catch-all) matcheando la
+                        #     keyword o episodios; si tampoco, al tema 'general'.
+                        foro = tid = None
+                        for fo in foros:
+                            m = match_tema_foro(fo, canal)
+                            if m:
+                                foro, tid = fo, m
+                                break
+                        if foro is None:
+                            foro = foro_objetivo(foros, canal)
+                            tid = match_tema_foro(foro, keyword) or \
+                                (match_tema_foro(foro, str(episodios)) if episodios else None)
+                        destinos.append((foro["id"], tid if tid else foro.get("general")))
                         destinos = list(dict.fromkeys(destinos))
+                        log("INFO", f"{archivo.name}: canal='{canal}' → foro '{foro['nombre']}' tema {tid or foro.get('general')}")
                     if not destinos:
-                        log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni tema. Se omite.")
+                        log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni foro. Se omite.")
                         continue
                     log("INFO", f"{archivo.name}: keyword='{keyword}' → {destinos}")
                     if episodios:
@@ -759,7 +926,7 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         caption_base = caption_sin_episodio(str(episodios))
                         log("INFO", f"{archivo.name}: episodio(s): {episodios} → caption '{caption_base}'")
                     else:
-                        canal = canal_from_filename(archivo.name)
+                        canal = canal or canal_from_filename(archivo.name)
                         caption_base = f"🎬 Directo de {canal}" if canal else "🎬 Directo"
                         log("WARN", f"{archivo.name}: sin episodios ni descripción, caption por defecto")
                     await subir_archivo(client, archivo, destinos, caption_base, keyword)

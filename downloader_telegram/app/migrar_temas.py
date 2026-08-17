@@ -26,10 +26,13 @@ from subir_videos import (  # noqa: E402
 )
 
 
-async def run(api_id, api_hash, pares, ejecutar):
-    default, grupos, grupo_series, temas = cargar_grupos()
-    if not grupo_series:
-        raise SystemExit("[x] No hay grupo_series en grupos.json.")
+async def run(api_id, api_hash, pares, ejecutar, foro_idx=0):
+    default, grupos, foros = cargar_grupos()
+    if not foros:
+        raise SystemExit("[x] No hay foros en grupos.json.")
+    foro = foros[min(foro_idx, len(foros) - 1)]
+    grupo_series = foro["id"]
+    temas = foro["temas"]
     tmap = {t["id"]: t["nombre"] for t in temas}
 
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
@@ -61,31 +64,40 @@ async def run(api_id, api_hash, pares, ejecutar):
             continue
 
         nenv = 0
+        ntxt = 0
         async for msg in client.iter_messages(source_ent, reverse=True):
-            if not (msg.media and getattr(msg, "document", None)):
-                continue
             try:
-                caption = msg.message or ""
-                await client.send_file(foro_ent, msg.media, caption=caption, reply_to=tema_id)
-                nenv += 1
-                if nenv % 5 == 0:
-                    log("ok", f"  {nombre}: re-subidos {nenv}")
-                await asyncio.sleep(0.5)
+                if msg.message and (msg.media and getattr(msg, "document", None)):
+                    caption = msg.message or ""
+                    await client.send_file(foro_ent, msg.media, caption=caption, reply_to=tema_id)
+                    nenv += 1
+                elif msg.message and not getattr(msg, "media", None):
+                    await client.send_message(foro_ent, msg.message, reply_to=tema_id)
+                    ntxt += 1
+                elif msg.media and getattr(msg, "document", None):
+                    await client.send_file(foro_ent, msg.media, reply_to=tema_id)
+                    nenv += 1
+                else:
+                    continue  # ni texto ni media (reacciones, service_msg, etc.)
             except Exception as e:
                 log("x", f"  fallo msg {msg.id}: {e}")
-        log("ok", f"{nombre}: {nenv} vídeos re-subidos al tema.")
+            await asyncio.sleep(0.3)
+        log("ok", f"{nombre}: {nenv} vídeos + {ntxt} textos re-subidos al tema.")
         await asyncio.sleep(1)
 
     await client.disconnect()
 
 
-async def run_deshacer(api_id, api_hash, pares, ventana_min):
+async def run_deshacer(api_id, api_hash, pares, ventana_min, foro_idx=0):
     """Borra de los temas las re-subidas hechas por la propia cuenta dentro de la
     ventana, en cada tema objetivo (pares = origen recuperado en el formato TEMA_ID:ORIGEN)."""
     from datetime import datetime, timedelta
-    default, grupos, grupo_series, temas = cargar_grupos()
-    if not grupo_series:
-        raise SystemExit("[x] No hay grupo_series en grupos.json.")
+    default, grupos, foros = cargar_grupos()
+    if not foros:
+        raise SystemExit("[x] No hay foros en grupos.json.")
+    foro = foros[min(foro_idx, len(foros) - 1)]
+    grupo_series = foro["id"]
+    temas = foro["temas"]
     tmap = {t["id"]: t["nombre"] for t in temas}
     topic_ids = sorted({int(p.split(":", 1)[0]) for p in pares})
 
@@ -125,12 +137,14 @@ async def run_deshacer(api_id, api_hash, pares, ventana_min):
     await client.disconnect()
 
 
-async def run_renombrar(api_id, api_hash, pares):
+async def run_renombrar(api_id, api_hash, pares, foro_idx=0):
     """Renombra temas del foro: pares TEMA_ID:NUEVO_NOMBRE."""
     from telethon.tl.functions.messages import EditForumTopicRequest
-    default, grupos, grupo_series, temas = cargar_grupos()
-    if not grupo_series:
-        raise SystemExit("[x] No hay grupo_series en grupos.json.")
+    default, grupos, foros = cargar_grupos()
+    if not foros:
+        raise SystemExit("[x] No hay foros en grupos.json.")
+    foro = foros[min(foro_idx, len(foros) - 1)]
+    grupo_series = foro["id"]
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     await _conectar(client)
     foro_ent = None

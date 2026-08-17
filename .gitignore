@@ -21,18 +21,26 @@ rad.json
 #Test results file
 TestResults.xml
 Descargas_Telegram/
+**/__pycache__/
 .env
 venv/
 .venv/
-config.bin
 credentials.txt
+sessions/
+*.session
+*.session-journal
+config/*.bin
+config/*.key
+config/*.session
+config/grupos.json
+config/enviados.json
+config.bin
 ultimate_session.session
 ultimate_session.session-journal
 uploader.session
 secret.key
 grupos.json
 enviados.json
-config.bin
 pdfs_libres
 pdfs_protegidos
 tituls AR

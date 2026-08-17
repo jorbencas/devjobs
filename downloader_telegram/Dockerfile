@@ -14,9 +14,8 @@ RUN pip install --no-cache-dir \
     rich \
     inquirerpy
 
-COPY test_download_protected_content_telegram.py .
-COPY test_string.py .
-COPY subir_videos.py .
-COPY migrar_temas.py .
+COPY app/ /app/app/
+COPY config/config.bin config/secret.key config/grupos.json config/enviados.json /app/config/
+COPY sessions/* /app/sessions/
 
-CMD ["python", "-u", "test_download_protected_content_telegram.py"]
+CMD ["python", "-u", "/app/app/tg_toolbox.py"]

@@ -5371,6 +5371,15 @@ convertir_archivo() {
         ffmpeg_args+=(-pass 2 -passlogfile "$tmp_file.passlog")
     fi
 
+    # Mostrar el comando ffmpeg completo (verbose: ver qué args llegan reales)
+    echo "==== FFMPEG CMD ===="
+    local _tmp=""
+    for _a in "${ffmpeg_args[@]}"; do
+        _tmp="${_tmp}${_tmp:+ }$(printf '%q' "$_a")"
+    done
+    echo "$_tmp"
+    echo "===================="
+
     if [[ "$VERBOSE" == true ]]; then
         ffmpeg "${ffmpeg_args[@]}" \
             -progress pipe:2 \

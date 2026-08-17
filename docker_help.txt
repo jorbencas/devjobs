@@ -242,7 +242,8 @@ data/grabaciones/test/   Grabaciones terminadas (*_KW_<kw>_completed.mp4)
 data/comprimidos/        Videos listos para subir (*_KW_<kw>_compressed.mp4)
 data/backups/            Grabaciones antiguas archivadas
 
-# Config (grupos.json, credenciales, sesiones, ruteo por keyword): ver README_UPLOADER.md
+# Config (grupos.json, credenciales, sesiones, ruteo por keyword): ver
+# downloader_telegram/README.md (sección "Uploader a Telegram")
 # NO uses `docker compose down` a secas en downloader_telegram / TwitchRecorder /
 # ffmpeg-yt-dlp (pararían también al daemon del pipeline). Para parar los 3 usa pipe_down.
 
