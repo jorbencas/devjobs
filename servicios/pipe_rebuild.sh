@@ -3,17 +3,18 @@
 # (Los .py se copian en la imagen: recorder.py, monitor, subir_videos.py...)
 # Uso:  bash servicios/pipe_rebuild.sh
 set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "== TwitchRecorder =="
-cd /home/jorge/dev/devjobs/TwitchRecorder
+cd "$ROOT/TwitchRecorder"
 docker compose build && docker compose up -d --force-recreate twitchrecorder
 
 echo "== ffmpeg-yt-dlp (monitor) =="
-cd /home/jorge/dev/devjobs/ffmpeg-yt-dlp
+cd "$ROOT/ffmpeg-yt-dlp"
 docker compose build && docker compose up -d --force-recreate monitor
 
 echo "== downloader_telegram (uploader) =="
-cd /home/jorge/dev/devjobs/downloader_telegram
+cd "$ROOT/downloader_telegram"
 docker compose build && docker compose up -d --force-recreate uploader
 
 echo "Pipeline reconstruido y recreado."

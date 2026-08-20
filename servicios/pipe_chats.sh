@@ -4,6 +4,7 @@
 #   --creados  -> solo los que creaste tú
 #   --folder   -> filtra por nombre de chat o archivado/principal
 # Uso:  bash servicios/pipe_chats.sh [--creados] [--folder <texto>]
-cd /home/jorge/dev/devjobs/downloader_telegram
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT/downloader_telegram"
 
-docker compose run --rm uploader python /app/subir_videos.py --list-chats "$@"
+docker compose run --rm uploader python /app/app/subir_videos.py --list-chats "$@"

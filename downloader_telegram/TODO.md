@@ -6,34 +6,36 @@
 - [ ] Filtros por fecha
 - [ ] Filtros por tipo (texto, fotos, vídeos, documentos)
 - [ ] Filtros por tamaño
-- [ ] Exportar a JSON
+- [x] Exportar a JSON (backup local en `Clonar & Backup`)
 - [ ] Exportar a CSV
 - [ ] Rate limiting configurable
 - [ ] Deduplicación
 - [ ] Resume: continuar descarga desde donde se quedó
-- [ ] Modo espejo: clonar y mantener sincronizado
+- [x] Modo espejo: clonar y mantener sincronizado
 - [ ] Búsqueda en canales
 - [ ] Filtros por usuario
 - [ ] Filtros por reply
 - [ ] Filtros por forwarded
 - [ ] Filtros por media group
-- [ ] Descarga de storys
-- [ ] Descarga de polls
-- [ ] Descarga de contactos
-- [ ] Descarga de ubicaciones
-- [ ] Descarga de voice messages (transcribir con whisper)
-- [ ] Descarga de stickers
-- [ ] Descarga de GIFs
+- [x] Descarga de storys
+- [x] Descarga de polls (como `.txt` legible)
+- [x] Descarga de contactos (como `.txt` legible)
+- [x] Descarga de ubicaciones (coordenadas + Google Maps en `.txt`)
+- [x] Descarga de voice messages (transcribir con whisper)
+- [x] Descarga de stickers
+- [x] Descarga de GIFs
 - [ ] Notificación push (ntfy.sh)
-- [ ] Modo watch: monitorear canal
+- [x] Modo watch: monitorear canal (Vigilante ampliado)
 - [ ] Webhook HTTP
 - [ ] API REST
 - [ ] Database SQLite
 - [ ] Stats del canal
 - [ ] Backup programado
-- [ ] Multi-canales simultáneos
-- [ ] Filtros por palabra clave
-- [ ] Auto-translate al descargar
+- [x] Multi-canales simultáneos (Vigilante)
+- [x] Filtros por palabra clave (Vigilante)
+- [x] Vigilante: filtro por tipo de medio, emisores, excluir chats y temas
+- [x] Vigilante: múltiples destinos, marcar razón, cooldown, resumen, config persistente
+- [x] Auto-translate al descargar
 - [ ] Hash verification
 - [ ] Modo dry-run
 - [ ] Exportar a Markdown/HTML/PDF
@@ -41,6 +43,11 @@
 - [ ] Audio transcription con whisper
 - [ ] Smart naming
 - [ ] Folder structure automático
+
+## Extra (añadido)
+- [x] Módulo 10: Fijar / Desfijar mensajes (pin/unpin, chat y tema de foro)
+- [x] Chats: crear carpeta, mover a carpeta, silenciar, fijar chat
+- [x] Backup/restaurar de clonación en archivo local
 
 ## Seguridad
 - [ ] Cifrado de descargas (AES)

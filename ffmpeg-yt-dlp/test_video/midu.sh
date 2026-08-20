@@ -65,6 +65,8 @@ midu.sh v${VERSION} — Conversor, descargador y editor de vídeo
   --deinterlace   Quita el "entrelazado" de vídeos de TV viejos (rayas)
   --fps           Cambia los frames por segundo (ej: de 30 a 60 para más suavidad)
   --speed         Acelera o ralentiza el vídeo (0.5 = mitad, 2 = doble)
+  --sync-av       Corrige el desfase audio/vídeo (ms o segundos, ej: 1000, 1.5s)
+  --sync-av       Re-sincroniza audio y vídeo (comprueba el desfase)
   -sl / -sh       Embebe o quema subtítulos en el vídeo
   --concat        Une varios vídeos en uno solo
   -ao / -ma       Extrae solo audio o mezcla audio con vídeo
@@ -142,6 +144,7 @@ MODO FPS:
 
 VELOCIDAD:
   --speed FACTOR         Velocidad del vídeo (0.25, 0.5, 0.75, 1.5, 2, 4)
+  --sync-av VAL       Ajustar sincronización audio/vídeo en ms o segundos (ej: 1500 ms, 1.5s audio retrasado; -0.5s audio adelantado)
 
 SUBTÍTULOS:
   -sl, --sub-soft FILE   Subtítulos soft (embed en contenedor)
@@ -251,6 +254,8 @@ Ejemplos:
   ./midu.sh --deinterlace                               # Desentrelazar
   ./midu.sh --fps 60                                    # Cambiar a 60fps
   ./midu.sh --speed 2.0                                 # Doble de velocidad
+  ./midu.sh --sync-av 1000                                # Audio retrasado 1s (adelanta)
+  ./midu.sh --sync-av -0.5s                                # Audio adelantado 0.5s (retrasa)
   ./midu.sh -sl subs.srt                                # Embebir subtítulos
   ./midu.sh -sh subs.srt                                # Quemar subtítulos
   ./midu.sh -ao "URL"                                   # Extraer audio
@@ -292,6 +297,7 @@ OUTPUT_FORMAT=""                # Formato de salida (mp3, m4a, wav, etc)
 SUBTITLE_SOFT=""                # Subtítulos soft (embed)
 SUBTITLE_HARD=""                # Subtítulos hard (quemados)
 SPEED=""                        # Factor de velocidad (0.5, 1.5, 2, etc)
+AV_OFFSET=""                    # Ajuste de sincronización audio/vídeo en ms (ej: 1000, -500; acepta s: 1.5s)
 CONCAT_FILES=()                 # Lista de archivos para concatenar
 WATCH_MODE=false                # Modo watch
 ROTATE_DEGREES=""               # Grados de rotación (90, 180, 270)
@@ -335,6 +341,48 @@ SUBS_LANGS="es,en"             # Idiomas de subtítulos a descargar
 
 
 
+# Convierte entrada de desfase audio a milisegundos enteros.
+# Acepta: "500" (ms), "1500ms", "1.5s", "0.75" (s), "-0.5s", "+2" (ms). Devuelve "" si no reconoce.
+parse_time_to_ms() {
+    local v="$1"
+    [[ -z "$v" ]] && { echo ""; return; }
+    local sign=""
+    if [[ "$v" =~ ^([+-]) ]]; then
+        sign="${BASH_REMATCH[1]}"
+        v="${v:1}"
+    fi
+    v="${v%% }"
+    # sufijo ms -> ms directos
+    if [[ "$v" =~ ^[0-9]+ms$ ]]; then
+        echo "${sign}${v%ms}"
+        return
+    fi
+    # número con punto decimal o sufijo s -> segundos a ms (redondea). ej: 1.5s, 0.75, 2s
+    if [[ "$v" =~ ^[0-9]+(\.[0-9]+)?s$ || "$v" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        local sec="${v%s}"
+        local int="${sec%%.*}"
+        local frac="${sec#*.}"
+        [[ "$frac" == "$sec" ]] && frac="0"
+        local msec="$int$frac"
+        msec=$((10#$msec))
+        local pows=$(( 3 - ${#frac} ))
+        if [[ $pows -gt 0 ]]; then
+            for ((i=0;i<pows;i++)); do msec=$((msec*10)); done
+        elif [[ $pows -lt 0 ]]; then
+            for ((i=0;i>pows;i--)); do msec=$((msec/10)); done
+        fi
+        echo "${sign}${msec}"
+        return
+    fi
+    # entero sin sufijo -> ms
+    if [[ "$v" =~ ^[0-9]+$ ]]; then
+        echo "${sign}${v}"
+        return
+    fi
+    echo ""
+}
+
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -s|--social)     SOCIAL="$2"; shift 2 ;;
@@ -356,6 +404,7 @@ while [[ $# -gt 0 ]]; do
         -sl|--sub-soft)    SUBTITLE_SOFT="$2"; shift 2 ;;
         -sh|--sub-hard)    SUBTITLE_HARD="$2"; shift 2 ;;
         --speed)           SPEED="$2"; shift 2 ;;
+        --sync-av)         AV_OFFSET=$(parse_time_to_ms "$2"); shift 2 ;;
         --concat)          MODE="concat"; shift; CONCAT_FILES=(); while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do CONCAT_FILES+=("$1"); shift; done ;;
         --concat-smart)    MODE="concat-smart"; shift; CONCAT_FILES=(); while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do CONCAT_FILES+=("$1"); shift; done ;;
         --crossfade)       CROSSFADE_DURATION="$2"; shift 2 ;;
@@ -3261,8 +3310,9 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}32)${NC} Compose               ${DIM}— Seleccionar vídeo + varias pistas de audio + subtítulos${NC}"
     echo -e "    ${GREEN}33)${NC} HLS                   ${DIM}— Preparar vídeo para streaming (m3u8)${NC}"
     echo -e "    ${GREEN}34)${NC} Ayuda                 ${DIM}— Ver todos los flags, modos y ejemplos${NC}"
+    echo -e "    ${GREEN}35)${NC} Sincronizar audio     ${DIM}— Corregir desfase audio/vídeo${NC}"
     echo ""
-    read -rp "  → Selecciona [1-34] (h = ayuda, 0 = salir): " mode_val
+    read -rp "  → Selecciona [1-35] (h = ayuda, 0 = salir): " mode_val
     echo ""
 
     case "$mode_val" in
@@ -3299,6 +3349,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         31) MODE="chain" ;;
         32) MODE="compose" ;;
         33) MODE="hls" ;;
+        35) MODE="syncav" ;;
         34|h|help|H|"?"|"")
             show_help
             echo ""
@@ -3574,7 +3625,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
 
             # Seleccionar archivo(s) - multi-selección para modos batch
             case "$MODE" in
-                cut|convert|gif|thumbnail|rotate|crop|fade|normalize|watermark|deinterlace|fps|speed|subtitles|audio-only|remux|tracks)
+                cut|convert|gif|thumbnail|rotate|crop|fade|normalize|watermark|deinterlace|fps|speed|syncav|subtitles|audio-only|remux|tracks)
                     echo -e "${BOLD}  ► Selecciona los vídeos${NC}"
                     if ! select_video_files "$INPUT_DIR"; then
                         exit 1
@@ -4016,6 +4067,29 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             echo ""
             ;;
 
+        syncav)
+            echo -e "${BOLD}  ► Sincronización audio/vídeo${NC}"
+            echo -e "    Desfase del audio respecto al vídeo:"
+            echo -e "    ${GREEN} +)${NC} Positivo  → audio retrasado (lo adelanta)  ej: 1000 o 1s"
+            echo -e "    ${GREEN} -)${NC} Negativo  → audio adelantado (lo retrasa)  ej: -500 o -0.5s"
+            echo -e "    Acepta ms (500, 1500) o segundos (0.5, 1.5, 2)."
+            syncav_def="${AV_OFFSET:-(sin ajuste)}"
+            read -rp "  → Desfase (default: $syncav_def, vacío = mantener): " val
+            if [[ -n "$val" ]]; then
+                # convertir entrada (ms o s) a milisegundos enteros
+                if [[ "$val" =~ ^[+-]?[0-9]+$ ]]; then
+                    AV_OFFSET="$val"
+                else
+                    AV_OFFSET="$(parse_time_to_ms "$val")"
+                    if [[ -z "$AV_OFFSET" ]]; then
+                        echo -e "${RED}✗${NC} Formato no reconocido: $val (usa ms o segundos ej: 1.5, -0.5s)"
+                        exit 1
+                    fi
+                fi
+            fi
+            echo ""
+            ;;
+
         subtitles)
             echo -e "${BOLD}  ► Tipo de subtítulos${NC}"
             echo -e "    ${GREEN}1)${NC} Soft — Se pueden quitar después"
@@ -4358,6 +4432,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         deinterlace)  mode_name="Desentrelazar" ;;
         fps)          mode_name="Cambiar FPS" ;;
         speed)        mode_name="Cambiar velocidad" ;;
+        syncav)       mode_name="Sincronizar audio" ;;
         subtitles)    mode_name="Subtítulos" ;;
         concat)       mode_name="Unir vídeos" ;;
         audio-only)   mode_name="Extraer audio" ;;
@@ -5278,7 +5353,7 @@ convertir_archivo() {
     duration_fmt=$(format_time "$effective_duration")
 
     local remux="false"
-    if can_remux "$file" && [[ "${VIDEO_CODEC:-h264}" == "h264" ]] && [[ -z "$MAX_SIZE" ]] && [[ -z "$START_TIME" ]] && [[ -z "$END_TIME" ]] && [[ -z "$SUBTITLE_SOFT" ]] && [[ -z "$SUBTITLE_HARD" ]] && [[ -z "$SPEED" ]]; then
+    if can_remux "$file" && [[ "${VIDEO_CODEC:-h264}" == "h264" ]] && [[ -z "$MAX_SIZE" ]] && [[ -z "$START_TIME" ]] && [[ -z "$END_TIME" ]] && [[ -z "$SUBTITLE_SOFT" ]] && [[ -z "$SUBTITLE_HARD" ]] && [[ -z "$SPEED" ]] && [[ -z "$AV_OFFSET" ]]; then
         remux="true"
     fi
 
@@ -5421,6 +5496,41 @@ convertir_archivo() {
             fi
         fi
 
+        # Re-sincronización audio/vídeo: desplaza el audio en ms.
+        # Positivo = retrasa el audio (adelay); negativo = lo adelanta (atrim).
+        if [[ -n "$AV_OFFSET" && "$AV_OFFSET" =~ ^-?[0-9]+$ ]]; then
+            # Recoger cualquier cadena -af previa (de atempo) para combinarla
+            local af_prev=""
+            local nueva_args=()
+            local i=0
+            while [[ $i -lt ${#ffmpeg_args[@]} ]]; do
+                if [[ "${ffmpeg_args[$i]}" == "-af" && $((i + 1)) -lt ${#ffmpeg_args[@]} ]]; then
+                    af_prev="${ffmpeg_args[$((i + 1))]}"
+                    i=$((i + 2))
+                else
+                    nueva_args+=("${ffmpeg_args[$i]}")
+                    i=$((i + 1))
+                fi
+            done
+            ffmpeg_args=("${nueva_args[@]}")
+
+            local delay_ms="$AV_OFFSET"
+            local af_chain
+            if [[ "$delay_ms" -ge 0 ]]; then
+                af_chain="adelay=${delay_ms}a:all=1"
+                if [[ -n "$af_prev" ]]; then
+                    af_chain="$af_chain,$af_prev"
+                fi
+            else
+                af_chain="atrim=start=${delay_ms#-}ms,asetpts=PTS-STARTPTS"
+                if [[ -n "$af_prev" ]]; then
+                    af_chain="$af_chain,$af_prev"
+                fi
+            fi
+            ffmpeg_args+=(-af "$af_chain")
+            [[ "$VERBOSE" == true ]] && emit_log "$job_log" "  → sync-av: $AV_OFFSET ms → -af '$af_chain'"
+        fi
+
     fi
 
     # Map streams: vídeo (input0) + audio si existe + subtítulos soft si existe (input1)
@@ -5473,15 +5583,6 @@ convertir_archivo() {
         # Añadir pasada 2 a los args
         ffmpeg_args+=(-pass 2 -passlogfile "$tmp_file.passlog")
     fi
-
-    # Mostrar el comando ffmpeg completo (verbose: ver qué args llegan reales)
-    echo "==== FFMPEG CMD ===="
-    local _tmp=""
-    for _a in "${ffmpeg_args[@]}"; do
-        _tmp="${_tmp}${_tmp:+ }$(printf '%q' "$_a")"
-    done
-    echo "$_tmp"
-    echo "===================="
 
     if [[ "$VERBOSE" == true ]]; then
         ffmpeg "${ffmpeg_args[@]}" \
@@ -5758,7 +5859,7 @@ rm -rf "$PROG_DIR"
 
 # Notificación
 if [[ "$NOTIFY" == true ]]; then
-    send_notification "midu.sh" "Procesamiento completado: $procesados OK, $fallidos falllos ($BATCH_FMT)"
+    send_notification "midu.sh" "Procesamiento completado: $procesados OK, $fallidos fallos ($BATCH_FMT)"
 fi
 
 # Reintentar archivos fallidos

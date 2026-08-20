@@ -1,8 +1,30 @@
-# 🥷 devjobs: Ultimate Automation Suite
+# 🥷 devjobs — Ultimate Automation Suite
+
+<p align="center">
+  <strong>Suite auto-hospedada de <u>automatización con Docker</u>: grabación de
+  directos, conversión de vídeo, subida a Telegram, descarga de cursos y gestión
+  de PDFs — listas para desplegar y olvidar.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jorbencas/devjobs/stargazers"><img src="https://img.shields.io/github/stars/jorbencas/devjobs?style=social" alt="Stars"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+  <a href="https://blog-jorbencas.vercel.app"><img src="https://img.shields.io/badge/Blog-jorbencas-orange.svg" alt="Blog"></a>
+</p>
+
+> Pipeline completo y monitorizado: **Twitch → ffmpeg → Telegram**, sin intervención.
 
 Repositorio de herramientas avanzadas para la gestión de activos digitales, automatización de Telegram y procesamiento de documentos legales.
 
 ---
+
+## 📑 Tabla de contenidos
+
+- [Herramientas del ecosistema](#herramientas-del-ecosistema)
+- [Pipeline: directos de Twitch → Telegram](#pipeline-directos-de-twitch--telegram)
+- [Instalación rápida (Docker)](#instalación-rápida-docker)
+- [Cheat sheet](#cheat-sheet)
+- [Blog](#blog)
 
 ## 🛠️ Herramientas del Ecosistema
 
@@ -181,3 +203,14 @@ Artículos técnicos en [blog-jorbencas.vercel.app](https://blog-jorbencas.verce
 | `ffmpeg-yt-dlp/` | [Docker: ffmpeg y yt-dlp en WSL](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/) |
 | `downloader_telegram/` | [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/) |
 | `pdfmanager/` | [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master/) |
+
+---
+
+## 🤝 Contribuir
+
+Aportaciones, correcciones y nuevas herramientas son bienvenidas:
+
+1. **Fork** el repositorio y crea una rama: `git checkout -b feat/mi-mejora`
+2. Haz el cambio en la herramienta correspondiente (mantén su `README.md` al día).
+3. Abre un **Pull Request** describiendo qué hace y por qué.
+4. Para bugs: abre un *issue* con pasos para reproducirlo.

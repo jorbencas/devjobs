@@ -1,6 +1,42 @@
 # Telegram Ultimate Toolbox
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <strong>Descargador masivo, clonador, vigilante y <u>subidor automático</u> de
+  Telegram — con CLI consolidado, descarga de media (vídeo, foto, sticker, storys,
+  transcribe voice) y pipeline de subida con ruteo por keyword.</strong>
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Python-3.11-blue.svg?logo=python&logoColor=white" alt="Python 3.11"></a>
+</p>
+
+## Características
+
+| Función | Detalle |
+|---|---|
+| 📥 Descarga masiva | Interactiva, enlace único, rango de IDs, canal completo, búsqueda, `enlaces.txt` |
+| 🎨 Todos los media | vídeo, foto, audio, voice, documento, sticker, gif, encuesta, contacto y ubicación |
+| 🌟 Storys y voice | Descarga storys activas y transcribe voice messages con whisper |
+| 🖥️ CLI consolidado | Menú guiado, entradas blindadas, auditoría y export/import de backup |
+| 👁️ Vigilante | Alertas en múltiples canales, reenvío a destinos y descarga de media |
+| 📤 Uploader automático | Vigila `comprimidos/`, divide >2 GB, rutea por keyword a temas/grupos |
+
+---
+
+## 📑 Tabla de contenidos
+
+- [Requisitos](#requisitos)
+- [Despliegue](#despliegue)
+- [Uploader a Telegram](#uploader-a-telegram-subir_videospy)
+- [CLI consolidada](#cli-consolidada-tg_toolboxpy)
+- [Estructura](#estructura)
+- [Seguridad](#seguridad)
+- [Dependencias](#dependencias)
+- [Blog](#blog)
+
+---
 
 Descargador masivo, clonador, vigilante de contenido y **subidor automático de vídeos a grupos** en Telegram.
 
@@ -43,7 +79,7 @@ python test_download_protected_content_telegram.py
 
 ### Qué hace
 
-1. Vigila `/home/jorge/dev/devjobs/data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
+1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
 4. Registra los enviados en `enviados.json` y elimina el archivo local (y todos sus restos: sidecar `*_episodios.json`, original de `.processed`, logs `log_*.txt` y partes divididas).
@@ -95,7 +131,7 @@ Todo es configurable con **variables de entorno** (en el bloque `environment` de
 #### 1. Sesión del uploader (una sola vez)
 
 ```bash
-cd /home/jorge/dev/devjobs/downloader_telegram
+cd downloader_telegram
 docker compose build
 touch sessions/uploader.session   # si no existe, Docker lo montaría como un directorio y la sesión fallaría
 docker compose run --rm uploader python /app/app/subir_videos.py --setup
@@ -352,7 +388,14 @@ reutiliza la lógica compartida a través de `cli_base.py` (credenciales cifrada
 por keyword, `match_tema_foro`, `atributos_video` con ffprobe y subida con tracking propio).
 
 ```bash
-# Primera vez: inicia sesión (teléfono + código, y 2FA si aplica). Crea sessions/tg_toolbox.session
+# Forma recomendada (alias): contenedor efímero, se autodescarta al salir (--rm)
+tg_menu
+
+# O manual: primera vez inicia sesión (teléfono + código, y 2FA si aplica).
+# Crea sessions/tg_toolbox.session
+docker compose -f docker-compose.yml run --rm telegram
+
+# O en un contenedor ya levantado
 docker exec -it telegram-downloader python /app/app/tg_toolbox.py
 
 # O sin Docker
@@ -371,16 +414,25 @@ rutas saneadas, **doble confirmación** en acciones destructivas (vaciar canal,
 migrar con borrado) y **log de auditoría** de todas las acciones en
 `data/logs/tg_toolbox.log` (ver `⚙️ Config → Ver log de auditoría`).
 
+### Límites de cuenta Telegram
+
+Las acciones que tocan límites de la cuenta (crear carpetas, fijar chats, fijar
+mensajes, mover a carpetas, silenciar) traducen los errores de límite RPC a un
+mensaje legible en español: p. ej. *"límite de chats fijados alcanzado"*,
+*límite de carpetas*, *se necesitan permisos de administrador*, etc. Si no se
+reconoce el límite, se muestra el error crudo de la API.
+
 ### Sub-funcionalidades de cada módulo
 
 ```
 📦 TELEGRAM TOOLBOX
  1  📥  Descargas               8 opciones (ver abajo)
- 2  🔄  Clonar & Backup         filtro + traducción + descarga
- 3  🗂️  Chats y carpetas        listar, archivar/desarchivar, listar por carpeta, renombrar/mover
+ 2  🔄  Clonar & Backup         clonar canal→canal · backup local · restaurar
+ 3  🗂️  Chats y carpetas        listar, archivar, carpetas, silenciar, fijar, mover
  4  🧭  Canales/Foros/Temas      ver, crear canal, archivar, gestionar temas, migrar, borrar
  5  🚚  Subida (pipeline)        sync, ver grupos, pasada, archivo, diferida, plantillas, export/import
- 6  👁️  Vigilante               alerta por palabras (con o sin filtro de canal)
+ 6  👁️  Vigilante               alertas, varios canales, reenvío, descarga de media
+10  📌  Fijar / Desfijar         fijar/desfijar mensajes y tema
 ──────
  7  ⚙️  Config / Salir          credenciales, export/import backup, ver auditoría
  8  🧭  Modo guiado             todo el flujo paso a paso (blindado)
@@ -397,8 +449,15 @@ migrar con borrado) y **log de auditoría** de todas las acciones en
 | 📄 Procesar `enlaces.txt` | Lee enlaces de un archivo de texto |
 | 📺 Canal completo | Descarga todo un canal |
 | 📈 Estadísticas de un canal/tema | Cuenta mensajes/media de un chat |
-| 🔎 Búsqueda por texto | Busca por texto y descarga los resultados |
+| 🔎 Búsqueda por texto | Busca por texto y descarga los resultados (dedup por nombre + retomar `.part`) |
+| 🌟 Descargar storys activas | Baja las storys no expiradas de un canal (foto/vídeo) a `Descargas_Telegram/Storys/` |
+| 🎙️ Transcribir voice messages | Descarga y transcribe audios de voz con whisper (`openai-whisper`, auto-instala si falta) → `.txt` |
 | ▶️ Descarga de YouTube | Usa `yt-dlp` (mp4/audio/mkv), auto-instala si falta, con opción de re-subir |
+
+**Tipos de medio soportados en descargas (filtro B3):** vídeo, foto, audio, voice, documento,
+sticker, gif, encuesta, contacto y ubicación. Encuestas/contactos/ubicaciones no son archivos
+descargables: se guarda un `.txt` legible (pregunta/opciones, datos de contacto o coordenadas
+con enlace a Google Maps).
 
 **🗂️ Módulo 3 · Chats y carpetas:**
 
@@ -407,7 +466,19 @@ migrar con borrado) y **log de auditoría** de todas las acciones en
 | 📋 Listar chats | Con filtros interactivos (todos/solo creados/por carpeta) |
 | 🗄️ Archivar / Desarchivar | Mueve un chat a Archivado o lo saca |
 | 🏷️ Listar por carpeta | Filtra chats por nombre/carpeta |
+| 📁 Crear carpeta | Crea una carpeta (folder) vacía para organizar chats |
+| 📦 Mover chat a carpeta | Mueve un chat a un folder (0=Principal, 1=Archivado, otras) |
+| 🔇 Silenciar / Desilenciar | Activa/desactiva notificaciones de un chat |
+| 📌 Fijar / Desfijar chat | Fija arriba o quita de la lista de chats |
 | ✏️ Renombrar / Mover | Renombra o mueve archivos locales |
+
+**🔄 Módulo 2 · Clonar & Backup** (submenú):
+
+| Opción | Qué hace |
+|---|---|
+| 🔀 Clonar canal → canal | Reenvía mensajes de un chat a otro (límite, multimedia, traducción, quitar remitente/descripción) |
+| 💾 Backup a archivo local | Guarda mensajes (+media) en `Descargas_Telegram/Backups/<chat>_backup/*.json` |
+| ♻️ Restaurar backup | Carga un JSON guardado y lo reenvía a un chat (con traducción y opción de quitar descripción) |
 
 **🧭 Módulo 4 · Canales / Foros / Temas:**
 
@@ -433,9 +504,22 @@ migrar con borrado) y **log de auditoría** de todas las acciones en
 | 💾 Exportar / Importar config | Hace/restaura una copia de la configuración |
 
 **👁️ Módulo 6 · Vigilante** — monitoriza mensajes **en tiempo real** (`NewMessage`).
-Detecta contenido filtrado por heurística (`procesar_texto_inteligente`) o palabras
-clave extra, y manda una **alerta a "Mensajes guardados"** (tú). Opcional: vigilar
-solo un canal concreto (filtro por chat).
+Config **persistente** (se guarda en `config/vigilante.json` y se reutiliza), filtros
+por tipo de medio, emisores, inclusión/exclusión de chats y temas, varios destinos,
+cooldown anti-ráfagas, reconexión automática y resumen al detener.
+
+| Opción | Qué hace |
+|---|---|
+| Chats vigilados | Vigilar TODOS o elegir lista; además **excluir** chats concretos |
+| Solo temas | Vigilar solo ciertos temas de un foro |
+| Tipos de medio | Reaccionar solo a vídeo/foto/voice/sticker/gif/encuesta/etc. |
+| Emisores | Solo alertar si el mensaje es de ciertos remitentes |
+| Palabras clave extra | Detecta además términos propios (separados por coma) |
+| 🚚 Reenvío automático | Envía a **varios** destinos (o "Mensajes guardados"); opción de reenviar el original con media, quitar remitente y/o descripción, y **marcar qué disparó** la alerta |
+| 💾 Descargar media | Guarda adjuntos de las alertas en `Vigilante_Media/` (dedup por nombre, retoma `.part`) |
+| ⏳ Cooldown | Segundos de espera entre alertas del mismo chat (anti-ráfagas) |
+| 📊 Resumen al salir | Al detener con Ctrl+C muestra alertas/reenvíos/media procesados |
+| 🔄 Config persistente | Guarda/reusa la configuración; permite editar o borrarla |
 
 **🗂️ Módulo 7 · Config** — cambiar credenciales/carpetas, **exportar/importar backup**
 de la config (usa `data/backups/` por defecto) y **ver log de auditoría**.
@@ -452,6 +536,17 @@ de la config (usa `data/backups/` por defecto) y **ver log de auditoría**.
 | 🧹 Limpiar temporales | Borra `.part`, `.jpg` y restos de `.staging` |
 | 🧹 Limpiar sync | Limpia el tracking de subidas ya hechas del CLI (`sync_cli.json`) |
 | ⏰ Programar sync | Programa sync automático de carpetas cada N minutos |
+
+**📌 Módulo 10 · Fijar / Desfijar mensajes** (chat, grupo o tema de foro):
+
+| Opción | Qué hace |
+|---|---|
+| 📌 Fijar mensaje | Fija un mensaje (por ID o el último) |
+| 📌 Fijar silencioso | Fija sin notificación a los miembros |
+| 🔓 Desfijar mensaje | Desfija un mensaje concreto |
+| 🗑️ Desfijar todos | Desfija todos los mensajes fijados del chat/tema |
+
+Uso de `UpdatePinnedMessageRequest` / `UnpinAllMessagesRequest` (Telethon 1.44).
 
 ---
 

@@ -11,13 +11,16 @@ PROPIA sesión (tg_toolbox.session) para no pisar la del daemon uploader.
 Requiere: telethon, cryptography, rich, inquirerpy, mtranslate.
 """
 import asyncio
+import importlib
 import json
 import os
+import re
+import types
 import shutil
 import subprocess
 import sys
 import platform
-import getpass
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -45,12 +48,42 @@ def _sistema_auto_setup():
 _sistema_auto_setup()
 
 from telethon import TelegramClient, errors, events  # noqa: E402
+from telethon.tl.types import (  # noqa: E402
+    User,
+    MessageMediaDocument, MessageMediaPhoto, MessageMediaWebPage,
+    MessageMediaPoll, MessageMediaContact, MessageMediaGeo,
+    MessageMediaGeoLive, MessageMediaVenue, MessageMediaDice,
+    DocumentAttributeSticker, DocumentAttributeAnimated, DocumentAttributeAudio,
+    DocumentAttributeVideo,
+    InputMessagesFilterPhotos,
+    DialogFilter, InputFolderPeer, InputNotifyPeer, InputPeerNotifySettings,
+)
+from telethon.tl.functions.messages import (  # noqa: E402
+    GetForumTopicsRequest, UpdateDialogFilterRequest, ToggleDialogPinRequest,
+    CreateForumTopicRequest, EditForumTopicRequest, DeleteTopicHistoryRequest,
+    DeleteHistoryRequest, GetHistoryRequest, UpdatePinnedMessageRequest,
+    UnpinAllMessagesRequest,
+)
+from telethon.tl.functions.folders import EditPeerFoldersRequest  # noqa: E402
+from telethon.tl.functions.account import UpdateNotifySettingsRequest  # noqa: E402
+from telethon.tl.functions.channels import (  # noqa: E402
+    CreateChannelRequest, DeleteChannelRequest,
+)
+from telethon.tl.functions.stories import GetPeerStoriesRequest  # noqa: E402
 from cryptography.fernet import Fernet  # noqa: E402
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
 from rich.table import Table  # noqa: E402
 from InquirerPy import inquirer  # noqa: E402
 from InquirerPy.separator import Separator  # noqa: E402
+from mtranslate import translate  # noqa: E402
+
+try:
+    import whisper as _whisper
+    _WHISPER_OK = True
+except ImportError:
+    _whisper = None
+    _WHISPER_OK = False
 
 from cli_base import (  # noqa: E402
     cargar_credenciales,
@@ -64,10 +97,11 @@ from cli_base import (  # noqa: E402
     match_tema_foro,
     grupos_para_keyword,
     subir_archivo_cli,
-    atributos_video,
     sync_ya_subido,
-    sync_marcar,
     _log_auditoria,
+    _sync_cargar,
+    _sync_guardar,
+    AUDIT_FILE,
 )
 
 console = Console()
@@ -80,8 +114,12 @@ KEY_FILE = Path(os.environ.get("TG_TOOLBOX_KEY", REPO_DIR / "config" / "secret.k
 CARPETA_BASE = Path(os.environ.get("TG_TOOLBOX_DESCARGAS", REPO_DIR / "Descargas_Telegram"))
 SESION = os.environ.get("TG_TOOLBOX_SESION", str(REPO_DIR / "sessions" / "tg_toolbox.session"))
 GRUPOS_FILE = os.environ.get("UPLOADER_GRUPOS", str(REPO_DIR / "config" / "grupos.json"))
+VIGCONFIG_FILE = os.environ.get("TG_TOOLBOX_VIGCONFIG", str(REPO_DIR / "config" / "vigilante.json"))
 
 SPAM_LIST = ["crypto", "ganar dinero", "casino", "poker", "estafa", "bet", "sex", "porn", "gore", "nude"]
+
+TIPOS_MEDIA = ["vídeo", "foto", "audio", "voice", "documento", "sticker", "gif",
+               "encuesta", "contacto", "ubicación"]
 
 
 def styled_panel(content, title="", style=BG):
@@ -144,6 +182,8 @@ async def resolver(client, ref):
 
 
 def _tipo(ent):
+    if isinstance(ent, User):
+        return "user" if not getattr(ent, "bot", False) else "bot"
     if getattr(ent, "forum", False):
         return "foro"
     if getattr(ent, "broadcast", False):
@@ -176,6 +216,11 @@ async def _listar_chats_filtrado(client, tipos=None, filtro="todos", folder=None
     elif filtro == "ajenos":
         creados = False
     resultados = []
+    if tipos and "me" in tipos:
+        resultados.append({
+            "ent": "me", "id": "me", "nombre": "💾 Mensajes guardados",
+            "tipo": "me", "carpeta": "Principal", "creado": True,
+        })
     async for d in client.iter_dialogs():
         ent = getattr(d, "entity", None)
         if ent is None:
@@ -252,7 +297,6 @@ async def _seleccionar_chat(client, titulo="Selecciona un chat:", tipos=None,
 
 async def _seleccionar_tema(client, foro_ent, titulo="Selecciona un tema:", permitir_general=True):
     """Lista los temas de un foro y devuelve el topic_id elegido (o None si vuelve)."""
-    from telethon.tl.functions.messages import GetForumTopicsRequest
     res = await client(GetForumTopicsRequest(peer=foro_ent, offset_date=datetime(1970, 1, 1),
                                              offset_id=0, offset_topic=0, limit=100))
     temas = {t.id: t.title for t in res.topics}
@@ -309,7 +353,6 @@ def _pedir_numero(mensaje, minimo=None, maximo=None, por_defecto=None, es_id=Fal
 
 def _saneado(nombre):
     """Quita caracteres inválidos para rutas de archivo."""
-    import re
     nombre = re.sub(r'[\\/*?:"<>|]', "_", nombre)
     return nombre.strip().strip(".") or "sin_nombre"
 
@@ -320,6 +363,30 @@ def _ruta_segura(destino):
     p = p.resolve()
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _mensaje_limite(e):
+    """Devuelve un mensaje legible si el error RPC es un límite de cuenta Telegram.
+    Retorna None si no es un límite reconocible."""
+    nombre = type(e).__name__
+    limites = {
+        "PinnedDialogsTooMuchError": "límite de chats fijados alcanzado (Telegram permite fijar un máximo)",
+        "PinnedDialogsTooMuch": "límite de chats fijados alcanzado (Telegram permite fijar un máximo)",
+        "FolderLimitReachedError": "límite de carpetas alcanzado (máximo de folders de tu cuenta)",
+        "FolderLimitReached": "límite de carpetas alcanzado (máximo de folders de tu cuenta)",
+        "FolderIdInvalidError": "ID de carpeta inválido (revisa que el folder exista)",
+        "FolderIdInvalid": "ID de carpeta inválido (revisa que el folder exista)",
+        "FolderIdEmptyError": "carpeta vacía no soportada",
+        "ChannelsTooMuchError": "límite de canales alcanzado (máximo de canales/grupos por cuenta)",
+        "ChannelsTooMuch": "límite de canales alcanzado (máximo de canales/grupos por cuenta)",
+        "UsersTooMuchError": "el chat ha alcanzado el máximo de miembros",
+        "UsersTooMuch": "el chat ha alcanzado el máximo de miembros",
+        "BotCommandsTooMuchError": "límite de comandos del bot alcanzado",
+        "AdminsTooMuchError": "límite de administradores del chat alcanzado",
+        "ChatAdminRequiredError": "se necesitan permisos de administrador para esta acción",
+        "ChatAdminRequired": "se necesitan permisos de administrador para esta acción",
+    }
+    return limites.get(nombre)
 
 
 async def _reintentar(coro_factory, veces=3, espera=2.0, etiqueta="operación"):
@@ -338,6 +405,10 @@ async def _reintentar(coro_factory, veces=3, espera=2.0, etiqueta="operación"):
             else:
                 styled_error(f"{etiqueta}: falló tras {veces} intentos: {e}")
         except Exception as e:
+            limite = _mensaje_limite(e)
+            if limite:
+                styled_error(f"{etiqueta}: no se pudo completar — {limite}.")
+                return None
             styled_error(f"{etiqueta}: error inesperado: {e}")
             return None
     return None
@@ -375,7 +446,6 @@ def procesar_texto_inteligente(texto, activar_traduccion=False):
         return "FILTERED_CONTENT"
     if activar_traduccion:
         try:
-            from mtranslate import translate
             return translate(texto, "es")
         except Exception:
             return texto
@@ -385,7 +455,14 @@ def procesar_texto_inteligente(texto, activar_traduccion=False):
 async def download_media_robust(client, message, folder):
     if not message or not getattr(message, "media", None):
         return False
-    file_name = message.file.name if message.file and message.file.name else f"file_{message.id}{message.file.ext if message.file and message.file.ext else '.bin'}"
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    tipo = _tipo_medio(message)
+    if tipo in ("encuesta", "contacto", "ubicación", "dado"):
+        return await _guardar_medio_texto(message, folder, tipo)
+
+    file_name = message.file.name if message.file and message.file.name else _nombre_por_defecto(message, tipo)
     full = os.path.join(str(folder), file_name)
     temp = full + ".part"
     if os.path.exists(full):
@@ -400,6 +477,117 @@ async def download_media_robust(client, message, folder):
         return True
     except Exception as e:
         log("ERR", f"Fallo en descarga {file_name}: {e}")
+        return False
+
+
+def _nombre_por_defecto(message, tipo):
+    ext = getattr(getattr(message, "file", None), "ext", None)
+    if not ext:
+        ext = {"voice": ".ogg", "gif": ".mp4", "sticker": ".webp"}.get(tipo, ".bin")
+    return f"msg_{message.id}{ext}"
+
+
+async def _guardar_medio_texto(message, folder, tipo):
+    """Guarda encuestas/contactos/ubicaciones/dados como .txt legible (no son archivos)."""
+    m = getattr(message, "media", None)
+    lineas = [f"[{tipo.upper()}] msg {message.id}", str(getattr(message, "date", "") or "")]
+    if message.text:
+        lineas.append(message.text)
+    if isinstance(m, MessageMediaPoll):
+        poll = m.poll
+        lineas.append(f"Pregunta: {poll.question}")
+        for i, r in enumerate(poll.answers, 1):
+            lineas.append(f"  {i}. {r.text}")
+    elif isinstance(m, MessageMediaContact):
+        lineas.append(f"Contacto: {m.first_name or ''} {m.last_name or ''} ({m.phone or ''})")
+        if m.user_id:
+            lineas.append(f"user_id={m.user_id}")
+    elif isinstance(m, (MessageMediaGeo, MessageMediaVenue)):
+        if isinstance(m, MessageMediaVenue):
+            lineas.append(f"Lugar: {m.title} — {m.address or ''}")
+        lat = getattr(m, "lat", None) or getattr(getattr(m, "geo", None), "lat", None)
+        lon = getattr(m, "long", None) or getattr(getattr(m, "geo", None), "long", None)
+        if lat is not None and lon is not None:
+            lineas.append(f"Coordenadas: {lat},{lon}")
+            lineas.append(f"Mapa: https://www.google.com/maps?q={lat},{lon}")
+    contenido = "\n".join(x for x in lineas if x).strip() + "\n"
+    full = folder / f"{tipo}_{message.id}.txt"
+    if not full.exists():
+        full.write_text(contenido, encoding="utf-8")
+        log("OK", f"Guardado: {full.name}")
+    else:
+        log("INFO", f"Ya existe: {full.name}")
+    return True
+
+
+# ============================================================================
+# Transcripción de voice messages con whisper (instala openai-whisper si falta)
+# ============================================================================
+def _whisper_instalado():
+    return _WHISPER_OK
+
+
+def _instalar_whisper():
+    global _whisper, _WHISPER_OK
+    if _WHISPER_OK:
+        return True
+    styled_info("whisper no está instalado. Intento instalarlo (openai-whisper)...")
+    try:
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "openai-whisper"],
+                           capture_output=True, text=True, timeout=60 * 10)
+        if r.returncode != 0:
+            styled_error(f"No se pudo instalar whisper: {r.stderr[-300:]}")
+            return False
+        _whisper = importlib.import_module("whisper")
+        _WHISPER_OK = True
+        return True
+    except Exception as e:
+        styled_error(f"No se pudo instalar whisper: {e}")
+        return False
+
+
+async def _transcribir_voice(client, message, folder):
+    """Descarga el voice message y lo transcribe a un .txt con whisper."""
+    if not _instalar_whisper():
+        return False
+    m = getattr(message, "media", None)
+    if not isinstance(m, MessageMediaDocument):
+        return False
+    if not any(isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False)
+               for a in (getattr(getattr(m, "document", None), "attributes", None) or [])):
+        return False
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    txt_path = folder / f"transcripcion_{message.id}.txt"
+    if txt_path.exists():
+        styled_info(f"Transcripción ya existe: {txt_path.name}")
+        return True
+    ogg = folder / f"voice_{message.id}.ogg"
+    if not ogg.exists():
+        try:
+            await client.download_media(message, file=str(ogg))
+        except Exception as e:
+            log("ERR", f"No se pudo bajar voice {message.id}: {e}")
+            return False
+    try:
+        styled_info(f"Transcribiendo voice {message.id}... (puede tardar)")
+        model = _whisper.load_model("base")
+        result = model.transcribe(str(ogg), language="es")
+        texto = result.get("text", "").strip()
+        (folder / f"transcripcion_{message.id}.txt").write_text(
+            texto or "(sin texto reconocido)", encoding="utf-8")
+        if ogg.exists() and not inquirer.confirm(
+                f"¿Eliminar el .ogg temporal de {message.id}?", default=True).execute():
+            pass
+        else:
+            try:
+                ogg.unlink(missing_ok=True)
+            except OSError:
+                pass
+        styled_success(f"Transcrito → transcripcion_{message.id}.txt")
+        return True
+    except Exception as e:
+        log("ERR", f"Fallo transcribiendo voice {message.id}: {e}")
         return False
 
 
@@ -510,6 +698,8 @@ async def modulo_descargas(client):
             {"name": "📺  Canal completo", "value": "d"},
             {"name": "📈  Estadísticas de un canal/tema", "value": "stats"},
             {"name": "🔎  Búsqueda por texto y descarga", "value": "busca"},
+            {"name": "🌟  Descargar storys activas de un canal", "value": "storia"},
+            {"name": "🎙️  Transcribir voice messages (whisper)", "value": "voice"},
             {"name": "▶️  Descarga de YouTube (yt-dlp)", "value": "yt"},
         ],
         pointer="▸",
@@ -534,6 +724,14 @@ async def modulo_descargas(client):
 
     if sub == "busca":
         await _buscar_y_descargar(client, trad)
+        return
+
+    if sub == "storia":
+        await _descargar_storys(client)
+        return
+
+    if sub == "voice":
+        await _transcribir_voice_canal(client)
         return
 
     if sub == "a":
@@ -598,21 +796,35 @@ def _tipo_medio(msg):
     m = getattr(msg, "media", None)
     if m is None:
         return None
-    from telethon.tl.types import (
-        MessageMediaDocument, MessageMediaPhoto, MessageMediaWebPage,
-    )
     if isinstance(m, MessageMediaPhoto):
         return "foto"
+    if isinstance(m, MessageMediaPoll):
+        return "encuesta"
+    if isinstance(m, (MessageMediaContact,)):
+        return "contacto"
+    if isinstance(m, (MessageMediaGeo, MessageMediaGeoLive, MessageMediaVenue)):
+        return "ubicación"
+    if isinstance(m, MessageMediaDice):
+        return "dado"
+    if isinstance(m, (MessageMediaWebPage,)):
+        return None
     if isinstance(m, MessageMediaDocument):
         d = getattr(m, "document", None)
-        nm = (getattr(d, "attributes", None) or [])
-        names = [getattr(a, "file_name", "") for a in nm]
-        fname = next((n for n in names if n), "")
-        ext = (fname or "").lower()
-        import re
-        if re.search(r"\.(mp[34]|mkv|avi|mov|webm|ts)$", ext):
+        attrs = getattr(d, "attributes", None) or []
+        if any(isinstance(a, DocumentAttributeSticker) for a in attrs):
+            return "sticker"
+        if any(isinstance(a, DocumentAttributeAnimated) for a in attrs):
+            return "gif"
+        audio_attr = next((a for a in attrs if isinstance(a, DocumentAttributeAudio)), None)
+        if audio_attr is not None and getattr(audio_attr, "voice", False):
+            return "voice"
+        if any(isinstance(a, DocumentAttributeVideo) for a in attrs):
             return "vídeo"
-        if re.search(r"\.(mp3|flac|aac|ogg|opus|wav|m4a)$", ext):
+        nm = [getattr(a, "file_name", "") or "" for a in attrs]
+        ext = next((n for n in nm if n), "")
+        if re.search(r"\.(mp[34]|mkv|avi|mov|webm|ts)$", ext.lower()):
+            return "vídeo"
+        if re.search(r"\.(mp3|flac|aac|ogg|opus|wav|m4a)$", ext.lower()):
             return "audio"
         return "documento"
     return "documento"
@@ -650,15 +862,13 @@ async def _descarga_interactiva(client, trad):
             styled_warn("Fecha inválida; se ignora el filtro de fecha.")
 
     # B3 · Tipos de media
-    tipos_ok = {"vídeo": True, "foto": True, "audio": True, "documento": True}
+    tipos_ok = {t: True for t in TIPOS_MEDIA}
     if inquirer.confirm("¿Filtrar por tipo de medio?", default=False).execute():
-        tipos_ok["vídeo"] = inquirer.confirm("¿Descargar vídeos?", default=True).execute()
-        tipos_ok["foto"] = inquirer.confirm("¿Descargar fotos?", default=True).execute()
-        tipos_ok["audio"] = inquirer.confirm("¿Descargar audios?", default=True).execute()
-        tipos_ok["documento"] = inquirer.confirm("¿Descargar documentos?", default=True).execute()
+        for t in TIPOS_MEDIA:
+            tipos_ok[t] = inquirer.confirm(f"¿Descargar {t}s?", default=True).execute()
     if not any(tipos_ok.values()):
         styled_warn("Ningún tipo seleccionado; se descargará todo.")
-        tipos_ok = {"vídeo": True, "foto": True, "audio": True, "documento": True}
+        tipos_ok = {t: True for t in TIPOS_MEDIA}
 
     styled_info("PASO 2 · Leyendo mensajes del origen...")
     mensajes = []
@@ -934,6 +1144,115 @@ async def _buscar_y_descargar(client, trad):
     styled_success(f"Descargados {ok}/{len(coincidencias)} a {folder}.")
 
 
+# ============================================================================
+# Descarga de storys activas de un canal/grupo
+# ============================================================================
+async def _descargar_storys(client):
+    """Descarga las storys activas (no expiradas) de un canal/grupo."""
+    sel = await _seleccionar_chat(client, "Canal/grupo del que saco las storys:",
+                                  tipos=["canal", "grupo", "foro"], filtro=None)
+    if not sel:
+        return
+    peer = sel["ent"]
+    styled_info("Leyendo storys activas...")
+    try:
+        res = await client(GetPeerStoriesRequest(peer=peer))
+    except Exception as e:
+        limite = _mensaje_limite(e)
+        styled_error(f"No se pudieron leer las storys: {limite or e}")
+        return
+    items = [s for s in getattr(res.stories, "stories", []) if not getattr(s, "min", False)]
+    if not items:
+        styled_info("Sin storys activas de ese chat.")
+        return
+    _tabla_resumen(["Story", "Fecha", "Vistas", "Caption"],
+                   [(f"#{s.id}", str(getattr(s, "date", "") or ""), str(getattr(s, "views", 0) or 0),
+                     (getattr(s, "caption", "") or "")[:40]) for s in items],
+                   titulo=f"{len(items)} storys activas de {sel['nombre']}")
+
+    folder = _ruta_segura(CARPETA_BASE / "Storys" / _saneado(sel["nombre"] or "sin_nombre"))
+    if not inquirer.confirm(f"¿Descargar las {len(items)} storys a {folder}?", default=True).execute():
+        styled_info("Cancelado.")
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    ok = 0
+    for s in items:
+        media = getattr(s, "media", None)
+        if not media or isinstance(media, MessageMediaWebPage):
+            continue
+        mime = getattr(getattr(media, "document", None), "mime_type", None) if getattr(media, "document", None) else None
+        es_foto = getattr(media, "photo", None) is not None
+        ext = {m: e for m, e in {"video/mp4": ".mp4", "image/jpeg": ".jpg", "image/png": ".png",
+                                  "audio/ogg": ".ogg", "application/x-tgsticker": ".tgs",
+                                  "image/webp": ".webp"}.items()}.get(mime) if mime else None
+        if es_foto and not ext:
+            ext = ".jpg"
+        full = folder / f"story_{s.id}{ext or '.bin'}"
+        temp = str(full) + ".part"
+        if full.exists():
+            styled_info(f"Ya existe: {full.name}")
+            ok += 1
+            continue
+        fake = types.SimpleNamespace(id=s.id, media=media, date=getattr(s, "date", None))
+        try:
+            with open(temp, "wb") as f:
+                await client.download_media(fake, file=f, progress_callback=lambda c, t: None)
+            os.rename(temp, full)
+            styled_success(f"  → {full.name}")
+            ok += 1
+        except Exception as e:
+            log("ERR", f"No se pudo bajar story {s.id}: {e}")
+    _log_auditoria("STORY", f"{sel['nombre']}: {ok}/{len(items)} storys → {folder}")
+    styled_success(f"Descargadas {ok}/{len(items)} storys a {folder}.")
+
+
+async def _transcribir_voice_canal(client):
+    """Busca voice messages en un canal/tema y los transcribe con whisper."""
+    sel = await _seleccionar_chat(client, "Canal/foro con voice messages:",
+                                  tipos=["canal", "grupo", "foro"], filtro=None)
+    if not sel:
+        return
+    peer = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, peer, "Tema (o Volver = todo):",
+                                         permitir_general=False)
+    limite = _pedir_numero("¿Cuántos mensajes revisar? (vacío = todos):",
+                           minimo=1, por_defecto=200)
+    if limite is None:
+        return
+    styled_info("Buscando voice messages...")
+    voices = []
+    async for msg in client.iter_messages(peer, reply_to=topico, limit=limite):
+        m = getattr(msg, "media", None)
+        if isinstance(m, MessageMediaDocument) and any(
+                isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False)
+                for a in (getattr(getattr(m, "document", None), "attributes", None) or [])):
+            voices.append(msg)
+        if len(voices) >= 50:
+            break
+    if not voices:
+        styled_info("Sin voice messages en ese rango.")
+        return
+    folder = _ruta_segura(CARPETA_BASE / "Transcripciones" / _saneado(sel["nombre"] or "sin_nombre"))
+    folder.mkdir(parents=True, exist_ok=True)
+    if not inquirer.confirm(
+            f"Transcribir {len(voices)} voice messages → {folder}? "
+            "(descarga openai-whisper si falta; puede tardar)", default=True).execute():
+        styled_info("Cancelado.")
+        return
+    ok = 0
+    for msg in voices:
+        if not await _comprobar_conexion(client):
+            break
+        if await _reintentar(lambda m=msg: _transcribir_voice(client, m, folder),
+                             veces=2, etiqueta=f"transcripción voice {msg.id}"):
+            ok += 1
+        await asyncio.sleep(0.2)
+    _log_auditoria("TRANSCRIBIR_VOICE", f"{sel['nombre']}: {ok}/{len(voices)}")
+    styled_success(f"Transcritos {ok}/{len(voices)} → {folder}.")
+
+
 def _str_id(x):
     return str(x)
 
@@ -941,8 +1260,7 @@ def _str_id(x):
 # ============================================================================
 # MÓDULO 2: Clonar & Backup
 # ============================================================================
-async def modulo_clonar(client):
-    console.print(styled_panel("[bold white]MÓDULO CLONACIÓN / BACKUP[/bold white]", title="🔄", style=BG))
+async def _clonar_canal_a_canal(client):
     styled_info("Elige el canal ORIGEN (puedes filtrar).")
     sel_origen = await _seleccionar_chat(client, "Canal ORIGEN:", tipos=["canal", "grupo", "foro"], filtro=None)
     if not sel_origen:
@@ -958,10 +1276,14 @@ async def modulo_clonar(client):
         return
     descargar = inquirer.confirm("¿Descargar multimedia también?", default=False).execute()
     trad = inquirer.confirm("¿Traducir contenido al clonar?", default=False).execute()
+    quitar_rem = inquirer.confirm("¿Quitar remitente? (reenviar como copia, sin 'Forwarded from')",
+                                  default=False).execute()
+    quitar_cap = inquirer.confirm("¿Quitar descripción/caption?", default=False).execute()
     _tabla_resumen(
-        ["Origen", "Destino", "Límite", "Multimedia", "Traducir"],
+        ["Origen", "Destino", "Límite", "Multimedia", "Traducir", "Sin remitente", "Sin caption"],
         [(sel_origen["nombre"], sel_destino["nombre"], str(limite),
-          "sí" if descargar else "no", "sí" if trad else "no")],
+          "sí" if descargar else "no", "sí" if trad else "no",
+          "sí" if quitar_rem else "no", "sí" if quitar_cap else "no")],
         titulo="Resumen de clonación",
     )
     if not inquirer.confirm("¿Ejecutar la clonación?", default=True).execute():
@@ -977,11 +1299,26 @@ async def modulo_clonar(client):
                 if texto == "FILTERED_CONTENT":
                     log("SPAM", f"Saltando ID {message.id}")
                     continue
+
+                def _caption_emitir(m, txt):
+                    """Devuelve el caption según las opciones de quitar descripción."""
+                    if quitar_cap:
+                        return None
+                    return txt if (trad and txt) else m.message
+
                 async def _enviar(m=message, txt=texto):
-                    if trad and txt:
-                        return await client.send_message(destino, txt,
-                                                         file=m.media if not descargar else None)
+                    cap = _caption_emitir(m, txt)
+                    # Si descargar=True, la media va al disco: no adjuntar, solo texto.
+                    if descargar:
+                        return await client.send_message(destino, cap if cap else "")
+                    # Modo copia: sin "Forwarded from" (quitar remitente).
+                    if quitar_rem or quitar_cap:
+                        if m.media:
+                            return await client.send_file(destino, m.media, caption=cap)
+                        return await client.send_message(destino, cap if cap else "")
+                    # Modo reenvío normal (con remitente y caption original).
                     return await client.send_message(destino, m)
+
                 await _reintentar(_enviar, etiqueta=f"clonado ID {message.id}")
                 if descargar and message.media:
                     cola.append(message)
@@ -999,6 +1336,135 @@ async def modulo_clonar(client):
             for msg in cola:
                 await _reintentar(lambda m=msg: download_media_robust(client, m, folder),
                                   etiqueta=f"descarga clonado {msg.id}")
+
+
+def _ruta_backup():
+    carpeta = _ruta_segura(CARPETA_BASE / "Backups")
+    carpeta.mkdir(parents=True, exist_ok=True)
+    return carpeta
+
+
+async def _backup_a_archivo(client):
+    """Guarda mensajes + media de un chat/tema en un JSON local (backup)."""
+    sel = await _seleccionar_chat(client, "Chat a respaldar:", tipos=["canal", "grupo", "foro"], filtro=None)
+    if not sel:
+        return
+    ent = sel["ent"]
+    tema_id = None
+    if _tipo(ent) == "foro":
+        tema_id = await _seleccionar_tema(client, ent, "Elige el tema:")
+        if tema_id is None:
+            return
+    limite = _pedir_numero("¿Cuántos mensajes respaldar? (vacío = todos):", minimo=1, por_defecto=200)
+    if limite is None:
+        return
+    descargar = inquirer.confirm("¿Descargar media también al respaldo?", default=False).execute()
+    if not inquirer.confirm("¿Ejecutar el backup?", default=True).execute():
+        return
+    nombre_base = _saneado(sel["nombre"])
+    backup_dir = _ruta_backup() / f"{nombre_base}_backup"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    media_dir = backup_dir / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    data = []
+    try:
+        async for message in client.iter_messages(ent, limit=limite, reverse=True):
+            if not await _comprobar_conexion(client):
+                break
+            registro = {"id": message.id, "text": message.text or "", "date": str(message.date)}
+            if descargar and message.media:
+                try:
+                    ruta = await client.download_media(message, file=media_dir)
+                    registro["media"] = str(ruta)
+                except Exception as e:
+                    log("ERR", f"id {message.id} media: {e}")
+            data.append(registro)
+            if len(data) % 100 == 0:
+                styled_info(f"{len(data)} mensajes...")
+            await asyncio.sleep(0.3)
+        out = backup_dir / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        out.write_text(json.dumps({"fuente": sel["nombre"], "tema": tema_id, "mensajes": data},
+                                  ensure_ascii=False, indent=2), encoding="utf-8")
+        _log_auditoria("BACKUP", f"{sel['nombre']} → {out} ({len(data)} msgs)")
+        styled_success(f"Backup guardado: {out} ({len(data)} mensajes)")
+    except Exception as e:
+        styled_error(f"Error en backup: {e}")
+
+
+async def _restaurar_backup(client):
+    """Carga un backup JSON local y lo reenvía a un chat elegido."""
+    backup_dir = _ruta_backup()
+    archivos = sorted([f for f in backup_dir.glob("**/*.json") if f.is_file()])
+    if not archivos:
+        styled_warn("No hay backups guardados.")
+        return
+    op = inquirer.select("Elige el backup a restaurar:",
+                         choices=[{"name": f"• {f.relative_to(backup_dir)}", "value": f}
+                                  for f in archivos], pointer="▸").execute()
+    if op is None:
+        return
+    try:
+        data = json.loads(op.read_text(encoding="utf-8"))
+        msgs = data.get("mensajes", [])
+    except Exception as e:
+        styled_error(f"No se pudo leer: {e}")
+        return
+    sel = await _seleccionar_chat(client, "Chat DESTINO de la restauración:",
+                                  tipos=["canal", "grupo", "foro"], filtro=None)
+    if not sel:
+        return
+    destino = sel["ent"]
+    trad = inquirer.confirm("¿Traducir al restaurar?", default=False).execute()
+    quitar_cap = inquirer.confirm("¿Quitar descripción/caption al restaurar?", default=False).execute()
+    if not inquirer.confirm(f"¿Restaurar {len(msgs)} mensajes a '{sel['nombre']}'?",
+                            default=True).execute():
+        return
+    ok = 0
+    for m in msgs:
+        texto = procesar_texto_inteligente(m.get("text"), trad)
+        if texto == "FILTERED_CONTENT":
+            continue
+        if quitar_cap:
+            texto = ""
+        ruta_media = m.get("media")
+        try:
+            if ruta_media and Path(ruta_media).exists():
+                await client.send_message(destino, texto or None, file=ruta_media)
+            elif texto:
+                await client.send_message(destino, texto)
+            else:
+                continue
+            ok += 1
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            log("ERR", f"id {m.get('id')}: {e}")
+    _log_auditoria("RESTAURAR", f"{data.get('fuente', '?')} → {sel['nombre']} ({ok} msgs)")
+    styled_success(f"Restaurados {ok}/{len(msgs)} mensajes.")
+
+
+async def modulo_clonar(client):
+    while True:
+        console.print(styled_panel("[bold white]MÓDULO CLONACIÓN / BACKUP[/bold white]", title="🔄", style=BG))
+        op = inquirer.select(
+            "Opciones:",
+            choices=[
+                {"name": "🔀  Clonar canal → canal", "value": "c"},
+                {"name": "💾  Backup a archivo local", "value": "b"},
+                {"name": "♻️  Restaurar backup", "value": "r"},
+                {"name": "🔙  Volver", "value": "x"},
+            ],
+            pointer="▸",
+        ).execute()
+        if op in ("x", None):
+            return
+        if op == "c":
+            await _clonar_canal_a_canal(client)
+        elif op == "b":
+            await _backup_a_archivo(client)
+        elif op == "r":
+            await _restaurar_backup(client)
+        styled_info("Pulsa Enter para continuar...")
+        input()
 
 
 # ============================================================================
@@ -1028,6 +1494,92 @@ def _tabla_chats(rows):
     console.print(t)
 
 
+async def _crear_carpeta(client):
+    """Crea una carpeta de chats con un título."""
+    nombre = inquirer.text("Nombre de la carpeta:").execute().strip()
+    if not nombre:
+        return
+    if not inquirer.confirm(f"¿Crear carpeta '{nombre}' (vacía)?", default=True).execute():
+        return
+    try:
+        filtro = DialogFilter(
+            id=0, title=nombre, pinned_peers=[], include_peers=[], exclude_peers=[],
+            contacts=False, non_contacts=False, groups=False, broadcasts=False,
+            bots=False, exclude_muted=False, exclude_read=False,
+            exclude_archived=False, emoticon=None,
+        )
+        await client(UpdateDialogFilterRequest(id=0, filter=filtro))
+        _log_auditoria("CREAR_CARPETA", nombre)
+        styled_success(f"Carpeta '{nombre}' creada.")
+    except Exception as e:
+        limite = _mensaje_limite(e)
+        styled_error(f"Error: {limite or e}")
+
+
+async def _mover_chat_carpeta(client):
+    """Mueve un chat dentro de una carpeta (folder)."""
+    sel = await _seleccionar_chat(client, "Chat a mover:", filtro=None)
+    if not sel:
+        return
+    folder_id = _pedir_numero("ID de carpeta destino (0 = Principal, 1 = Archivado):",
+                              minimo=0, por_defecto=0)
+    if folder_id is None:
+        return
+    if not inquirer.confirm(f"¿Mover '{sel['nombre']}' a la carpeta {folder_id}? (se aplica en Telegram)",
+                            default=True).execute():
+        styled_info("Cancelado.")
+        return
+    inp = await client.get_input_entity(sel["ent"])
+    try:
+        await client(EditPeerFoldersRequest(folder_peers=[InputFolderPeer(peer=inp, folder_id=folder_id)]))
+    except Exception as e:
+        limite = _mensaje_limite(e)
+        styled_error(f"No se pudo mover: {limite or e}")
+        return
+    _log_auditoria("MOVERCARPETA", f"{sel['nombre']} → carpeta {folder_id}")
+    styled_success(f"{sel['nombre']} movido a carpeta {folder_id}.")
+
+
+async def _silenciar_chat(client):
+    """Silencia / desilencia un chat o canal."""
+    sel = await _seleccionar_chat(client, "Chat a silenciar/desilenciar:", filtro=None)
+    if not sel:
+        return
+    silenciar = inquirer.confirm(f"Acción sobre '{sel['nombre']}': ¿silenciarlo? (No = desilenciarlo)",
+                                 default=True).execute()
+    muted_until = 2**31 - 1 if silenciar else 0
+    peer = await client.get_input_entity(sel["ent"])
+    try:
+        await client(UpdateNotifySettingsRequest(
+            peer=InputNotifyPeer(peer=peer),
+            settings=InputPeerNotifySettings(show_previews=True, silent=False,
+                                             mute_until=muted_until, sound="Default")))
+    except Exception as e:
+        limite = _mensaje_limite(e)
+        styled_error(f"No se pudo cambiar notificaciones: {limite or e}")
+        return
+    _log_auditoria("SILENCIAR" if silenciar else "DESILENCIAR", sel["nombre"])
+    styled_success(f"{sel['nombre']} {'silenciado' if silenciar else 'desilenciado'}.")
+
+
+async def _pinar_chat(client):
+    """Fija / desfija un chat arriba de la lista de chats."""
+    sel = await _seleccionar_chat(client, "Chat a fijar/desfijar:", filtro=None)
+    if not sel:
+        return
+    pin = inquirer.confirm(f"Acción sobre '{sel['nombre']}': ¿fijarlo arriba? (No = desfijarlo)",
+                           default=True).execute()
+    peer = await client.get_input_entity(sel["ent"])
+    try:
+        await client(ToggleDialogPinRequest(peer=peer, pinned=pin))
+    except Exception as e:
+        limite = _mensaje_limite(e)
+        styled_error(f"No se pudo fijar: {limite or e}")
+        return
+    _log_auditoria("PINCHAT" if pin else "UNPINCHAT", sel["nombre"])
+    styled_success(f"{sel['nombre']} {'fijado' if pin else 'desfijado'}.")
+
+
 async def modulo_chats(client):
     console.print(styled_panel("[bold white]MÓDULO CHATS Y CARPETAS[/bold white]", title="🗂️", style=BG))
     while True:
@@ -1037,6 +1589,10 @@ async def modulo_chats(client):
                 {"name": "📋  Listar chats (con filtros)", "value": "l"},
                 {"name": "🗄️  Archivar / Desarchivar chat", "value": "a"},
                 {"name": "🏷️  Listar por carpeta", "value": "f"},
+                {"name": "📁  Crear carpeta", "value": "cf"},
+                {"name": "📦  Mover chat a carpeta", "value": "m"},
+                {"name": "🔇  Silenciar / Desilenciar chat", "value": "s"},
+                {"name": "📌  Fijar / Desfijar chat", "value": "p"},
                 {"name": "✏️  Renombrar / Mover archivos", "value": "r"},
                 {"name": "🔙  Volver", "value": "b"},
             ],
@@ -1062,6 +1618,14 @@ async def modulo_chats(client):
                            "sí" if i["creado"] else "no") for i in items])
         elif op == "a":
             await _archivar(client)
+        elif op == "cf":
+            await _crear_carpeta(client)
+        elif op == "m":
+            await _mover_chat_carpeta(client)
+        elif op == "s":
+            await _silenciar_chat(client)
+        elif op == "p":
+            await _pinar_chat(client)
         elif op == "r":
             await _renombrar_mover(client)
 
@@ -1118,8 +1682,6 @@ async def _renombrar_mover(client):
 
 
 async def _archivar(client, ref=None, folder_id=None):
-    from telethon.tl.functions.folders import EditPeerFoldersRequest
-    from telethon.tl.types import InputFolderPeer
     if ref is None:
         sel = await _seleccionar_chat(client, "Chat a archivar/desarchivar (con filtro):", filtro=None)
         if not sel:
@@ -1179,10 +1741,13 @@ async def modulo_foros(client):
 
 
 async def _crear_canal(client):
-    from telethon.tl.functions.channels import CreateChannelRequest
     titulo = inquirer.text("Título del canal:").execute().strip()
     about = inquirer.text("Descripción (vacío = nada):").execute().strip()
     foro = inquirer.confirm("¿Activar foro (temas)?", default=True).execute()
+    tipo = "canal" if not foro else "canal-foro"
+    if not inquirer.confirm(f"¿Crear {tipo} '{titulo}'? (se aplica en Telegram)", default=True).execute():
+        styled_info("Cancelado.")
+        return
     res = await client(CreateChannelRequest(title=titulo, about=about, broadcast=True, megagroup=False, forum=bool(foro)))
     chat = res.chats[0]
     _log_auditoria("CREAR_CANAL", f"{chat.title} (id={chat.id}) foro={bool(foro)}")
@@ -1190,9 +1755,6 @@ async def _crear_canal(client):
 
 
 async def _gestionar_temas(client):
-    from telethon.tl.functions.messages import (
-        CreateForumTopicRequest, EditForumTopicRequest, DeleteTopicHistoryRequest, GetForumTopicsRequest,
-    )
     sel = await _seleccionar_chat(client, "Selecciona el foro:", tipos=["foro"], filtro=None)
     if not sel:
         return
@@ -1220,7 +1782,14 @@ async def _gestionar_temas(client):
     ).execute()
     if op == "c":
         titulos = inquirer.text("Títulos (separados por coma):").execute().strip()
-        for i, titulo in enumerate([x.strip() for x in titulos.split(",") if x.strip()]):
+        lista = [x.strip() for x in titulos.split(",") if x.strip()]
+        if not lista:
+            return
+        if not inquirer.confirm(f"¿Crear {len(lista)} tema(s) en '{sel['nombre']}'?",
+                                default=True).execute():
+            styled_info("Cancelado.")
+            return
+        for i, titulo in enumerate(lista):
             r = await client(CreateForumTopicRequest(peer=foro_ent, title=titulo, random_id=int(asyncio.get_event_loop().time() * 1000) + i))
             _log_auditoria("CREAR_TEMA", f"{sel['nombre']}: {titulo}")
             styled_success(f"Tema '{titulo}' creado (id={getattr(r.updates[0], 'message', None).id if r.updates else '?'})")
@@ -1230,6 +1799,10 @@ async def _gestionar_temas(client):
             return
         nuevo = inquirer.text("Nuevo título:").execute().strip()
         if nuevo:
+            if not inquirer.confirm(f"¿Renombrar tema a '{nuevo}'? (se aplica en Telegram)",
+                                    default=True).execute():
+                styled_info("Cancelado.")
+                return
             await client(EditForumTopicRequest(peer=foro_ent, topic_id=tid, title=nuevo))
             _log_auditoria("RENOMBRAR_TEMA", f"{sel['nombre']}/tema{tid} → {nuevo}")
             styled_success("Tema renombrado.")
@@ -1277,6 +1850,7 @@ async def _migrar_canal_a_tema(client):
     if not inquirer.confirm("¿Ejecutar la migración (sin borrar origen)?", default=True).execute():
         styled_info("Cancelado.")
         return
+    quitar_cap = inquirer.confirm("¿Quitar descripción/caption?", default=False).execute()
     borrar_origen = False
     if inquirer.confirm("¿BORRAR el origen tras migrar correctamente? (irreversible)", default=False).execute():
         escribir = inquirer.text(f"Escribe el nombre exacto '{sel_origen['nombre']}' para confirmar el BORRADO:").execute().strip()
@@ -1290,14 +1864,15 @@ async def _migrar_canal_a_tema(client):
         if not await _comprobar_conexion(client):
             break
         try:
+            cap = None if quitar_cap else msg.message
             if msg.message and getattr(msg, "media", None) and getattr(msg, "document", None):
-                async def _f(m=msg):
-                    return await client.send_file(foro_ent, m.media, caption=m.message, reply_to=tema_id)
+                async def _f(m=msg, c=cap):
+                    return await client.send_file(foro_ent, m.media, caption=c, reply_to=tema_id)
                 if await _reintentar(_f, etiqueta=f"migrar msg {msg.id}"):
                     nenv += 1
             elif msg.message and not getattr(msg, "media", None):
-                async def _t(m=msg):
-                    return await client.send_message(foro_ent, m.message, reply_to=tema_id)
+                async def _t(m=msg, c=cap):
+                    return await client.send_message(foro_ent, c or "", reply_to=tema_id)
                 if await _reintentar(_t, etiqueta=f"migrar msg {msg.id}"):
                     ntxt += 1
             elif getattr(msg, "media", None) and getattr(msg, "document", None):
@@ -1319,7 +1894,6 @@ async def _migrar_canal_a_tema(client):
 
 async def _vaciar_canal(client, ent, nombre):
     """Borra TODOS los mensajes de un canal/grupo (con doble confirmación)."""
-    from telethon.tl.functions.messages import DeleteHistoryRequest
     styled_warn(f"BORRADO DE CANAL: '{nombre}' — SE BORRARÁ TODO EL HISTORIAL. ¡IRREVERSIBLE!")
     escribir = inquirer.text(f"Escribe el nombre exacto '{nombre}' para CONFIRMAR el borrado:").execute().strip()
     if escribir != nombre:
@@ -1334,7 +1908,6 @@ async def _vaciar_canal(client, ent, nombre):
 
 
 async def _borrar_canal(client):
-    from telethon.tl.functions.channels import DeleteChannelRequest
     sel = await _seleccionar_chat(client, "Canal a BORRAR (con filtro):",
                                   tipos=["canal", "foro"], filtro=None)
     if not sel:
@@ -1592,7 +2165,6 @@ def _export_import_config():
     if op == "exp":
         dest = inquirer.text("Destino del backup (carpeta):").execute().strip() or str(REPO_DIR / "data" / "backups")
         d = _ruta_segura(dest)
-        import shutil
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         for src, nombre in [(GRUPOS_FILE, f"grupos_{ts}.json"),
                             (PLANTILLAS_FILE, f"plantillas_{ts}.json")]:
@@ -1606,7 +2178,6 @@ def _export_import_config():
         if not d.exists():
             styled_error("No existe esa carpeta.")
             return
-        import shutil
         dest_config = PLANTILLAS_FILE.parent
         dest_config.mkdir(parents=True, exist_ok=True)
         count = 0
@@ -1721,36 +2292,341 @@ async def _calcular_destinos(archivo, default, grupos, foros):
 
 
 # ============================================================================
-# MÓDULO 6: Vigilante
+# MÓDULO 6: Vigilante (ampliado)
 # ============================================================================
+def _vig_cargar():
+    """Carga la config persistente del vigilante (o devuelve dict vacío)."""
+    try:
+        with open(VIGCONFIG_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _vig_guardar(cfg):
+    Path(VIGCONFIG_FILE).parent.mkdir(parents=True, exist_ok=True)
+    with open(VIGCONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    styled_success(f"Config guardada en {VIGCONFIG_FILE}")
+
+
+def _vig_nombre_chat(cfg, chat_id, destinos):
+    """Devuelve el nombre guardado del chat (o el id)."""
+    for d in cfg.get("nombres", []):
+        if d["id"] == chat_id:
+            return d["nombre"]
+    return str(chat_id)
+
+
+def _tema_mensaje(msg):
+    """Devuelve el topic_id del mensaje (foro) o None si no es de un tema."""
+    rt = getattr(msg, "reply_to", None)
+    if rt is not None:
+        return getattr(rt, "reply_to_top_id", None)
+    return None
+
+
+def _cooldown_activo(ultimo, ahora, seg):
+    return ultimo is not None and (ahora - ultimo).total_seconds() < seg
+
+
 async def modulo_vigilante(client):
-    filtro_ent = None
-    if inquirer.confirm("¿Vigilar solo un canal concreto?", default=False).execute():
-        sel = await _seleccionar_chat(client, "Canal a vigilar (con filtro):", tipos=["canal", "grupo", "foro"], filtro=None)
-        if not sel:
-            return
-        filtro_ent = sel["ent"]
-        styled_info(f"Vigilando SOLO: {sel['nombre']}")
-    log("INFO", "Modo Vigilante activo. Ctrl+C para salir.")
-    extra_str = inquirer.text("Palabras clave extra (separadas por coma):", default="").execute()
-    extra = [p.lower() for p in extra_str.split(",") if p.strip()]
+    """Vigilante mejorado: filtros por tipo/emisor, inclusión/exclusión de chats y
+    temas, varios destinos con razones, cooldown, config persistente y resumen."""
+    previa = _vig_cargar()
+    if previa and inquirer.confirm(
+            "¿Reusar la config del vigilante guardada?", default=True).execute():
+        cfg = previa
+    else:
+        cfg = {}
+    usar = inquirer.select("Configuración:",
+                           choices=[
+                               {"name": "✨  Configurar vigilante desde cero", "value": "nuevo"},
+                               {"name": "🔄  Cambiar configuración actual", "value": "editar"},
+                               {"name": "🧹  Borrar config guardada y empezar", "value": "borrar"},
+                               {"name": "❌  Cancelar", "value": "salir"},
+                           ], pointer="▸").execute()
+    if usar == "salir":
+        return
+    if usar == "borrar":
+        try:
+            Path(VIGCONFIG_FILE).unlink(missing_ok=True)
+        except OSError:
+            pass
+        cfg = {}
+        styled_info("Config borrada.")
+    elif usar == "nuevo":
+        cfg = {}
+    # --- 1. Chats: incluir / excluir / temas ---
+    styled_info("PASO 1 · CHATS A VIGILAR")
+    todos = inquirer.confirm("¿Vigilar TODOS los chats? (No = elegir una lista)",
+                             default=cfg.get("todos", True)).execute()
+    incluir = []
+    if not todos:
+        styled_info("Elige los chats a vigilar (varias selecciones).")
+        while True:
+            sel = await _seleccionar_chat(client, "Añadir chat a vigilar (Volver = terminar):",
+                                          tipos=["canal", "grupo", "foro"], filtro=None)
+            if not sel:
+                break
+            incluir.append({"id": getattr(sel["ent"], "id", None), "nombre": sel["nombre"],
+                            "tipo": sel["tipo"]})
+            if not inquirer.confirm("¿Añadir otro chat?", default=True).execute():
+                break
+        cfg["incluir"] = incluir
+    else:
+        cfg["incluir"] = []
+    cfg["todos"] = todos
+
+    excluir = cfg.get("excluir", [])
+    if inquirer.confirm("¿Excluir algunos chats concretos?", default=bool(excluir)).execute():
+        excluir = []
+        styled_info("Elige los chats a EXCLUIR (no se vigilarán).")
+        while True:
+            sel = await _seleccionar_chat(client, "Añadir chat a EXCLUIR (Volver = terminar):",
+                                          tipos=["canal", "grupo", "foro"], filtro=None)
+            if not sel:
+                break
+            excluir.append({"id": getattr(sel["ent"], "id", None), "nombre": sel["nombre"]})
+            if not inquirer.confirm("¿Añadir otro chat a excluir?", default=True).execute():
+                break
+    cfg["excluir"] = excluir
+
+    # Temas de foro restringidos
+    solo_temas = cfg.get("solo_temas", {})
+    if inquirer.confirm("¿Vigilar SOLO ciertos temas de foros?", default=bool(solo_temas)).execute():
+        solo_temas = {}
+        styled_info("Elige foro y, dentro, los temas que sí se vigilan.")
+        while True:
+            sel = await _seleccionar_chat(client, "Foro (Volver = terminar):",
+                                          tipos=["foro"], filtro=None)
+            if not sel:
+                break
+            foro_ent = sel["ent"]
+            styled_info("Elige los temas (1 a 1).")
+            temas_elegidos = []
+            while True:
+                tid = await _seleccionar_tema(client, foro_ent,
+                                              "Tema a incluir (Volver = terminar):")
+                if tid is None:
+                    break
+                temas_elegidos.append(tid)
+                if not inquirer.confirm("¿Añadir otro tema?", default=True).execute():
+                    break
+            solo_temas[str(getattr(foro_ent, "id", None))] = temas_elegidos
+            if not inquirer.confirm("¿Configurar otro foro?", default=False).execute():
+                break
+    cfg["solo_temas"] = solo_temas
+
+    # --- 2. Tipos de medio ---
+    styled_info("PASO 2 · FILTRO POR TIPO DE MEDIO")
+    cfg["tipos"] = cfg.get("tipos", TIPOS_MEDIA[:])
+    if inquirer.confirm("¿Filtrar solo por ciertos tipos de medio?", default=False).execute():
+        tipos_ok = {t: True for t in TIPOS_MEDIA}
+        for t in TIPOS_MEDIA:
+            tipos_ok[t] = inquirer.confirm(f"¿Detectar {t}s?", default=(t in cfg.get("tipos", TIPOS_MEDIA))).execute()
+        cfg["tipos"] = [t for t, ok in tipos_ok.items() if ok]
+    styled_info(f"Tipos activos: {', '.join(cfg['tipos']) if cfg['tipos'] else 'TODOS (sin filtro de tipo)'}")
+
+    # --- 3. Emisores ---
+    styled_info("PASO 3 · FILTRO POR EMISOR")
+    cfg["emisores"] = cfg.get("emisores", [])
+    if inquirer.confirm("¿Solo reaccionar a ciertos remitentes?", default=bool(cfg["emisores"])).execute():
+        emisores = []
+        styled_info("Elige los remitentes (canales/users) que sí interesan.")
+        while True:
+            sel = await _seleccionar_chat(client, "Remitente (Volver = terminar):",
+                                          tipos=["canal", "grupo", "foro", "user"], filtro=None)
+            if not sel:
+                break
+            emisores.append({"id": getattr(sel["ent"], "id", None), "nombre": sel["nombre"]})
+            if not inquirer.confirm("¿Añadir otro remitente?", default=True).execute():
+                break
+        cfg["emisores"] = emisores
+    styled_info("Emisores: " + (", ".join(e["nombre"] for e in cfg["emisores"]) or "TODOS"))
+
+    # --- 4. Palabras clave ---
+    styled_info("PASO 4 · PALABRAS CLAVE")
+    extra_str = inquirer.text("Palabras clave extra (separadas por coma):",
+                              default=", ".join(cfg.get("keywords", []))).execute()
+    cfg["keywords"] = [p.lower() for p in extra_str.split(",") if p.strip()]
+
+    # --- 5. Destinos + modo de reenvío ---
+    styled_info("PASO 5 · REENVÍO")
+    destinos = cfg.get("destinos", [])
+    reenviar = inquirer.confirm("¿REENVIAR alertas a otro(s) chat(s)?",
+                                default=bool(destinos)).execute()
+    if reenviar:
+        destinos = []
+        styled_info("Elige los destinos (varias selecciones; 'Mensajes guardados' = tu propio chat).")
+        while True:
+            sel = await _seleccionar_chat(client, "Destino del reenvío (Volver = terminar):",
+                                          tipos=["canal", "grupo", "foro", "me"], filtro=None)
+            if not sel:
+                break
+            destinos.append({"id": getattr(sel["ent"], "id", None) or "me",
+                             "nombre": sel["nombre"]})
+            if not inquirer.confirm("¿Añadir otro destino?", default=True).execute():
+                break
+        if not destinos:
+            reenviar = False
+    cfg["destinos"] = destinos
+
+    cfg["reenviar_original"] = reenviar and inquirer.confirm(
+        "¿Reenviar el mensaje ORIGINAL (media incluida) en vez de solo el texto?",
+        default=cfg.get("reenviar_original", False)).execute()
+    cfg["quitar_rem"] = cfg.get("reenviar_original") and inquirer.confirm(
+        "¿Quitar remitente al reenviar? (copia sin 'Forwarded from')",
+        default=cfg.get("quitar_rem", False)).execute()
+    cfg["quitar_cap"] = cfg.get("reenviar_original") and inquirer.confirm(
+        "¿Quitar descripción/caption al reenviar?", default=cfg.get("quitar_cap", False)).execute()
+    cfg["marcar_razon"] = reenviar and inquirer.confirm(
+        "¿Marcar en la alerta QUÉ keyword/tipo disparó?", default=cfg.get("marcar_razon", True)).execute()
+
+    # --- 6. Descarga de media ---
+    styled_info("PASO 6 · DESCARGA DE MEDIA")
+    cfg["descargar_media"] = inquirer.confirm(
+        "¿Descargar archivos adjuntos de las alertas?", default=cfg.get("descargar_media", False)).execute()
+    if cfg["descargar_media"]:
+        cfg["carpeta_media"] = _ruta_segura(cfg.get("carpeta_media") or
+                                            CARPETA_BASE / "Vigilante_Media").as_posix()
+
+    # --- 7. Cooldown ---
+    styled_info("PASO 7 · COOLDOWN (anti-ráfagas)")
+    cfg["cooldown"] = _pedir_numero(
+        "Segundos de espera entre alertas del mismo chat (0 = sin límite):",
+        minimo=0, por_defecto=cfg.get("cooldown", 30)) or 0
+
+    _vig_guardar(cfg)
+
+    # --- Resumen de confirmación ---
+    _tabla_resumen(
+        ["Chats", "Tipos", "Emisores", "Keywords", "Destinos", "Media", "Cooldown"],
+        [("TODOS" if cfg["todos"] else f"{len(cfg['incluir'])} chat(s)",
+          ", ".join(cfg["tipos"]) if cfg["tipos"] else "todo",
+          "todos" if not cfg["emisores"] else f"{len(cfg['emisores'])}",
+          ", ".join(cfg["keywords"]) or "-",
+          ", ".join(d["nombre"] for d in cfg["destinos"]) or "Mensajes guardados",
+          "sí" if cfg.get("descargar_media") else "no",
+          f"{cfg['cooldown']}s")],
+        titulo="Resumen del vigilante",
+    )
+    if not inquirer.confirm("¿Iniciar el vigilante?", default=True).execute():
+        styled_info("Cancelado.")
+        return
+
+    ids_incluir = {c["id"] for c in cfg["incluir"]}
+    ids_excluir = {c["id"] for c in cfg["excluir"]}
+    ids_emisores = {e["id"] for e in cfg["emisores"]}
+    ids_destinos = [d["id"] for d in cfg["destinos"]]
+    solo_temas = {int(k): set(v) for k, v in cfg.get("solo_temas", {}).items()}
+    keywords = cfg.get("keywords", [])
+    tipos_ok = set(cfg.get("tipos", [])) or None
+    cooldown = cfg.get("cooldown", 0)
+    al_guardado = "me"
+    contador = {"alertas": 0, "reenviadas": 0, "descargadas": 0}
+    ultimo_por_chat = {}
 
     @client.on(events.NewMessage)
     async def handler(event):
-        if filtro_ent is not None and getattr(event, "chat_id", None) != getattr(filtro_ent, "id", None):
+        chat_id = getattr(event, "chat_id", None)
+        if chat_id is None:
             return
-        texto = event.message.message or ""
-        if procesar_texto_inteligente(texto) == "FILTERED_CONTENT" or any(p in texto.lower() for p in extra):
-            log("SPAM", f"Contenido detectado → {texto[:60]}")
+        if ids_incluir and chat_id not in ids_incluir:
+            return
+        if chat_id in ids_excluir:
+            return
+        msg = event.message
+        if solo_temas and chat_id in solo_temas:
+            t = _tema_mensaje(msg)
+            if t not in solo_temas[chat_id]:
+                return
+        if cooldown and chat_id in ultimo_por_chat and \
+                _cooldown_activo(ultimo_por_chat[chat_id], datetime.now(timezone.utc), cooldown):
+            return
+
+        razones = []
+        texto = msg.message or ""
+        if procesar_texto_inteligente(texto) == "FILTERED_CONTENT":
+            razones.append("🚫 contenido filtrado")
+        if keywords and any(p in texto.lower() for p in keywords):
+            razones.append("🔑 keyword")
+        tipo = _tipo_medio(msg)
+        if tipos_ok and tipo and tipo in tipos_ok:
+            razones.append(f"🎯 {tipo}")
+        if ids_emisores:
+            sender = getattr(msg, "sender_id", None) or getattr(msg, "from_id", None)
+            if sender is not None and getattr(sender, "user_id", sender) in ids_emisores:
+                razones.append("👤 emisor")
+        if not razones:
+            return
+        ultimo_por_chat[chat_id] = datetime.now(timezone.utc)
+        contador["alertas"] += 1
+        log("SPAM", f"Vigilante: {', '.join(razones)} → {texto[:60]}")
+
+        cabecera = " | ".join(razones)
+        alerta = f"🔔 Alerta ({cabecera})\n{texto[:1500]}" if texto else \
+            f"🔔 Alerta ({cabecera}): media detectada"
+        origen = f"\n· Origen: {_vig_nombre_chat(cfg, chat_id, ids_destinos)}"
+        if _tema_mensaje(msg):
+            origen += f" (tema {_tema_mensaje(msg)})"
+        try:
+            for dest in ids_destinos:
+                if cfg.get("reenviar_original"):
+                    if cfg.get("quitar_rem") or cfg.get("quitar_cap"):
+                        cap = None if cfg.get("quitar_cap") else (msg.message or None)
+                        if msg.media:
+                            await client.send_file(dest, msg.media, caption=cap)
+                        elif cap:
+                            await client.send_message(dest, cap)
+                        else:
+                            await client.send_message(dest, alerta + origen)
+                    else:
+                        await client.send_message(dest, msg)
+                    contador["reenviadas"] += 1
+                else:
+                    if cfg.get("marcar_razon"):
+                        await client.send_message(dest, alerta + origen)
+                    else:
+                        await client.send_message(dest, alerta)
+                    contador["reenviadas"] += 1
+            if not ids_destinos:
+                await client.send_message(al_guardado,
+                                          (alerta + origen) if cfg.get("marcar_razon") else alerta)
+                contador["reenviadas"] += 1
+        except Exception as e:
+            log("ERR", f"Vigilante reenvío: {e}")
+        if cfg.get("descargar_media") and msg.media:
             try:
-                await client.send_message("me", f"🔔 Alerta:\n{texto[:400]}")
+                folder = _ruta_segura(cfg.get("carpeta_media") or CARPETA_BASE / "Vigilante_Media")
+                if await _reintentar(lambda: download_media_robust(client, msg, folder),
+                                     veces=2, etiqueta="vigilante media"):
+                    contador["descargadas"] += 1
             except Exception:
                 pass
 
+    styled_success("Vigilante activo. Ctrl+C para detener (y ver resumen).")
+    styled_info(f"  Chats: {'TODOS' if cfg['todos'] else f'{len(ids_incluir)}'} · "
+                f"Tipos: {', '.join(cfg['tipos']) if cfg['tipos'] else 'todo'} · "
+                f"Destinos: {len(ids_destinos) or 'guardados'}")
     try:
-        await client.run_until_disconnected()
+        while client.is_connected():
+            await asyncio.sleep(1)
     except KeyboardInterrupt:
-        styled_warn("Vigilante detenido.")
+        pass
+    except Exception as e:
+        styled_warn(f"Conexión perdida: {e}")
+    styled_info("Deteniendo vigilante...")
+    try:
+        client.remove_event_handler(handler, events.NewMessage)
+    except Exception:
+        pass
+    _log_auditoria("VIGILANTE_FIN",
+                   f"{contador['alertas']} alertas, {contador['reenviadas']} reenviadas, "
+                   f"{contador['descargadas']} media")
+    styled_success(f"Resumen: {contador['alertas']} alertas · "
+                   f"{contador['reenviadas']} reenviadas · "
+                   f"{contador['descargadas']} media descargada.")
 
 
 # ============================================================================
@@ -1781,12 +2657,10 @@ async def _modo_guiado(client):
                                                                 tzinfo=timezone.utc) if h else None
         except ValueError:
             styled_warn("Fecha inválida; se ignora.")
-    tipos_ok = {"vídeo": True, "foto": True, "audio": True, "documento": True}
+    tipos_ok = {t: True for t in TIPOS_MEDIA}
     if inquirer.confirm("¿Filtrar por tipo de medio?", default=False).execute():
-        tipos_ok["vídeo"] = inquirer.confirm("¿Vídeos?", default=True).execute()
-        tipos_ok["foto"] = inquirer.confirm("¿Fotos?", default=True).execute()
-        tipos_ok["audio"] = inquirer.confirm("¿Audios?", default=True).execute()
-        tipos_ok["documento"] = inquirer.confirm("¿Documentos?", default=True).execute()
+        for t in TIPOS_MEDIA:
+            tipos_ok[t] = inquirer.confirm(f"¿{t.capitalize()}s?", default=True).execute()
 
     styled_info("PASO 3 · Buscando archivos...")
     mensajes = []
@@ -1887,6 +2761,119 @@ async def _modo_guiado(client):
 
 
 # ============================================================================
+# BÚSQUEDA DE FOTOS EN GUARDADOS (por descripción y por OCR del contenido)
+# ============================================================================
+def _tesseract_ok():
+    return shutil.which("tesseract") is not None
+
+
+def _buscar_caption_fotos(client, termino, limite=200):
+    """Recorre los mensajes guardados ('me') y devuelve los que son FOTOS cuyo
+    caption contiene el término. Devuelve lista de (msg, motivo)."""
+    res = []
+    try:
+        for msg in client.iter_messages("me", search=termino, filter=InputMessagesFilterPhotos,
+                                        limit=limite):
+            if getattr(msg, "media", None) and isinstance(getattr(msg, "media", None), MessageMediaPhoto):
+                res.append((msg, "caption"))
+    except Exception:
+        pass
+    return res
+
+
+def _ocr_de_imagen(ruta):
+    """Corre tesseract sobre una imagen y devuelve el texto (o "")."""
+    try:
+        r = subprocess.run(["tesseract", str(ruta), "stdout", "-l", "spa+eng", "--psm", "6"],
+                           capture_output=True, text=True, timeout=60)
+        return r.stdout
+    except Exception:
+        return ""
+
+
+async def _buscar_fotos_en_guardados(client):
+    console.print(styled_panel("[bold white]BUSCAR FOTOS EN GUARDADOS[/bold white]", title="🔎", style=BG))
+
+    termino = inquirer.text("Texto a buscar (p. ej. 'apaches'):").execute().strip()
+    if not termino:
+        styled_warn("Sin texto de búsqueda.")
+        return
+
+    en_caption = inquirer.confirm(
+        "¿Buscar en la DESCRIPCIÓN de las fotos?", default=True).execute()
+    por_ocr = inquirer.confirm(
+        "¿Buscar TAMBIÉN dentro de la imagen (OCR, más lento)?", default=True).execute()
+    limite = _pedir_numero("Máximo de fotos a revisar (vacío = 200):",
+                           minimo=1, por_defecto=200)
+    if limite is None:
+        limite = 200
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tg_buscar_"))
+    resultados = []  # (msg, motivo)
+
+    styled_info(f"Buscando '{termino}' en 'Mensajes guardados'...")
+
+    if en_caption:
+        for msg, motivo in _buscar_caption_fotos(client, termino, limite):
+            resultados.append((msg, motivo))
+
+    if por_ocr:
+        if not _tesseract_ok():
+            styled_warn("tesseract no está instalado; se omite la búsqueda por OCR.")
+        else:
+            n = 0
+            async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos):
+                if n >= limite:
+                    break
+                n += 1
+                if any(msg.id == m.id for m, _ in resultados):
+                    continue
+                try:
+                    ruta = await client.download_media(msg, file=tmp_dir)
+                except Exception:
+                    ruta = None
+                if ruta and Path(ruta).is_file():
+                    cli_txt = _ocr_de_imagen(Path(ruta)).lower()
+                    if termino.lower() in cli_txt:
+                        resultados.append((msg, "OCR"))
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if not resultados:
+        styled_warn(f"No se encontró ninguna foto con '{termino}' (descripción u OCR).")
+        return
+
+    styled_success(f"Encontradas {len(resultados)} foto(s) con '{termino}'.")
+    filas = []
+    for msg, motivo in resultados:
+        fecha = str(getattr(msg, "date", ""))[:16]
+        cap = (getattr(msg, "text", "") or "").replace("\n", " ")[:40]
+        filas.append((msg.id, motivo, fecha, cap))
+    _tabla_resumen(["ID", "Dónde", "Fecha", "Descripción"], filas, titulo="Fotos encontradas")
+
+    descargar = inquirer.confirm("¿Descargar las fotos encontradas?", default=True).execute()
+    if not descargar:
+        return
+    carpeta = _ruta_segura(inquirer.text(
+        "Carpeta destino (vacío = Descargas_Telegram/Busqueda_Guardados):").execute().strip()
+        or str(CARPETA_BASE / "Busqueda_Guardados"))
+    carpeta.mkdir(parents=True, exist_ok=True)
+    carpeta = Path(carpeta)
+    ok = 0
+    for msg, _ in resultados:
+        if await download_media_robust(client, msg, carpeta):
+            ok += 1
+        await asyncio.sleep(0.2)
+    _log_auditoria("BUSCAR_FOTOS", f"'{termino}': {ok} descargadas de {len(resultados)}")
+    styled_success(f"Descargadas {ok}/{len(resultados)} fotos a {carpeta}")
+
+
+async def modulo_buscar_fotos(client):
+    console.print(styled_panel("[bold white]BUSCAR FOTOS EN GUARDADOS[/bold white]", title="🔎", style=BG))
+    await _buscar_fotos_en_guardados(client)
+
+
+# ============================================================================
 # MÓDULO 8: Limpieza / Programación
 # ============================================================================
 async def _modo_limpieza(client):
@@ -1948,7 +2935,6 @@ async def _limpiar_temporales():
 
 
 def _limpiar_sync():
-    from cli_base import _sync_cargar, _sync_guardar
     lista = _sync_cargar()
     if not lista:
         styled_success("sync_cli.json vacío.")
@@ -2002,10 +2988,103 @@ async def _programar_sync(client):
 
 
 # ============================================================================
+# PIN / UNPIN (fijar y desfijar mensajes)
+# ============================================================================
+async def _ultimo_mensaje_id(client, ent, tema_id=None):
+    """Devuelve el id del último mensaje de un chat (o tema de foro)."""
+    kwargs = dict(peer=ent, limit=1)
+    res = await client(GetHistoryRequest(**kwargs))
+    msgs = res.messages
+    if not msgs:
+        return None
+    return msgs[0].id
+
+
+async def modulo_pin(client):
+    """Fijar / desfijar mensajes en un chat o tema."""
+    sel = await _seleccionar_chat(client, "Selecciona el chat donde fijar/desfijar:",
+                                  tipos=["grupo", "canal", "foro"], filtro=None)
+    if not sel:
+        return
+    ent = sel["ent"]
+    ent_ref = ent
+
+    tema_id = None
+    if _tipo(ent) == "foro":
+        tema_id = await _seleccionar_tema(client, ent, "Elige el tema:")
+        if tema_id is None:
+            return
+
+    while True:
+        console.clear()
+        console.print(styled_panel(
+            f"[bold white]{sel['nombre']}[/bold white] · {sel['tipo']}"
+            f"{' · tema ' + str(tema_id) if tema_id else ''}",
+            title="📌 PIN / UNPIN", style=f"bold {FG}"
+        ))
+        op = inquirer.select(
+            "Acción:",
+            choices=[
+                {"name": "📌  Fijar mensaje (por ID o último)", "value": "pin"},
+                {"name": "📌  Fijar con silencio (sin notificación)", "value": "pin_silent"},
+                {"name": "🔓  Desfijar un mensaje concreto", "value": "unpin"},
+                {"name": "🗑️  Desfijar TODOS los fijados", "value": "unpin_all"},
+                {"name": "🔙  Volver", "value": "b"},
+            ],
+            pointer="▸",
+        ).execute()
+        if op in ("b", None):
+            return
+        try:
+            if op in ("pin", "pin_silent"):
+                ultimo = await _ultimo_mensaje_id(client, ent_ref, tema_id)
+                mid_str = inquirer.text(
+                    f"ID del mensaje a fijar (vacío = último, ahora {ultimo}):"
+                ).execute().strip()
+                mid = int(mid_str) if mid_str.isdigit() else (ultimo or 1)
+                if not inquirer.confirm(
+                        f"¿Fijar el mensaje {mid} en '{sel['nombre']}'?",
+                        default=True).execute():
+                    continue
+                await client(UpdatePinnedMessageRequest(
+                    peer=ent_ref, id=mid,
+                    silent=(op == "pin_silent"), unpin=False))
+                _log_auditoria("PIN", f"{sel['nombre']} msg {mid}")
+                styled_success(f"Mensaje {mid} fijado.")
+            elif op == "unpin":
+                ultimo = await _ultimo_mensaje_id(client, ent_ref, tema_id)
+                mid_str = inquirer.text(
+                    f"ID del mensaje a desfijar (vacío = último, ahora {ultimo}):"
+                ).execute().strip()
+                mid = int(mid_str) if mid_str.isdigit() else (ultimo or 1)
+                if not inquirer.confirm(
+                        f"¿Desfijar el mensaje {mid}?", default=True).execute():
+                    continue
+                await client(UpdatePinnedMessageRequest(peer=ent_ref, id=mid, unpin=True))
+                _log_auditoria("UNPIN", f"{sel['nombre']} msg {mid}")
+                styled_success(f"Mensaje {mid} desfijado.")
+            elif op == "unpin_all":
+                if not inquirer.confirm(
+                        f"¿Desfijar TODOS los mensajes fijados de '{sel['nombre']}'?",
+                        default=False).execute():
+                    continue
+                kwargs = {"peer": ent_ref}
+                if tema_id:
+                    kwargs["top_msg_id"] = tema_id
+                await client(UnpinAllMessagesRequest(**kwargs))
+                _log_auditoria("UNPIN_ALL", sel["nombre"])
+                styled_success("Mensajes desfijados.")
+        except Exception as e:
+            limite = _mensaje_limite(e)
+            styled_error(f"Error: {limite or e}")
+        styled_info("Pulsa Enter para continuar...")
+        input()
+
+
+# ============================================================================
 # CONFIG / main
 # ============================================================================
 def _ver_auditoria():
-    from cli_base import AUDIT_FILE
     if not AUDIT_FILE.exists() or AUDIT_FILE.stat().st_size == 0:
         styled_warn("Sin registros de auditoría aún.")
         return
@@ -2065,6 +3144,8 @@ async def main():
                 {"name": "🧭  Canales / Foros / Temas", "value": "4"},
                 {"name": "🚚  Subida (pipeline)", "value": "5"},
                 {"name": "👁️  Vigilante", "value": "6"},
+                {"name": "📌  Fijar / Desfijar mensajes", "value": "10"},
+                {"name": "🔎  Buscar fotos en Guardados", "value": "11"},
                 {"name": "🧭  Modo guiado (todo el flujo)", "value": "8"},
                 {"name": "🧹  Limpieza / Programación", "value": "9"},
                 Separator(),
@@ -2087,6 +3168,10 @@ async def main():
                 await modulo_subida(client)
             elif choice == "6":
                 await modulo_vigilante(client)
+            elif choice == "10":
+                await modulo_pin(client)
+            elif choice == "11":
+                await modulo_buscar_fotos(client)
             elif choice == "8":
                 await _modo_guiado(client)
             elif choice == "9":

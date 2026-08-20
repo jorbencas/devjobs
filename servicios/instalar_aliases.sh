@@ -38,7 +38,7 @@ alias pipe_test='bash $SCRIPT_DIR/pipe_test_upload.sh'
 alias pipe_up='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d twitchrecorder && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d uploader'
 alias pipe_recreate='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d --force-recreate twitchrecorder && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d --force-recreate monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d --force-recreate uploader'
 alias pipe_down='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml down && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml down && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml down'
-alias pipe_ps='docker ps --filter name=twitchrecorder --filter name=ffmpeg_monitor --filter name=telegram-uploader --format "table {{.Names}}\t{{.Status}}"'
+alias pipe_ps='bash $SCRIPT_DIR/pipe_ps.sh'
 alias pipe_sys_start='sudo systemctl start twitch-stream-pipeline.service'
 alias pipe_sys_stop='sudo systemctl stop twitch-stream-pipeline.service'
 alias pipe_sys_status='systemctl status twitch-stream-pipeline.service'
@@ -75,7 +75,7 @@ alias tg_stop='docker stop telegram-uploader'
 alias tg_restart='docker restart telegram-uploader'
 # MANUAL (telegram, clonador/interactivo):
 alias tg_menu='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml run --rm telegram'
-alias tg_sessions='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml run --rm telegram python test_string.py'
+alias tg_sessions='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml run --rm telegram'
 alias tg_manual_logs='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml logs -f telegram'
 alias tg_manual_stop='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml stop telegram'
 alias tg_down='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml down'
@@ -101,8 +101,8 @@ alias tw_logs='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml logs
 alias tw_stop='docker stop twitchrecorder'
 alias tw_restart='docker restart twitchrecorder'
 # MANUAL (prueba puntual):
-alias tw_run='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm run'
-alias tw_dry='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm run --dry-run'
+alias tw_run='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder'
+alias tw_dry='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder --dry-run'
 alias tw_down='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml down'
 
 # ---------- ffmpeg-yt-dlp ----------

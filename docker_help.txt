@@ -1,6 +1,6 @@
 ==============================================================================
   DOCKER CHEATSHEET - devjobs Ultimate Automation Suite
-  Ruta: /home/jorge/dev/devjobs/docker_help.txt
+  Ruta: <devjobs>/docker_help.txt
 ==============================================================================
 
 ÍNDICE
@@ -345,7 +345,7 @@ pipe_sys_status       # Ver estado
 docker_help           Mostrar este cheatsheet
 docker ps             Contenedores activos
 docker ps --format "table {{.Names}}\t{{.Status}}"   Nombres + estado en una tabla
-du -sh /home/jorge/dev/devjobs/*/     Peso por proyecto (videos y backups pesan mucho)
+du -sh ../devjobs/*/     Peso por proyecto (videos y backups pesan mucho)
 df -h                 Uso de los discos
 
 ==============================================================================

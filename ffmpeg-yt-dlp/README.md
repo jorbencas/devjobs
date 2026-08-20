@@ -1,10 +1,49 @@
 # FFmpeg + yt-dlp Pipeline
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <strong>Conversor, descargador y editor de vídeo con <u>ffmpeg + yt-dlp</u>:
+  33 modos de midu.sh, presets por red social, aceleración por hardware y
+  monitor automático de carpetas.</strong>
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/33%20modos%20de%20conversi%C3%B3n-blue.svg" alt="33 modos de conversión"></a>
+</p>
+
+## Características
+
+| Función | Detalle |
+|---|---|
+| 🎬 33 modos | Conversión, descarga, cortes, unión, pipelines encadenados y más desde `midu.sh` |
+| 🌐 Presets por red | Perfiles de salida listos (social media) y presets de calidad |
+| ⚡ HW acceleration | Aceleración por hardware (NVIDIA/QSV/VAAPI) |
+| 📺 Compose & HLS | Selección de pistas de audio y re-empaguetado HLS |
+| 👁️ Preview watcher | Previsualización automática en VLC desde WSL |
+| 🔁 Monitor de carpeta | Comprime automáticamente grabaciones terminadas (escala a 720p, pieza del pipeline) |
+
+---
+
+## 📑 Tabla de contenidos
+
+- [Requisitos](#requisitos)
+- [Despliegue](#despliegue)
+- [Uso](#uso)
+- [Los 33 modos de midu.sh](#los-33-modos-de-midush)
+- [Presets y códecs](#presets-de-red-social)
+- [Flags generales](#flags-generales)
+- [Pipeline encadenado](#pipeline-encadenado)
+- [Compose & HLS](#compose-selección-de-pistas)
+- [Variables (Preview Watcher / ntfy)](#variables-del-preview-watcher)
+- [Estructura](#estructura)
+- [Flujo recomendado](#flujo-recomendado)
+- [Peculiaridades](#peculiaridades)
+- [Blog](#blog)
+
+---
 
 Conversor, descargador y editor de vídeo con ffmpeg, yt-dlp y preview watcher para WSL.
-
-
 
 ## Requisitos
 
@@ -106,13 +145,13 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Vigila una c
 
 #### Qué hace
 
-1. Vigila una carpeta (por defecto `/home/jorge/dev/devjobs/data/grabaciones/test`, donde TwitchRecorder deja los `*_completed.mp4`,
+1. Vigila una carpeta (en el pipeline, `../data/grabaciones/test` — donde TwitchRecorder deja los `*_completed.mp4`,
    que pueden incluir la keyword del directo: `*_KW_<keyword>_completed.mp4`).
 2. Detecta archivos que terminan en `*_completed.mp4`.
 3. Los comprime a **720p** (H.264/libx264, CRF 23, preset medium, AAC 128k) — misma config que el preset "default" de midu.sh, para máxima compatibilidad.
    - **Garantía de tamaño <2 GB**: si el resultado de CRF 23 supera `TAMANO_MAX_MB` (default **1900 MB**, por el tope de Telegram), se re-codifica automáticamente en **2 pasadas** apuntando a ese tamaño. Así nunca supera 2 GB y no hay que partir el vídeo.
 4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
-   en `/home/jorge/dev/devjobs/data/comprimidos`.
+   en `../data/comprimidos`.
 5. Mueve el original a `$OUTPUT_DIR/.processed`.
 6. Repite cada `POLL_INTERVAL` segundos.
 
@@ -138,7 +177,7 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 
 | Flag | Descripción | Default |
 |---|---|---|
-| `-o, --output DIR` | Directorio de salida | `/home/jorge/dev/devjobs/data/comprimidos` |
+| `-o, --output DIR` | Directorio de salida | `../data/comprimidos` |
 | `-c, --crf VALUE` | Calidad CRF (menor = mejor) | `28` |
 | `-p, --preset NAME` | Preset de velocidad | `fast` |
 | `--codec NAME` | Códec de vídeo | `libx264` |
@@ -156,7 +195,7 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 Definido en `docker-compose.yml` del proyecto `ffmpeg-yt-dlp`. Corre con `restart: unless-stopped`.
 
 ```bash
-cd /home/jorge/dev/devjobs/ffmpeg-yt-dlp
+cd ffmpeg-yt-dlp
 docker compose build        # reconstruir tras cambios
 docker compose up -d monitor
 ```
@@ -178,7 +217,7 @@ Parar:
 docker compose stop monitor   # o docker compose down
 ```
 
-Vigila `/home/jorge/dev/devjobs/data/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `/home/jorge/dev/devjobs/data/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
+Vigila `../data/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `../data/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
 
 #### Corte de inicio/fin del directo y `DIRECTO_COMPLETO`
 

@@ -1,6 +1,48 @@
 # HDFull Downloader
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <strong>Descargador automatizado de películas de <u>HDFull</u> con Docker +
+  noVNC: detecta dominios activos, resuelve reCAPTCHA manualmente y captura el
+  stream real (MPEG-DASH/HLS/MP4) con ffmpeg.</strong>
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+</p>
+
+## Características
+
+| Función | Detalle |
+|---|---|
+| 🕸️ noVNC | Navegador con interfaz web para resolver reCAPTCHA manualmente |
+| 🔁 ReCAPTCHA interactivo | Espera a que resuelvas el captcha y continúa solo |
+| 🎯 Detección de dominios | Detecta automáticamente dominios activos (Cloudflare/mirrors) |
+| 📡 Captura de stream | MPEG-DASH / HLS / MP4 con ffmpeg, anti-señuelos y Blob hooks |
+| 🖥️ Persistencia de sesión | Cookies y sesión entre reinicios (perfil borrable) |
+
+---
+
+## 📑 Tabla de contenidos
+
+- [¿Por qué existe este proyecto?](#por-qué-existe-este-proyecto)
+- [El problema](#el-problema)
+- [La solución](#la-solución)
+- [Arquitectura](#arquitectura)
+- [Requisitos](#requisitos)
+- [Despliegue](#despliegue)
+- [Configuración](#configuración)
+- [Uso](#uso)
+- [Cómo maneja los problemas](#cómo-maneja-los-problemas)
+- [Persistencia de sesión](#persistencia-de-sesión)
+- [Variables de entorno](#variables-de-entorno)
+- [Comandos rápidos](#comandos-rápidos)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Notas de seguridad](#notas-de-seguridad)
+- [Tecnologías](#tecnologías)
+- [Archivos](#archivos)
+
+---
 
 Descargador automatizado de películas de **HDFull** con Docker + noVNC. Detecta automáticamente dominios activos, resuelve reCAPTCHA **manualmente** a través de noVNC, y captura el stream real (MPEG-DASH/HLS/MP4) usando ffmpeg.
 

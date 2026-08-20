@@ -1,8 +1,34 @@
 # AULA Downloader
 
+<p align="center">
+  <strong>Descarga los vídeos protegidos de <u>Moodle + Vimeo privado</u> sin
+  navegador — solo Python y requests, incluso cuando yt-dlp falla con 403.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Python-3.11-blue.svg?logo=python&logoColor=white" alt="Python 3.11"></a>
+</p>
+
 Descargador de vídeos de **aula.pmoposiciones.com** (plataforma Moodle con Vimeo privado).
 
 No necesita navegador — usa requests + Python puro para extraer URLs HLS del `playerConfig` de Vimeo.
+
+---
+
+## 📑 Tabla de contenidos
+
+- [¿Por qué existe este proyecto?](#por-qué-existe-este-proyecto)
+- [El problema](#el-problema)
+- [La solución](#la-solución)
+- [Características](#características)
+- [Configuración](#configuración)
+- [Uso con Docker](#uso-con-docker-recomendado)
+- [Cómo funciona](#cómo-funciona)
+- [Comparativa: AULA vs HDFull](#comparativa-aula-vs-hdfull)
+- [Tecnologías](#tecnologías)
+- [Contribuir](#contribuir)
+- [Licencia](#licencia)
 
 ---
 
@@ -254,3 +280,8 @@ Resultado: de 720 a 516 líneas (-28%) con las mismas funcionalidades.
 - `start.sh` — Script de inicio
 - `menu.sh` — Menú interactivo
 - `descargas/` — Salida organizada por curso
+
+## Contribuir
+
+Los *issues* y *pull requests* son bienvenidos. Si tu plataforma Moodle usa otro
+proveedor de vídeo, abre un *issue* con el HTML del reproductor para adaptarlo.

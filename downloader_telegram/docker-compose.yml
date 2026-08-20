@@ -12,7 +12,7 @@ services:
       - ./config/enviados.json:/app/config/enviados.json
       - ./sessions/tg_toolbox.session:/app/sessions/tg_toolbox.session
       - ./Descargas_Telegram:/app/Descargas_Telegram
-      - /home/jorge/dev/devjobs/data/comprimidos:/comprimidos
+      - ../data/comprimidos:/comprimidos
     stdin_open: true
     tty: true
     command: python -u /app/app/tg_toolbox.py
@@ -32,10 +32,10 @@ services:
       - ./sessions/tg_toolbox.session:/app/sessions/tg_toolbox.session
       - ./sessions/uploader.session:/app/sessions/uploader.session
       - ../data/partes:/app/partes
-      - /home/jorge/dev/devjobs/data/comprimidos:/comprimidos
+      - ../data/comprimidos:/comprimidos
     environment:
       UPLOADER_INTERVALO: "60"
       # Reenvío automático al canal de solo-reenvío (diarios de la boticaria)
-      # UPLOADER_FORWARD_CHANNEL: "-1004359591062"
-      # UPLOADER_FORWARD_KEYWORD: "diarios_boticaria"
+      UPLOADER_FORWARD_CHANNEL: "-1004359591062"
+      UPLOADER_FORWARD_KEYWORD: "diarios_boticaria"
     command: python -u /app/app/subir_videos.py /comprimidos

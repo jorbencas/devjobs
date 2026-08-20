@@ -9,5 +9,6 @@ if [ -z "$GRUPO" ]; then
     echo "  ej: bash servicios/pipe_topics.sh -100999888777"
     exit 1
 fi
-cd /home/jorge/dev/devjobs/downloader_telegram
-docker compose run --rm uploader python /app/subir_videos.py --list-topics "$GRUPO"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT/downloader_telegram"
+docker compose run --rm uploader python /app/app/subir_videos.py --list-topics "$GRUPO"

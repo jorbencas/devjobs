@@ -644,7 +644,8 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
 
     # ¿Reenviar este vídeo al canal de solo-reenvío?
     kw_norm = _normalizar_texto(keyword)
-    reenviar = bool(FORWARD_CHANNEL) and bool(FORWARD_KEYWORD) and FORWARD_KEYWORD in kw_norm
+    forward_kw = _normalizar_texto(FORWARD_KEYWORD)
+    reenviar = bool(FORWARD_CHANNEL) and bool(forward_kw) and forward_kw in kw_norm
     if reenviar:
         log("INFO", f"{nombre}: keyword '{keyword}' → se reenviará a {FORWARD_CHANNEL}")
 

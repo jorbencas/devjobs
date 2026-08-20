@@ -1,5 +1,49 @@
 # TwitchRecorder
 
+<p align="center">
+  <strong>Grabador automático de directos de <u>Twitch, YouTube y Kick</u> con
+  Docker: detecta el directo, graba con calidad original, reconecta si se cae y
+  organiza los vídeos por fecha — sin recompresión.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
+  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Plataformas-Twitch%20%7C%20YouTube%20%7C%20Kick-purple.svg" alt="Plataformas: Twitch | YouTube | Kick"></a>
+</p>
+
+## Características
+
+| Función | Detalle |
+|---|---|
+| 📡 Multiplataforma | Twitch (Streamlink), YouTube/Kick (yt-dlp) y webs propias (`platform: web`) |
+| 🔀 Fallback por canal | Varias fuentes con prioridad; si el canal cambia de plataforma, concatena las partes |
+| 🔄 Reconexión automática | Si se cae la conexión, reintenta en `retry_interval` segundos |
+| 🗓️ Horarios por canal | `days` + `start_time` por canal, con prioridad de plataforma por día |
+| ✂️ Corte y episodios | Detección de episodios y corte de inicio/fin configurables por fuente |
+| 💾 Calidad original | Graba el stream tal cual sale de la plataforma (sin re-codificar) |
+
+---
+
+## 📑 Tabla de contenidos
+
+- [¿Por qué existe este proyecto?](#por-qué-existe-este-proyecto)
+- [El problema](#el-problema)
+- [Qué hace](#qué-hace)
+- [Requisitos](#requisitos)
+- [Configuración](#configuración)
+- [Uso](#uso)
+- [Cómo funciona](#cómo-funciona)
+- [Tecnologías](#tecnologías)
+- [Recuperación automática](#recuperación-automática)
+- [Organización de archivos](#organización-de-archivos)
+- [Pipeline completo: grabar → comprimir → subir a Telegram](#pipeline-completo-grabar--comprimir--subir-a-telegram)
+- [Bugs encontrados durante el desarrollo](#bugs-encontrados-durante-el-desarrollo)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Resumen de comandos](#resumen-de-comandos)
+- [Lo que aprendimos](#lo-que-aprendimos)
+
+---
+
 Grabador automático de directos de **Twitch**, **YouTube** y **Kick** con Docker. Detecta cuándo un canal está en directo, graba con calidad original usando Streamlink/yt-dlp, reconecta si se cae y organiza los vídeos por fecha.
 
 ---
@@ -271,7 +315,10 @@ canal solo en su día y cuando ya ha pasado su hora de inicio. Si un canal no de
 `days`, graba todos los días; si no define `start_time`, usa el valor por defecto
 `19:55`.
 
-> **Nota:** `copy_to_test` con el PC tal cual monta el contenedor (`/home/jorge/dev/devjobs/data/grabaciones:/recordings`) escribe los `*_completed.mp4` en `/home/jorge/dev/devjobs/data/grabaciones/test/`. Esa carpeta es la que vigila `monitor_folder.sh` del pipeline (ver sección [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
+> **Nota:** `copy_to_test` escribe los `*_completed.mp4` en `data/grabaciones/test/`
+> (el compose monta `../data/grabaciones:/recordings`). Esa carpeta es la que
+> vigila `monitor_folder.sh` del pipeline (ver sección
+> [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 
 ---
 
@@ -327,7 +374,7 @@ docker compose build
 ```bash
 docker run --rm \
   -v ./config.json:/app/config.json:ro \
-  -v /home/jorge/dev/devjobs/data/grabaciones:/recordings \
+  -v "$(pwd)/../data/grabaciones:/recordings" \
   -e TZ=Europe/Madrid \
   twitchrecorder
 ```
