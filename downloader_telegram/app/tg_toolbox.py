@@ -62,7 +62,7 @@ from telethon.tl.functions.messages import (  # noqa: E402
     GetForumTopicsRequest, UpdateDialogFilterRequest, ToggleDialogPinRequest,
     CreateForumTopicRequest, EditForumTopicRequest, DeleteTopicHistoryRequest,
     DeleteHistoryRequest, GetHistoryRequest, UpdatePinnedMessageRequest,
-    UnpinAllMessagesRequest,
+    UnpinAllMessagesRequest, GetMessageEditDataRequest,
 )
 from telethon.tl.functions.folders import EditPeerFoldersRequest  # noqa: E402
 from telethon.tl.functions.account import UpdateNotifySettingsRequest  # noqa: E402
@@ -2874,6 +2874,163 @@ async def modulo_buscar_fotos(client):
 
 
 # ============================================================================
+# MÓDULO 12: Editar descripciones en Guardados (sin descargar archivos)
+# ============================================================================
+def _tipo_edicion_msg(msg):
+    if msg.photo:
+        return "FOTO"
+    if msg.video:
+        return "VIDEO"
+    if msg.voice:
+        return "VOICE"
+    if getattr(msg, "document", None):
+        return "DOC"
+    if msg.sticker:
+        return "STICKER"
+    if msg.text:
+        return "TEXTO"
+    return "OTRO"
+
+
+async def _confirmar_editable(client, msg_id):
+    d = await client(GetMessageEditDataRequest(peer="me", id=msg_id))
+    return getattr(d, "caption", False)
+
+
+async def _editar_caption_guardados(client):
+    console.print(styled_panel("[bold white]EDITAR DESCRIPCIONES EN GUARDADOS[/bold white]",
+                               title="✏️", style=BG))
+    styled_info("""
+Este módulo AÑADE texto a la descripción de un mensaje de 'Mensajes guardados',
+sin sustituir lo que ya tiene y sin descargar el archivo.
+
+Recordatorio: no todo se puede editar. Telegram lo decide por mensaje (no por
+antigüedad); se consulta antes de guardar y solo se edita si es posible.
+""")
+
+    busqueda = inquirer.text(
+        "Texto para localizar el mensaje (p. ej. 'apaches', 'mononoke'):"
+    ).execute().strip()
+    tipo_filtro = inquirer.select(
+        "¿Qué tipo de mensaje?",
+        choices=[
+            {"name": "Fotos", "value": "foto"},
+            {"name": "Videos", "value": "video"},
+            {"name": "Cualquiera", "value": "any"},
+        ],
+        pointer="▸", default="foto",
+    ).execute()
+    limite = _pedir_numero("Máximo de mensajes a revisar (vacío = 300):",
+                           minimo=1, por_defecto=300)
+    if limite is None:
+        limite = 300
+
+    filtro = None
+    if tipo_filtro == "foto":
+        filtro = InputMessagesFilterPhotos
+    elif tipo_filtro == "video":
+        from telethon.tl.types import InputMessagesFilterVideo
+        filtro = InputMessagesFilterVideo
+
+    styled_info(f"Buscando '{busqueda}' en 'Mensajes guardados'...")
+    candidatos = []
+    iterator = client.iter_messages("me", filter=filtro, limit=limite)
+    async for msg in iterator:
+        texto = msg.text or ""
+        if busqueda.lower() in texto.lower():
+            candidatos.append(msg)
+            if len(candidatos) >= 25:
+                break
+
+    if not candidatos:
+        styled_warn(f"No se encontró ningún mensaje con '{busqueda}'.")
+        return
+
+    styled_success(f"{len(candidatos)} mensaje(s) coinciden. Revisa la lista:")
+    filas = []
+    for msg in candidatos:
+        fecha = str(getattr(msg, "date", ""))[:16]
+        cap = (msg.text or "").replace("\n", " ")[:38] or "(sin descripción)"
+        filas.append((msg.id, _tipo_edicion_msg(msg), fecha, cap))
+    _tabla_resumen(["ID", "Tipo", "Fecha", "Descripción"], filas,
+                   titulo="Candidatos (confirma antes de guardar)")
+
+    elegir = inquirer.select(
+        "¿Quieres editar TODOS, elegir por ID, o cancelar?",
+        choices=[
+            {"name": "Todos los listados", "value": "all"},
+            {"name": "Elegir por ID", "value": "pick"},
+            {"name": "Cancelar", "value": "cancel"},
+        ],
+        pointer="▸", default="pick",
+    ).execute()
+    if elegir == "cancel":
+        styled_warn("Cancelado.")
+        return
+
+    seleccion = []
+    if elegir == "pick":
+        raw = inquirer.text("IDs separados por comas (p. ej. 122490,122489):").execute().strip()
+        ids = [int(x.strip()) for x in raw.split(",") if x.strip()]
+        seleccion = [m for m in candidatos if m.id in ids]
+    else:
+        seleccion = candidatos
+
+    if not seleccion:
+        styled_warn("No se seleccionó ningún mensaje.")
+        return
+
+    texto_a_anadir = inquirer.text("Texto que quieres AÑADIR a la descripción:").execute()
+    if not texto_a_anadir.strip():
+        styled_warn("Sin texto, nada que añadir.")
+        return
+
+    confirm = inquirer.confirm(
+        f"¿Añadir a {len(seleccion)} mensaje(s)? Se hace en su sitio, no se borra lo actual.",
+        default=True).execute()
+    if not confirm:
+        styled_warn("Cancelado.")
+        return
+
+    no_editables = []
+    editados = 0
+    for msg in seleccion:
+        try:
+            ok = await _confirmar_editable(client, msg.id)
+        except Exception as e:
+            styled_warn(f"ID {msg.id}: no se pudo comprobar ({e})")
+            no_editables.append(msg.id)
+            continue
+        if not ok:
+            styled_warn(
+                f"ID {msg.id}: Telegram no permite editar la descripción de este mensaje.")
+            no_editables.append(msg.id)
+            continue
+        anterior = (msg.text or "").rstrip() or ""
+        nuevo = f"{anterior}\n{texto_a_anadir}".strip() if anterior else texto_a_anadir.strip()
+        try:
+            await client.edit_message("me", msg.id, text=nuevo)
+            editados += 1
+            styled_success(f"ID {msg.id}: descripción actualizada.")
+        except Exception as e:
+            styled_warn(f"ID {msg.id}: error al guardar ({e})")
+            no_editables.append(msg.id)
+
+    styled_success(f"Editados {editados} de {len(seleccion)}.")
+    if no_editables:
+        styled_warn(f"No editables / con error: {', '.join(map(str, no_editables))}")
+    _log_auditoria("EDITAR_CAPTION",
+                   f"'{busqueda}': {editados} editados de {len(seleccion)}, "
+                   f"no editables {len(no_editables)}")
+
+
+async def modulo_editar_caption(client):
+    console.print(styled_panel("[bold white]EDITAR DESCRIPCIONES EN GUARDADOS[/bold white]",
+                               title="✏️", style=BG))
+    await _editar_caption_guardados(client)
+
+
+# ============================================================================
 # MÓDULO 8: Limpieza / Programación
 # ============================================================================
 async def _modo_limpieza(client):
@@ -3146,6 +3303,7 @@ async def main():
                 {"name": "👁️  Vigilante", "value": "6"},
                 {"name": "📌  Fijar / Desfijar mensajes", "value": "10"},
                 {"name": "🔎  Buscar fotos en Guardados", "value": "11"},
+                {"name": "✏️  Editar descripciones en Guardados", "value": "12"},
                 {"name": "🧭  Modo guiado (todo el flujo)", "value": "8"},
                 {"name": "🧹  Limpieza / Programación", "value": "9"},
                 Separator(),
@@ -3172,6 +3330,8 @@ async def main():
                 await modulo_pin(client)
             elif choice == "11":
                 await modulo_buscar_fotos(client)
+            elif choice == "12":
+                await modulo_editar_caption(client)
             elif choice == "8":
                 await _modo_guiado(client)
             elif choice == "9":
