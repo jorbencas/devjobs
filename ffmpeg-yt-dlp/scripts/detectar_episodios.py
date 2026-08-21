@@ -101,6 +101,37 @@ def dur_video(video: Path) -> float:
         return 0.0
 
 
+def _ocr_texto(img_path: Path) -> str:
+    """OCR en 2 pasadas: normal (PSM 3) y línea única (PSM 7).
+    Devuelve el texto con más coincidencias de patrones de episodio,
+    lo que mitiga tipografías raras que confunden una de las pasadas."""
+    textos = []
+    for psm in ("3", "7"):
+        try:
+            ocr = subprocess.run(
+                ["tesseract", str(img_path), "stdout", "-l", "eng",
+                 "--psm", psm],
+                capture_output=True, text=True)
+            if ocr.stdout:
+                textos.append(ocr.stdout)
+        except Exception:
+            pass
+    if not textos:
+        return ""
+    if len(textos) == 1:
+        return textos[0]
+    # Puntuar: nº de coincidencias de patrones ep/temp/película
+    def _puntos(txt: str) -> int:
+        bajo = txt.lower()
+        pts = len(re.findall(r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*\S{0,4}\d", bajo))
+        pts += len(re.findall(r"\d\s*[xX]\s*\d", bajo))
+        pts += len(re.findall(r"[sS]\d+[eE]\d+", bajo))
+        pts += len(re.findall(r"(?:temporada|temp|season)\s*\d+", bajo))
+        pts += len(re.findall(r"pel[ií]cula", bajo))
+        return pts
+    return max(textos, key=_puntos)
+
+
 def _preprocess_image(img_path: Path) -> Path:
     """Preprocesa la imagen para mejorar OCR: escala de grises, contraste, umbralización."""
     try:
@@ -194,7 +225,7 @@ def detectar(video: Path, paso: int, margen: int):
     if dur <= 0:
         return {"episodios": [], "rango": "", "primero": None, "ultimo": None}
 
-    episodios = {}  # num -> [primero, ultimo]
+    episodios = {}  # num -> [primero, ultimo, muestras]
     temporadas = {}  # num -> [primero, ultimo]
     pelicula_times = []        # instantes donde aparece la palabra 'película'
     palabras = Counter()       # palabra -> [conteo, primera_aparicion]
@@ -216,11 +247,8 @@ def detectar(video: Path, paso: int, margen: int):
                 # Preprocesar imagen para mejorar OCR
                 proc_img = _preprocess_image(img)
                 
-                # Ejecutar OCR
-                ocr = subprocess.run(
-                    ["tesseract", str(proc_img), "stdout", "-l", "eng"],
-                    capture_output=True, text=True)
-                texto = ocr.stdout
+                # Ejecutar OCR (2 pasadas: PSM 3 y PSM 7, se queda la mejor)
+                texto = _ocr_texto(proc_img)
                 texto_bajo = texto.lower()
                 
                 # Extraer episodios y temporadas
@@ -228,9 +256,10 @@ def detectar(video: Path, paso: int, margen: int):
                 
                 for num in eps_en_frame:
                     if num not in episodios:
-                        episodios[num] = [t, t]
+                        episodios[num] = [t, t, 1]
                     else:
                         episodios[num][1] = t
+                        episodios[num][2] += 1
                 
                 for num in temps_en_frame:
                     if num not in temporadas:
@@ -279,6 +308,23 @@ def detectar(video: Path, paso: int, margen: int):
 
     if not episodios and not es_pelicula:
         return {"episodios": [], "rango": "", "primero": None, "ultimo": None}
+
+    # Filtrar outliers OCR: un número mal leído ("9" que luego se corrige a
+    # "8") o un dígito espurio aparece en pocas muestras Y su ventana temporal
+    # SOLAPA con la de un episodio más estable (el error ocurre mientras el
+    # banner real está visible). Episodios distintos nunca solapan.
+    if len(episodios) > 1:
+        ordenados = sorted(episodios.items(), key=lambda kv: -kv[1][2])
+        firmes = dict(ordenados[:1])
+        for num, v in ordenados[1:]:
+            dominado = any(
+                w[2] >= 2 * v[2]
+                and v[0] <= w[1] + paso and w[0] <= v[1] + paso
+                for w in firmes.values())
+            if not dominado:
+                firmes[num] = v
+        if set(firmes) != set(episodios):
+            episodios = firmes
 
     nums = sorted(episodios)
     primero = min(v[0] for v in episodios.values()) if episodios else min(pelicula_times)
