@@ -436,6 +436,42 @@ def _tabla_resumen(columnas, filas, titulo="Resumen"):
     console.print(t)
 
 
+async def _stats_chat(client, ent):
+    """(~n_mensajes, fecha_ultimo) vía GetHistoryRequest (rápido, 1 petición)."""
+    try:
+        r = await client(GetHistoryRequest(
+            peer=ent, limit=1, offset_date=None, offset_id=0,
+            max_id=0, min_id=0, add_offset=0, hash=0))
+        fecha = r.messages[0].date if r.messages else None
+        return getattr(r, "count", 0), fecha
+    except Exception:
+        return None, None
+
+
+async def _confirmar_destruccion(nombre, detalle="", client=None, ent=None):
+    """Patrón unificado para acciones irreversibles:
+    1. Muestra stats del chat (nº mensajes y última actividad) si hay ent.
+    2. Exige escribir el nombre exacto (fail-safe si no coincide).
+    3. Confirmación final con default=False."""
+    extra = ""
+    if client is not None and ent is not None:
+        n, fecha = await _stats_chat(client, ent)
+        f = fecha.strftime("%d/%m/%Y") if fecha else "¿?"
+        total = f"~{n}" if n is not None else "¿?"
+        extra = f" ({total} mensajes, último el {f})"
+    styled_warn(f"{detalle} '{nombre}'{extra}. ¡IRREVERSIBLE!")
+    escribir = inquirer.text(
+        f"Escribe el nombre exacto '{nombre}' para confirmar:").execute().strip()
+    if escribir != nombre:
+        styled_warn("El texto no coincide. Cancelado.")
+        return False
+    if not inquirer.confirm("¿Seguro? Esta acción NO se puede deshacer.",
+                            default=False).execute():
+        styled_info("Cancelado.")
+        return False
+    return True
+
+
 # ============================================================================
 # MÓDULO 1: Descargas
 # ============================================================================
@@ -1811,12 +1847,9 @@ async def _gestionar_temas(client):
         if tid is None:
             return
         titulo = temas.get(tid, str(tid))
-        if not inquirer.confirm("¿Vaciar TODO el contenido del tema?", default=False).execute():
-            styled_info("Cancelado.")
-            return
-        escribir = inquirer.text(f"Escribe el título exacto del tema '{titulo}' para confirmar:").execute().strip()
-        if escribir != titulo:
-            styled_warn("El texto no coincide. Cancelado.")
+        if not await _confirmar_destruccion(
+                titulo,
+                detalle=f"Vaciar TODO el contenido del tema en '{sel['nombre']}'"):
             return
         await client(DeleteTopicHistoryRequest(peer=foro_ent, top_msg_id=tid))
         _log_auditoria("VACIAR_TEMA", f"{sel['nombre']}: {titulo}")
@@ -1852,11 +1885,14 @@ async def _migrar_canal_a_tema(client):
         return
     quitar_cap = inquirer.confirm("¿Quitar descripción/caption?", default=False).execute()
     borrar_origen = False
-    if inquirer.confirm("¿BORRAR el origen tras migrar correctamente? (irreversible)", default=False).execute():
-        escribir = inquirer.text(f"Escribe el nombre exacto '{sel_origen['nombre']}' para confirmar el BORRADO:").execute().strip()
-        borrar_origen = escribir == sel_origen["nombre"]
-        if not borrar_origen:
-            styled_warn("El texto no coincide. Se migrará sin borrar.")
+    if inquirer.confirm("¿BORRAR el origen tras migrar correctamente? (irreversible)",
+                        default=False).execute():
+        if not await _confirmar_destruccion(
+                sel_origen["nombre"],
+                detalle=f"BORRAR el canal ORIGEN tras migrar sus {n} mensajes"):
+            styled_warn("Se migrará sin borrar el origen.")
+        else:
+            borrar_origen = True
 
     nenv = ntxt = 0
     styled_info(f"Migrando {n} mensajes...")
@@ -1894,13 +1930,9 @@ async def _migrar_canal_a_tema(client):
 
 async def _vaciar_canal(client, ent, nombre):
     """Borra TODOS los mensajes de un canal/grupo (con doble confirmación)."""
-    styled_warn(f"BORRADO DE CANAL: '{nombre}' — SE BORRARÁ TODO EL HISTORIAL. ¡IRREVERSIBLE!")
-    escribir = inquirer.text(f"Escribe el nombre exacto '{nombre}' para CONFIRMAR el borrado:").execute().strip()
-    if escribir != nombre:
-        styled_warn("El texto no coincide. Borrado cancelado.")
-        return
-    if not inquirer.confirm("¿Seguro? Esta acción NO se puede deshacer.", default=False).execute():
-        styled_info("Cancelado.")
+    if not await _confirmar_destruccion(
+            nombre, detalle="BORRADO DE CANAL: SE BORRARÁ TODO EL HISTORIAL.",
+            client=client, ent=ent):
         return
     await client(DeleteHistoryRequest(peer=ent, max_id=0))
     _log_auditoria("VACIAR_CANAL", nombre)
@@ -1914,13 +1946,9 @@ async def _borrar_canal(client):
         return
     ent = sel["ent"]
     titulo = getattr(ent, "title", sel["nombre"])
-    styled_warn(f"Vas a borrar '{titulo}' (id={ent.id}). ¡IRREVERSIBLE!")
-    if not inquirer.confirm("¿Confirmas?", default=False).execute():
-        styled_info("Cancelado.")
-        return
-    escribir = inquirer.text(f"Escribe el título exacto '{titulo}' para confirmar:").execute().strip()
-    if escribir != titulo:
-        styled_warn("El texto no coincide. Cancelado.")
+    if not await _confirmar_destruccion(
+            titulo, detalle=f"Vas a borrar el canal (id={ent.id})",
+            client=client, ent=ent):
         return
     await client(DeleteChannelRequest(channel=ent))
     _log_auditoria("BORRAR_CANAL", titulo)

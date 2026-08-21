@@ -405,13 +405,117 @@ python app/tg_toolbox.py
 > **Sesión propia:** usa `sessions/tg_toolbox.session` (no pisa la del daemon `uploader`).
 > Si la borras o cambias de contenedor, vuelve a pedir login la primera vez.
 
+### Menú principal
+
+| Opción | Módulo |
+|---|---|
+| 📥 **1** | Descargas |
+| 🔄 **2** | Clonar & Backup |
+| 🗂️ **3** | Chats y carpetas |
+| 🧭 **4** | Canales / Foros / Temas |
+| 🚚 **5** | Subida (pipeline) |
+| 👁️ **6** | Vigilante |
+| ⚙️ **7** | Config / Salir |
+| 🧭 **8** | Modo guiado (todo el flujo) |
+| 🧹 **9** | Limpieza / Programación |
+| 📌 **10** | Fijar / Desfijar mensajes |
+| 🔎 **11** | Buscar fotos en Guardados |
+| ✏️ **12** | Editar descripciones en Guardados |
+
+### 1️⃣ Descargas
+
+| Opción | Qué hace |
+|---|---|
+| 🎯 Descarga interactiva | Origen → filtros (fechas/tipos de medio) → destino; descarga todo o 1 a 1 |
+| 🔗 Enlace único | Descarga un mensaje concreto (`t.me/...`) con opción de subirlo a un canal propio |
+| 📊 Rango de IDs | Descarga mensajes entre dos IDs de un chat |
+| 📄 Procesar enlaces.txt | Lee enlaces (uno por línea) y los procesa en lote |
+| 📺 Canal completo | Descarga todo el historial (con filtros opcionales de fechas y tipos) |
+| 📈 Estadísticas | Resumen de un canal/tema: nº de mensajes, tipos de media, actividad |
+| 🔎 Búsqueda por texto | Busca coincidencias en un chat y permite descargar lo encontrado |
+| 🌟 Storys activas | Descarga las stories publicadas actualmente por un canal |
+| 🎙️ Voice → texto | Transcribe voice messages con whisper local |
+| ▶️ YouTube (yt-dlp) | Descarga mejor mp4 / solo audio mp3 / mkv; opcionalmente sube a un canal |
+
+### 2️⃣ Clonar & Backup
+
+| Opción | Qué hace |
+|---|---|
+| 🔀 Clonar canal → canal | Reenvía/re-subida completa con opciones: traducir, descargar media, quitar remitente ("Forwarded from"), quitar caption |
+| 💾 Backup a archivo local | Exporta contenido a JSON en disco (opcional media) |
+| ♻️ Restaurar backup | Sube un backup previo a cualquier chat; opciones de traducción/caption |
+
+### 3️⃣ Chats y carpetas
+
+| Opción | Qué hace |
+|---|---|
+| 📋 Listar chats | Con filtros: todos / míos / ajenos / de una carpeta |
+| 🗄️ Archivar / Desarchivar | Archiva o desarchiva un chat (se aplica en Telegram) |
+| 🏷️ Listar por carpeta | Muestra chats agrupados por carpeta de Telegram |
+| 📁 Crear carpeta | Crea una carpeta nueva (respeta el límite de carpetas de la cuenta) |
+| 📦 Mover chat a carpeta | Añade/quita un chat de una carpeta |
+| 🔇 Silenciar / Desilenciar | Cambia el mute de un chat |
+| 📌 Fijar / Desfijar chat | Fija o desfija el chat en la lista |
+| ✏️ Renombrar / Mover archivos | Renombra o mueve archivos locales ya descargados |
+
+### 4️⃣ Canales / Foros / Temas
+
+| Opción | Qué hace |
+|---|---|
+| 📋 Ver mis canales/foros | Lista con filtro por nombre |
+| ✨ Crear canal | Crea canal con foro habilitado |
+| 📂 Archivar / Desarchivar | Igual que chats pero para canales |
+| 🗂️ Gestionar temas | Crear tema · renombrar tema · **vaciar tema** (borra sus mensajes) |
+| 📤 Migrar canal → tema | Re-subida completa de un canal al tema de un foro; opcionalmente **borra el origen** tras migrar |
+| 🗑️ Borrar canal | Elimina el canal entero de Telegram |
+
+### 5️⃣ Subida (pipeline)
+
+| Opción | Qué hace |
+|---|---|
+| 🔄 Sync carpeta → Telegram | Sube lo nuevo de una carpeta local |
+| 📄 Ver grupos.json | Muestra el ruteo keyword → foro/grupo configurado |
+| 🚀 Subir pasada | Rutea archivos pendientes según `grupos.json` |
+| 🎬 Subir archivo concreto | Elige un archivo y su destino exacto |
+| ⏰ Subida diferida | Programa una subida para más tarde |
+| 🏷️ Plantillas de caption | Ver / añadir / eliminar plantillas reutilizables |
+| 💾 Exportar / Importar config | Backup y restauración de la configuración del pipeline |
+
+### 6️⃣ Vigilante — configura alertas de canales con reenvío y descarga automática (desde cero, editar config existente o borrarla).
+
+### 8️⃣ Modo guiado — recorre todo el flujo paso a paso (origen → filtros → traducción → descarga → subida).
+
+### 9️⃣ Limpieza / Programación
+
+| Opción | Qué hace |
+|---|---|
+| 📊 Estado de conversión | Progreso del monitor ffmpeg |
+| 🧹 Limpiar temporales | Borra `.part`, `.jpg` y `.staging` huérfanos |
+| 🗑️ Limpiar ya subidas | Borra descargas que el sync_cli ya marcó como subidas |
+| ⏰ Programar sync automático | Lanza el sync cada N minutos |
+
+### 🔟 Fijar mensajes — fijar (normal o silencioso), desfijar uno concreto o **todos**.
+
+### 1️⃣1️⃣ Buscar fotos en Guardados — busca por tipo (foto/vídeo/cualquiera), lista resultados y descarga todos o por ID.
+
+### 1️⃣2️⃣ Editar descripciones en Guardados — busca mensajes por texto/tipo, comprueba si el caption sigue editable (Telegram limita la edición por antigüedad) y **añade** texto sin sustituir el existente.
+
+### Confirmaciones y seguridad
+
+- **Acciones destructivas** (vaciar canal, borrar canal, vaciar tema, migración con borrado) usan el patrón unificado `_confirmar_destruccion()`:
+  1. Aviso rojo con **estadísticas del chat** (~nº de mensajes y fecha del último) para detectar selecciones equivocadas
+  2. Exige **escribir el nombre exacto** del chat/tema
+  3. Confirmación final con default **No**
+- Si el texto no coincide, la acción se cancela (fail-safe); en la migración se continúa *sin* borrar el origen.
+- Todas estas acciones quedan registradas en el **log de auditoría** (`data/logs/tg_toolbox.log`, visible desde Config).
+
 ### Robustez (entradas blindadas)
 
 El CLI está **blindado frente a fallos de uso**: entrada numérica validada,
 tabla resumen + **confirmación antes de ejecutar** cualquier acción, reintentos
 con backoff ante `FloodWait`/`ConnectionError`, comprobación de conexión previa,
-rutas saneadas, **doble confirmación** en acciones destructivas (vaciar canal,
-migrar con borrado) y **log de auditoría** de todas las acciones en
+rutas saneadas, **triple confirmación** en acciones destructivas (ver
+[Confirmaciones y seguridad](#confirmaciones-y-seguridad)) y **log de auditoría** de todas las acciones en
 `data/logs/tg_toolbox.log` (ver `⚙️ Config → Ver log de auditoría`).
 
 ### Límites de cuenta Telegram
