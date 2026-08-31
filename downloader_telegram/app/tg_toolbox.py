@@ -2826,7 +2826,7 @@ def _buscar_caption_fotos(client, termino, limite=200):
     res = []
     try:
         for msg in client.iter_messages("me", search=termino, filter=InputMessagesFilterPhotos,
-                                        limit=limite):
+                                        limit=limite, wait_time=2):
             if getattr(msg, "media", None) and isinstance(getattr(msg, "media", None), MessageMediaPhoto):
                 res.append((msg, "caption"))
     except Exception:
@@ -2875,9 +2875,10 @@ async def _buscar_fotos_en_guardados(client):
             styled_warn("tesseract no está instalado; se omite la búsqueda por OCR.")
         else:
             n = 0
+            skipped = 0
             try:
                 async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
-                                                      limit=limite):
+                                                      limit=limite, wait_time=2):
                     n += 1
                     styled_info(f"  OCR: {n}/{limite}...")
                     if any(msg.id == m.id for m, _ in resultados):
@@ -2885,13 +2886,17 @@ async def _buscar_fotos_en_guardados(client):
                     try:
                         ruta = await client.download_media(msg, file=tmp_dir)
                     except Exception:
-                        ruta = None
+                        skipped += 1
+                        if skipped > 5:
+                            styled_warn(f"Demasiados errores de descarga tras {n} fotos, parando OCR.")
+                            break
+                        continue
                     if ruta and Path(ruta).is_file():
                         cli_txt = _ocr_de_imagen(Path(ruta)).lower()
                         if termino.lower() in cli_txt:
                             resultados.append((msg, "OCR"))
             except Exception as e:
-                styled_warn(f"Conexión perdida tras {n} fotos: {e}")
+                styled_warn(f"Conexión perdida tras {n} fotos (skipped={skipped}): {e}")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
