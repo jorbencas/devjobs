@@ -2875,20 +2875,23 @@ async def _buscar_fotos_en_guardados(client):
             styled_warn("tesseract no está instalado; se omite la búsqueda por OCR.")
         else:
             n = 0
-            async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos):
-                if n >= limite:
-                    break
-                n += 1
-                if any(msg.id == m.id for m, _ in resultados):
-                    continue
-                try:
-                    ruta = await client.download_media(msg, file=tmp_dir)
-                except Exception:
-                    ruta = None
-                if ruta and Path(ruta).is_file():
-                    cli_txt = _ocr_de_imagen(Path(ruta)).lower()
-                    if termino.lower() in cli_txt:
-                        resultados.append((msg, "OCR"))
+            try:
+                async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
+                                                      limit=limite, search=termino):
+                    n += 1
+                    styled_info(f"  OCR: {n}/{limite}...",)
+                    if any(msg.id == m.id for m, _ in resultados):
+                        continue
+                    try:
+                        ruta = await client.download_media(msg, file=tmp_dir)
+                    except Exception:
+                        ruta = None
+                    if ruta and Path(ruta).is_file():
+                        cli_txt = _ocr_de_imagen(Path(ruta)).lower()
+                        if termino.lower() in cli_txt:
+                            resultados.append((msg, "OCR"))
+            except Exception as e:
+                styled_warn(f"Conexión perdida tras {n} fotos: {e}")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
