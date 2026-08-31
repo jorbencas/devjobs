@@ -78,6 +78,31 @@ from InquirerPy import inquirer  # noqa: E402
 from InquirerPy.separator import Separator  # noqa: E402
 from mtranslate import translate  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# Monkey-patch: ejecutar .execute() de InquirerPy en un thread separado cuando
+# ya hay un event loop asyncio activo (evita "asyncio.run() cannot be called
+# from a running event loop").
+# ---------------------------------------------------------------------------
+import concurrent.futures as _futures
+from InquirerPy.base.simple import BaseSimplePrompt as _SP
+from InquirerPy.base.complex import BaseComplexPrompt as _CP
+
+_orig_sp_execute = _SP.execute
+_orig_cp_execute = _CP.execute
+
+def _threaded_execute(self):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        with _futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(_orig_sp_execute, self).result()
+    return _orig_sp_execute(self)
+
+_SP.execute = _threaded_execute
+_CP.execute = _threaded_execute
+
 try:
     import whisper as _whisper
     _WHISPER_OK = True
