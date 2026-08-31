@@ -10,9 +10,11 @@ services:
       - ./config/secret.key:/app/config/secret.key
       - ./config/grupos.json:/app/config/grupos.json
       - ./config/enviados.json:/app/config/enviados.json
-      - ./sessions/tg_toolbox.session:/app/sessions/tg_toolbox.session
+      - ./sessions/tg_menu.session:/app/sessions/tg_menu.session
       - ./Descargas_Telegram:/app/Descargas_Telegram
       - ../data/comprimidos:/comprimidos
+    environment:
+      - TG_TOOLBOX_SESION=/app/sessions/tg_menu.session
     stdin_open: true
     tty: true
     command: python -u /app/app/tg_toolbox.py
