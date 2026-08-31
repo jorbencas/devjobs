@@ -2877,9 +2877,9 @@ async def _buscar_fotos_en_guardados(client):
             n = 0
             try:
                 async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
-                                                      limit=limite, search=termino):
+                                                      limit=limite):
                     n += 1
-                    styled_info(f"  OCR: {n}/{limite}...",)
+                    styled_info(f"  OCR: {n}/{limite}...")
                     if any(msg.id == m.id for m, _ in resultados):
                         continue
                     try:
