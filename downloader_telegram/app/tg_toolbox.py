@@ -2866,37 +2866,51 @@ async def _buscar_fotos_en_guardados(client):
 
     styled_info(f"Buscando '{termino}' en 'Mensajes guardados'...")
 
-    if en_caption:
-        for msg, motivo in _buscar_caption_fotos(client, termino, limite):
-            resultados.append((msg, motivo))
+    # Cliente temporal con sesión separada para evitar SQLite lock
+    api_id, api_hash = cargar_credenciales()
+    tmp_session = str(tmp_dir / "buscar.session")
+    tmp_client = TelegramClient(tmp_session, api_id, api_hash)
+    await tmp_client.connect()
+    if not await tmp_client.is_user_authorized():
+        styled_warn("Sesión temporal no autorizada.")
+        await tmp_client.disconnect()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return
 
-    if por_ocr:
-        if not _tesseract_ok():
-            styled_warn("tesseract no está instalado; se omite la búsqueda por OCR.")
-        else:
-            n = 0
-            skipped = 0
-            try:
-                async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
-                                                      limit=limite, wait_time=2):
-                    n += 1
-                    styled_info(f"  OCR: {n}/{limite}...")
-                    if any(msg.id == m.id for m, _ in resultados):
-                        continue
-                    try:
-                        ruta = await client.download_media(msg, file=tmp_dir)
-                    except Exception:
-                        skipped += 1
-                        if skipped > 5:
-                            styled_warn(f"Demasiados errores de descarga tras {n} fotos, parando OCR.")
-                            break
-                        continue
-                    if ruta and Path(ruta).is_file():
-                        cli_txt = _ocr_de_imagen(Path(ruta)).lower()
-                        if termino.lower() in cli_txt:
-                            resultados.append((msg, "OCR"))
-            except Exception as e:
-                styled_warn(f"Conexión perdida tras {n} fotos (skipped={skipped}): {e}")
+    try:
+        if en_caption:
+            for msg, motivo in _buscar_caption_fotos(tmp_client, termino, limite):
+                resultados.append((msg, motivo))
+
+        if por_ocr:
+            if not _tesseract_ok():
+                styled_warn("tesseract no está instalado; se omite la búsqueda por OCR.")
+            else:
+                n = 0
+                skipped = 0
+                try:
+                    async for msg in tmp_client.iter_messages("me", filter=InputMessagesFilterPhotos,
+                                                              limit=limite, wait_time=2):
+                        n += 1
+                        styled_info(f"  OCR: {n}/{limite}...")
+                        if any(msg.id == m.id for m, _ in resultados):
+                            continue
+                        try:
+                            ruta = await tmp_client.download_media(msg, file=tmp_dir)
+                        except Exception:
+                            skipped += 1
+                            if skipped > 5:
+                                styled_warn(f"Demasiados errores de descarga tras {n} fotos, parando OCR.")
+                                break
+                            continue
+                        if ruta and Path(ruta).is_file():
+                            cli_txt = _ocr_de_imagen(Path(ruta)).lower()
+                            if termino.lower() in cli_txt:
+                                resultados.append((msg, "OCR"))
+                except Exception as e:
+                    styled_warn(f"Conexión perdida tras {n} fotos (skipped={skipped}): {e}")
+    finally:
+        await tmp_client.disconnect()
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
