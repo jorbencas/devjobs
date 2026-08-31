@@ -410,16 +410,27 @@ class Recorder:
         final = self._partes[0].with_name(self._partes[0].stem + ".mp4")
         tmp = final.with_name(final.stem + "_tmp.mp4")
         log.info(f"[{self.channel}] Concatenando {len(partes)} partes del directo...")
-        if not self._concatenar(partes, tmp):
-            log.warning(f"[{self.channel}] No se pudo concatenar; se mantienen las partes por separado")
-            return
-        # Primero colocar el concat en su nombre final y SOLO entonces borrar
-        # las partes (si algo falla antes, las partes siguen intactas).
-        try:
-            shutil.move(str(tmp), str(final))
-        except Exception as e:
-            log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
-            return
+        # Intentar concat con -c copy primero (muy rápido si los códecs coinciden)
+        if self._concatenar_con_copy(partes, tmp):
+            # Primero colocar el concat en su nombre final y SOLO entonces borrar
+            # las partes (si algo falla antes, las partes siguen intactas).
+            try:
+                shutil.move(str(tmp), str(final))
+            except Exception as e:
+                log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
+                return
+        else:
+            # Fallback: reencode completo (método original, más lento pero compatible)
+            if not self._concatenar(partes, tmp):
+                log.warning(f"[{self.channel}] No se pudo concatenar; se mantienen las partes por separado")
+                return
+            # Primero colocar el concat en su nombre final y SOLO entonces borrar
+            # las partes (si algo falla antes, las partes siguen intactas).
+            try:
+                shutil.move(str(tmp), str(final))
+            except Exception as e:
+                log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
+                return
         # Sidecar de descripción de la primera parte (si existe) → archivo final
         for p in partes:
             sc = p.with_name(p.stem + "_descripcion.json")
@@ -541,3 +552,52 @@ class Recorder:
                         self.start()
 
             time.sleep(5)
+
+    def _concatenar_con_copy(self, partes: list, output: Path) -> bool:
+        """Intenta concatenar las partes usando ffmpeg concat demuxer con
+        -c copy (muy rápido, lossless si los códecs coinciden). Si falla,
+        retorna False para que el caller use _concatenar (reencode)."""
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            return False
+        # Verificar que todas las partes tengan el mismo códec y resolución
+        first_height = None
+        first_vcodec = None
+        for p in partes:
+            try:
+                out = subprocess.check_output(
+                    ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                     "-show_entries", "stream=codec_height,codec_name", "-of", "csv=p=0", str(p)],
+                    stderr=subprocess.DEVNULL,
+                ).decode().strip()
+                parts_info = out.split(",")
+                height = int(parts_info[0]) if len(parts_info) > 0 else None
+                vcodec = parts_info[1] if len(parts_info) > 1 else None
+                if first_height is None:
+                    first_height = height
+                    first_vcodec = vcodec
+                elif height != first_height or vcodec != first_vcodec:
+                    return False
+            except Exception:
+                return False
+        # Crear archivo de lista para concat demuxer
+        list_file = output.parent / (output.stem + "_concat.txt")
+        try:
+            with open(list_file, "w") as f:
+                for p in partes:
+                    f.write(f"file '{p.resolve()}'\n")
+            cmd = [
+                ffmpeg, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(list_file),
+                "-c", "copy",
+                "-movflags", "+faststart",
+                str(output),
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception as e:
+            log.warning(f"[{self.channel}] Error en concat rápido: {e}")
+            return False
+        finally:
+            list_file.unlink(missing_ok=True)

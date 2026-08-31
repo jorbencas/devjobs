@@ -1,10 +1,16 @@
 import time
 import threading
+import signal
+import sys
 from datetime import datetime
 
-from utils.config import load_config, parse_duration, get_channels_with_platform
-from utils.logger import log
-from utils.recorder import Recorder
+running = True
+
+
+def signal_handler(sig, frame):
+    global running
+    log.info("=== Señal SIGTERM recibida, apagando scheduler ===")
+    running = False
 
 
 def _parse_minutes(t: str) -> int:
@@ -33,7 +39,6 @@ def _dias_para(extra: dict, config: dict) -> list:
     dias = extra.get("days") or config.get("days")
     if isinstance(dias, str):
         dias = [dias]
-    # Si no se indica nada, se entiende que emite todos los días.
     return list(dias) if dias else ALL_DAYS
 
 
@@ -104,7 +109,7 @@ def run_scheduler(dry_run: bool = False):
 
     current_day = _get_today()
 
-    while True:
+    while running:
         today = _get_today()
         if today != current_day:
             log.info("Nuevo día detectado, reiniciando grabadores...")

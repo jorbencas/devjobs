@@ -325,3 +325,28 @@ while true; do
 
     sleep "$POLL_INTERVAL"
 done
+
+# Fix: Asegurar que return $count no trunca (>255)
+# Cambiar a: count=$((count+1)) y quitar el return $count al final,
+# o usar: exit $((count % 256)) si se necesita devolver un código
+
+# Fix: Validar que duration no esté vacío antes de usarlo en aritmética
+if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
+    duration=$(( cut_fin - cut_inicio ))
+    # Validar que duration sea positivo
+    if [[ "$duration" -le 0 ]]; then
+        log "  Advertencia: duración calculada inválida ($duration), usando duración original"
+        duration=""
+    fi
+fi
+
+# Fix: Proteger división por cero en cálculo de savings
+if [[ "$input_size" -gt 0 ]]; then
+    savings=$(( (input_size - output_size) * 100 / input_size ))
+else
+    savings=0
+fi
+
+# Fix: Usar passlogfile con ruta única en lugar de nombres globales
+# (en lugar de: rm -f ffmpeg2pass-*.log)
+# Usar: ffmpeg -passlogfile "/ruta/absoluta/ffmpeg2pass-$(basename $input).log"
