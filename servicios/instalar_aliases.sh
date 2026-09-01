@@ -74,8 +74,8 @@ alias tg_logs='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml
 alias tg_stop='docker stop telegram-uploader'
 alias tg_restart='docker restart telegram-uploader'
 # MANUAL (telegram, clonador/interactivo):
-alias tg_menu='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml run --rm telegram'
-alias tg_sessions='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml run --rm telegram'
+alias tg_menu='docker exec -it telegram-downloader python -u /app/app/tg_toolbox.py'
+alias tg_sessions='docker exec -it telegram-downloader python -u /app/app/tg_toolbox.py'
 alias tg_manual_logs='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml logs -f telegram'
 alias tg_manual_stop='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml stop telegram'
 alias tg_down='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml down'

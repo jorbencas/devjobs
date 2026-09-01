@@ -17,7 +17,7 @@ services:
       - TG_TOOLBOX_SESION=/app/sessions/tg_menu.session
     stdin_open: true
     tty: true
-    command: python -u /app/app/tg_toolbox.py
+    command: tail -f /dev/null
 
   #          ============================================================
   #          Daemon uploader (sube *_compressed.mp4 a los grupos/foros)
