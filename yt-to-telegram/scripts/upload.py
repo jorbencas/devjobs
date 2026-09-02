@@ -26,6 +26,15 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 GROUP_ID = os.environ.get("TELEGRAM_GROUP_ID", "")
 TOPICS_FILE = Path(__file__).parent.parent / "config" / "topics.json"
 
+# Topics predefinidos (canal → topic_id)
+# Se obtienen del grupo de Telegram existente
+PREDEFINED_TOPICS = {
+    "MoureDev": {"id": None, "name": "MoureDev"},
+    "Midudev": {"id": None, "name": "Midudev"},
+    "Carlos Azaustre": {"id": None, "name": "Carlos Azaustre"},
+    "Linkfydev": {"id": None, "name": "Linkfydev"},
+}
+
 def load_topics():
     """Carga el mapping de canales a topics."""
     if TOPICS_FILE.exists():
@@ -38,10 +47,26 @@ def save_topics(topics):
     with open(TOPICS_FILE, "w") as f:
         json.dump(topics, f, indent=2, ensure_ascii=False)
 
-def create_topic(channel_name, topics):
-    """Crea un tema nuevo en el grupo de Telegram para un canal."""
+def get_topic_id(channel_name, topics):
+    """Obtiene el topic_id para un canal."""
+    # Buscar en topics predefinidos
+    for key, topic in PREDEFINED_TOPICS.items():
+        if key.lower() in channel_name.lower() or channel_name.lower() in key.lower():
+            if topic["id"]:
+                return topic["id"]
+    
+    # Buscar en topics existentes
     if channel_name in topics:
         return topics[channel_name]["id"]
+    
+    return None
+
+def create_topic(channel_name, topics):
+    """Crea un tema nuevo en el grupo de Telegram para un canal."""
+    # Verificar si ya existe
+    existing_id = get_topic_id(channel_name, topics)
+    if existing_id:
+        return existing_id
     
     logger.info(f"📝 Creando tema para canal: {channel_name}")
     
@@ -78,9 +103,25 @@ def create_topic(channel_name, topics):
         logger.error(f"  ❌ Error creando tema: {e}")
         return None
 
+def format_caption(video):
+    """Formatea el caption con título y fecha de publicación."""
+    title = video.get("title", video["filename"][:100])
+    channel = video.get("channel", "Desconocido")
+    publish_date = video.get("publish_date", "")
+    
+    caption = f"📺 <b>{title}</b>\n\n"
+    caption += f"🔗 Canal: {channel}\n"
+    
+    if publish_date:
+        caption += f"📅 Publicado: {publish_date}\n"
+    
+    return caption
+
 def upload_video(video, topic_id):
     """Sube un vídeo a Telegram en un tema específico."""
     logger.info(f"⬆️  Subiendo: {video['filename'][:50]}...")
+    
+    caption = format_caption(video)
     
     # Usar telethon o python-telegram-bot para subir
     # Por ahora usamos curl como fallback
@@ -91,7 +132,7 @@ def upload_video(video, topic_id):
         "-F", f"chat_id={GROUP_ID}",
         "-F", f"video=@{video['path']}",
         "-F", f"message_thread_id={topic_id}",
-        "-F", f"caption={video.get('title', video['filename'][:100])}",
+        "-F", f"caption={caption}",
         "-F", "parse_mode=HTML"
     ]
     
@@ -143,7 +184,8 @@ def get_pending_videos():
                 "channel": channel_name,
                 "path": str(video_file),
                 "filename": video_file.name,
-                "title": video_file.stem.replace("_", " ")[:100]
+                "title": video_file.stem.replace("_", " ")[:100],
+                "publish_date": video_file.stem.split("_")[0] if "_" in video_file.stem else ""
             })
     
     return pending
@@ -173,8 +215,11 @@ def main():
         # Crear tema si no existe
         topic_id = create_topic(video["channel"], topics)
         if not topic_id:
-            logger.error(f"  ❌ No se pudo crear tema para {video['channel']}, saltando")
-            continue
+            # Si no se puede crear tema, usar "General"
+            logger.warning(f"  ⚠️  No se pudo crear tema para {video['channel']}, usando General")
+            topic_id = get_topic_id("General", topics)
+            if not topic_id:
+                topic_id = create_topic("General", topics)
         
         # Subir vídeo
         if upload_video(video, topic_id):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 convert.py — Convierte vídeos descargados a 720p para Telegram.
+Incluye vídeos normales, shorts y directos.
 """
 import json
 import os
@@ -38,11 +39,21 @@ def get_pending_videos():
             if converted_file.exists():
                 continue
             
+            # Extraer información del nombre del archivo
+            # Formato: {id}_{date}_{type}_{title}.mp4
+            parts = video_file.stem.split("_")
+            video_id = parts[0] if parts else ""
+            publish_date = parts[1] if len(parts) > 1 else ""
+            video_type = parts[2] if len(parts) > 2 else "video"
+            
             pending.append({
                 "channel": channel_name,
                 "input_path": str(video_file),
                 "output_path": str(converted_file),
-                "filename": video_file.name
+                "filename": video_file.name,
+                "video_id": video_id,
+                "publish_date": publish_date,
+                "video_type": video_type
             })
     
     return pending
@@ -51,18 +62,27 @@ def convert_video(video):
     """Convierte un vídeo a 720p para Telegram."""
     logger.info(f"🔄 Convirtiendo: {video['filename'][:50]}...")
     
+    # Comando base de conversión
     cmd = [
         "ffmpeg", "-y",
         "-i", video["input_path"],
         "-c:v", "libx264", "-crf", "28", "-preset", "fast",
         "-c:a", "aac", "-b:a", "128k",
-        "-vf", "scale='trunc(ow/2)*2:trunc(oh/2)*2'",
         "-map", "0:v:0", "-map", "0:a:0",
         "-map_metadata", "0",
         "-movflags", "+faststart",
         "-f", "mp4",
         video["output_path"]
     ]
+    
+    # Para shorts, mantener la resolución original (ya son verticales)
+    if video["video_type"] == "short":
+        # No redimensionar shorts
+        pass
+    else:
+        # Para vídeos normales, asegurar compatibilidad
+        cmd.insert(-2, "-vf")
+        cmd.insert(-2, "scale='trunc(ow/2)*2:trunc(oh/2)*2'")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)

@@ -2,6 +2,7 @@
 """
 download.py — Descarga vídeos de canales de YouTube.
 Limita a N vídeos por canal (default: 2).
+Incluye vídeos normales, shorts y directos.
 """
 import json
 import os
@@ -32,7 +33,7 @@ def get_downloaded_videos(channel_name):
     channel_dir = DOWNLOADS_DIR / channel_name
     if not channel_dir.exists():
         return set()
-    return {f.stem for f in channel_dir.glob("*.mp4")}
+    return {f.stem.split("_")[0] for f in channel_dir.glob("*.mp4")}
 
 def download_channel_videos(channel, max_videos=2):
     """Descarga hasta max_videos de un canal."""
@@ -51,16 +52,17 @@ def download_channel_videos(channel, max_videos=2):
         logger.info(f"  ⏭️  Ya tiene {len(downloaded)} vídeos, saltando")
         return []
     
-    # Listar vídeos disponibles
+    # Listar vídeos disponibles (incluye normales, shorts y directos)
     remaining = max_videos - len(downloaded)
     logger.info(f"  📋 Buscando vídeos (quedan {remaining} plazas)")
     
     # Usar yt-dlp para listar y descargar
+    # Incluye: vídeos normales, shorts, y directos finalizados
     cmd = [
         "yt-dlp",
         "--flat-playlist",
-        "--print", "%(id)s|||%(title)s|||%(duration)s",
-        "--playlist-end", str(remaining * 2),  # Más por si hay errores
+        "--print", "%(id)s|||%(title)s|||%(duration)s|||%(upload_date)s|||%(live_status)s",
+        "--playlist-end", str(remaining * 3),  # Más por si hay errores o shorts
         url
     ]
     
@@ -80,14 +82,29 @@ def download_channel_videos(channel, max_videos=2):
             
             video_id = parts[0]
             title = parts[1]
+            duration = parts[2] if len(parts) > 2 else "0"
+            upload_date = parts[3] if len(parts) > 3 else ""
+            live_status = parts[4] if len(parts) > 4 else ""
             
             # Saltar si ya está descargado
             if video_id in downloaded:
                 continue
             
-            videos.append({"id": video_id, "title": title})
+            # Formatear fecha
+            if upload_date and len(upload_date) == 8:
+                upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
             
-            if len(videos) >= remaining:
+            videos.append({
+                "id": video_id,
+                "title": title,
+                "duration": duration,
+                "upload_date": upload_date,
+                "live_status": live_status,
+                "is_short": int(duration) <= 60 if duration.isdigit() else False,
+                "is_live": live_status in ["is_live", "is_upcoming"]
+            })
+            
+            if len(videos) >= remaining * 2:  # Más para filtrar después
                 break
         
         if not videos:
@@ -97,17 +114,45 @@ def download_channel_videos(channel, max_videos=2):
         # Descargar vídeos
         downloaded_videos = []
         for video in videos:
+            # Filtrar: no descargar directos en cours
+            if video["is_live"] and video["live_status"] == "is_upcoming":
+                logger.info(f"  ⏭️  Saltando directo programado: {video['title'][:50]}")
+                continue
+            
             logger.info(f"  ⬇️  Descargando: {video['title'][:50]}...")
             
-            output_template = str(channel_dir / f"{video['id']}_{video['title'][:50].replace('/', '_').replace(':', '_')}.mp4")
+            # Formato de salida con fecha y tipo
+            video_type = "short" if video["is_short"] else "live" if video["is_live"] else "video"
+            output_template = str(channel_dir / f"{video['id']}_{video['upload_date']}_{video_type}_{video['title'][:50].replace('/', '_').replace(':', '_')}.mp4")
             
-            cmd = [
-                "yt-dlp",
-                "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
-                "--merge-output-format", "mp4",
-                "-o", output_template,
-                f"https://www.youtube.com/watch?v={video['id']}"
-            ]
+            # Comando de descarga
+            if video["is_short"]:
+                # Shorts: descargar directamente
+                cmd = [
+                    "yt-dlp",
+                    "-f", "best[height<=720][ext=mp4]/best",
+                    "--merge-output-format", "mp4",
+                    "-o", output_template,
+                    f"https://www.youtube.com/shorts/{video['id']}"
+                ]
+            elif video["is_live"]:
+                # Directos: descargar si están disponibles
+                cmd = [
+                    "yt-dlp",
+                    "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
+                    "--merge-output-format", "mp4",
+                    "-o", output_template,
+                    f"https://www.youtube.com/watch?v={video['id']}"
+                ]
+            else:
+                # Vídeos normales
+                cmd = [
+                    "yt-dlp",
+                    "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
+                    "--merge-output-format", "mp4",
+                    "-o", output_template,
+                    f"https://www.youtube.com/watch?v={video['id']}"
+                ]
             
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
@@ -120,6 +165,9 @@ def download_channel_videos(channel, max_videos=2):
                                 "title": video["title"],
                                 "channel": name,
                                 "path": str(f),
+                                "filename": f.name,
+                                "publish_date": video["upload_date"],
+                                "video_type": video_type,
                                 "downloaded_at": datetime.now().isoformat()
                             })
                             logger.info(f"  ✅ Descargado: {video['title'][:50]}")
@@ -128,6 +176,10 @@ def download_channel_videos(channel, max_videos=2):
                     logger.error(f"  ❌ Error descargando: {result.stderr[:100]}")
             except subprocess.TimeoutExpired:
                 logger.error(f"  ⏰ Timeout descargando: {video['title'][:50]}")
+            
+            # Limitar a max_videos
+            if len(downloaded_videos) >= remaining:
+                break
         
         return downloaded_videos
         

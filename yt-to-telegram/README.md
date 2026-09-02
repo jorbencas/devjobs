@@ -7,11 +7,13 @@ Pipeline independiente para descargar vídeos de canales de YouTube, convertirlo
 | Función | Detalle |
 |---|---|
 | 📥 Descarga automática | Descarga vídeos de 158 canales de YouTube |
+| 🎬 Vídeos, Shorts y Directos | Incluye todos los tipos de contenido |
 | 🔄 Conversión 720p | Convierte a H.264/AAC compatible con Telegram |
 | 📤 Subida a Telegram | Sube a grupo con temas (topics) por canal |
 | 🎯 Límite por canal | Máximo 2 vídeos por canal a la vez |
 | 🗑️ Limpieza automática | Elimina vídeos después de subirlos |
 | 📊 Organización | Carpetas por canal en cada etapa |
+| 🏷️ Caption enriquecido | Título + fecha de publicación + canal |
 
 ## Estructura
 
@@ -63,6 +65,14 @@ Editar `config/channels.json` para habilitar/deshabilitar canales:
 
 Los topics se crean automáticamente en `config/topics.json` cuando se sube el primer vídeo de un canal.
 
+**Topics preconfigurados:**
+- MoureDev
+- Midudev
+- Carlos Azaustre
+- Linkfydev
+
+Los canales sin tema propio van a **General**.
+
 ## Uso
 
 ### Ejecutar pipeline completo
@@ -110,9 +120,28 @@ python upload.py
 │                 │     │                 │     │                 │
 │ - Lista vídeos  │     │ - Convierte     │     │ - Crea temas    │
 │ - Descarga 2/canal│   │ - 720p H.264   │     │ - Sube vídeos   │
-│ - Guarda en     │     │ - Guarda en     │     │ - Mueve a       │
-│   downloads/    │     │   converted/    │     │   uploaded/     │
+│ - Shorts/Lives  │     │ - Shorts intactos│    │ - Caption con   │
+│ - Guarda en     │     │ - Guarda en     │     │   título+fecha  │
+│   downloads/    │     │   converted/    │     │ - Mueve a       │
+│                 │     │                 │     │   uploaded/     │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+## Tipos de contenido
+
+| Tipo | Descripción | Conversión |
+|---|---|---|
+| 📹 Vídeo | Vídeo normal del canal | 720p H.264 |
+| 🩳 Short | Vídeo vertical (<60s) | Sin redimensionar |
+| 🔴 Live | Directo finalizado | 720p H.264 |
+
+## Caption de ejemplo
+
+```
+📺 Título del vídeo
+
+🔗 Canal: Midudev
+📅 Publicado: 2026-09-01
 ```
 
 ## Límites
@@ -179,3 +208,12 @@ Algunos vídeos son muy largos. Se puede aumentar el timeout en `download.py`.
 ### Vídeos no se eliminan
 
 La eliminación es automática después de subir. Si falla la subida, el vídeo se mantiene en `converted/`.
+
+## Independencia
+
+Este pipeline es **completamente independiente** del pipeline de TwitchRecorder:
+- No comparten carpetas
+- No comparten configuración
+- No afectan entre sí
+- Se pueden ejecutar simultáneamente
+
