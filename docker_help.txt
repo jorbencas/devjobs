@@ -309,6 +309,13 @@ Telegram (h264/aac, CRF 28, 2 pasadas si >50MB) y los sube al grupo
     -movflags +faststart -f mp4
     2 pasadas si >50MB Telegram limit
 
+  Cron (automático diario 01:00 → 18:00+1):
+    0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
+    - Arranca: docker compose up -d yt-pipeline
+    - Para: docker compose down
+    - Logs: data/yt-pipeline/logs/cron_YYYYMMDD.log
+    - Pendientes: data/yt-pipeline/logs/pending_videos.log
+
 ==============================================================================
   4. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM
 ==============================================================================
