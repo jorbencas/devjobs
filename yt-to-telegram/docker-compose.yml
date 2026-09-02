@@ -1,0 +1,68 @@
+services:
+  #          ============================================================
+  #          Pipeline YouTube → Telegram
+  #          ============================================================
+  yt-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-to-telegram
+    restart: unless-stopped
+    volumes:
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+      - ../data/yt-pipeline:/data/yt-pipeline
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
+      - DATA_DIR=/data/yt-pipeline
+    command: python /app/scripts/pipeline.py
+
+  #          ============================================================
+  #          Solo descarga (para testing)
+  #          ============================================================
+  yt-download:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-download
+    volumes:
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+      - ../data/yt-pipeline:/data/yt-pipeline
+    environment:
+      - DATA_DIR=/data/yt-pipeline
+    command: python /app/scripts/download.py
+
+  #          ============================================================
+  #          Solo conversión (para testing)
+  #          ============================================================
+  yt-convert:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-convert
+    volumes:
+      - ./scripts:/app/scripts
+      - ../data/yt-pipeline:/data/yt-pipeline
+    environment:
+      - DATA_DIR=/data/yt-pipeline
+    command: python /app/scripts/convert.py
+
+  #          ============================================================
+  #          Solo subida (para testing)
+  #          ============================================================
+  yt-upload:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-upload
+    volumes:
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+      - ../data/yt-pipeline:/data/yt-pipeline
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - TELEGRAM_GROUP_ID=${TELEGRAM_GROUP_ID}
+      - DATA_DIR=/data/yt-pipeline
+    command: python /app/scripts/upload.py

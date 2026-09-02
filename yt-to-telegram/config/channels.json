@@ -1,0 +1,950 @@
+[
+  {
+    "name": "Programa Con Arnau",
+    "url": "https://youtube.com/@progconarnau/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "El Pingüino de Mario",
+    "url": "https://www.youtube.com/@elpinguinodemario/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "MoureDev",
+    "url": "https://www.youtube.com/@mouredev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Pelado Nerd",
+    "url": "https://www.youtube.com/@PeladoNerd/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Midudev",
+    "url": "https://www.youtube.com/@midudev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Codigo facilito",
+    "url": "https://www.youtube.com/@codigofacilito/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Carlos Azaustre",
+    "url": "https://www.youtube.com/@CarlosAzaustre/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Clipset",
+    "url": "https://www.youtube.com/@clipset/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "CodelyTV",
+    "url": "https://www.youtube.com/@CodelyTV/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "EDteam",
+    "url": "https://www.youtube.com/@EDteam/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Fazt",
+    "url": "https://www.youtube.com/@FaztTech/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "FreeCodeCamp",
+    "url": "https://www.youtube.com/@freecodecamp/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "HolaMundo",
+    "url": "https://www.youtube.com/@holamundodev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Victor Robles",
+    "url": "https://www.youtube.com/@victorroblesweb/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Xataka",
+    "url": "https://www.youtube.com/@xatakatv/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "LinkTV",
+    "url": "https://www.youtube.com/@LinkTVA/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Ringa Tech",
+    "url": "https://www.youtube.com/@RingaTech/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Nethermind",
+    "url": "https://www.youtube.com/@NethermindDev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Develoteca",
+    "url": "https://www.youtube.com/@Develoteca/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Linkfydev",
+    "url": "https://www.youtube.com/@Linkfydev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Esa Operativa",
+    "url": "https://www.youtube.com/@EsaOperativa/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Programador X",
+    "url": "https://www.youtube.com/@ProgramadorX/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "3DHumbe",
+    "url": "https://www.youtube.com/@3DHumbe/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "4tomik",
+    "url": "https://www.youtube.com/@4tomik434/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "AfroCode",
+    "url": "https://www.youtube.com/@Afro-code/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Agustín Medina | AI Agency Academy",
+    "url": "https://www.youtube.com/@agustinmedinaIA/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Aivars Meijers",
+    "url": "https://www.youtube.com/@AivarsMeijers/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "ALDI SCRAP PCB",
+    "url": "https://www.youtube.com/@aldiscrap/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "aleccisWithX",
+    "url": "https://www.youtube.com/@alecciswithx9137/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Alejandro Pérez",
+    "url": "https://www.youtube.com/@alejandroperez/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "AlexCG Design",
+    "url": "https://www.youtube.com/@AlexCGDesign/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Antonio Sarosi",
+    "url": "https://www.youtube.com/@AntonioSarosi/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "AprenDevOps",
+    "url": "https://www.youtube.com/@AprenDevOps/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Aprendiendo Frontend",
+    "url": "https://www.youtube.com/@AprendiendoFrontendChannel/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Atípico Mental",
+    "url": "https://www.youtube.com/@atipicomental/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "BettaTech",
+    "url": "https://www.youtube.com/@BettaTech/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Bita Byte Ibiza",
+    "url": "https://www.youtube.com/@bitabyteibiza1177/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Bro Code",
+    "url": "https://www.youtube.com/@BroCodez/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "campusMVP.es",
+    "url": "https://www.youtube.com/@campusmvp/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Carlos Alfaro",
+    "url": "https://www.youtube.com/@CarlosAlfaroSV/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Carlos Azaustre Two",
+    "url": "https://www.youtube.com/@CarlosAzaustreTV/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Chilango Radio",
+    "url": "https://www.youtube.com/@chilangoradiomx/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Clever Programmer",
+    "url": "https://www.youtube.com/@CleverProgrammer/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "clipset shorts",
+    "url": "https://www.youtube.com/@clipsetshorts/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "ClipsetTEST",
+    "url": "https://www.youtube.com/@testunit/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Code Monkey",
+    "url": "https://www.youtube.com/@CodeMonkeyUnity/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "CodeBorn Dev",
+    "url": "https://www.youtube.com/@codeborn-dev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Codificandolo",
+    "url": "https://www.youtube.com/@codificandolo/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Codigo Estudiante",
+    "url": "https://www.youtube.com/@codigoestudiante/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Consejos C#",
+    "url": "https://www.youtube.com/@ConsejosCSharp/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Contando Bits",
+    "url": "https://www.youtube.com/@ContandoBits/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Control 3D",
+    "url": "https://www.youtube.com/@Control3D/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Cristian Torres",
+    "url": "https://www.youtube.com/@krizalfaro/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "d3vcloud",
+    "url": "https://www.youtube.com/@d3vcloud/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Daniel Diaz",
+    "url": "https://www.youtube.com/@DanielDiazGranizo/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "DanieloTech",
+    "url": "https://www.youtube.com/@danielotech/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "DesarrolloWeb.com",
+    "url": "https://www.youtube.com/@deswebcom/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "DesignCourse",
+    "url": "https://www.youtube.com/@DesignCourse/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Devon Crawford",
+    "url": "https://www.youtube.com/@DevonCrawford/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "diegoveloper",
+    "url": "https://www.youtube.com/@diegoveloper/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "DistroTube",
+    "url": "https://www.youtube.com/@DistroTube/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Domingo Gomes",
+    "url": "https://www.youtube.com/@new3sc/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "dotnet",
+    "url": "https://www.youtube.com/@dotnet/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Enrique Dans",
+    "url": "https://www.youtube.com/@edans/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "FalconMasters",
+    "url": "https://www.youtube.com/@FalconMasters/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Fazt Code",
+    "url": "https://www.youtube.com/@FaztCode/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Fernando Herrera",
+    "url": "https://www.youtube.com/@fernando_her85/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "freeCodeCamp Español",
+    "url": "https://www.youtube.com/@freecodecampes/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "GitHub",
+    "url": "https://www.youtube.com/@GitHub/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Google",
+    "url": "https://www.youtube.com/@Google/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "GoogleDoodles",
+    "url": "https://www.youtube.com/@googledoodles/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "grenasfrijolito",
+    "url": "https://www.youtube.com/@grenasfrijolito/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Guillermo Garcia",
+    "url": "https://www.youtube.com/@GuillermoGarcia46840/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Hallden",
+    "url": "https://www.youtube.com/@Hallden_/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Hdeleon Clips",
+    "url": "https://www.youtube.com/@hdeleonClips/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "hdeleon.net",
+    "url": "https://www.youtube.com/@hdeleonnet/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "IA con Daniel",
+    "url": "https://www.youtube.com/@IAconDaniel/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "IAmTimCorey",
+    "url": "https://www.youtube.com/@IAmTimCorey/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Ildefonso Segura Tutoriales",
+    "url": "https://www.youtube.com/@ildefonsosegura/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "IndevError",
+    "url": "https://www.youtube.com/@IndevError/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Informatic.com",
+    "url": "https://www.youtube.com/@ProgramaInformatic/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Informática DP",
+    "url": "https://www.youtube.com/@informaticadp/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Internet no pesa nada",
+    "url": "https://www.youtube.com/@internetnopesanada/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "JD Productions HD",
+    "url": "https://www.youtube.com/@MrJDTutoriales/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Jerry Sawhney",
+    "url": "https://www.youtube.com/@Innovativecoder/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Jesse Dietrichson",
+    "url": "https://www.youtube.com/@JesseDietrichson/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Jesus Luque Medina",
+    "url": "https://www.youtube.com/@JesusLuqueMedina/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Jorebza",
+    "url": "https://www.youtube.com/@Jorebza/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Jose Maria Alonso",
+    "url": "https://www.youtube.com/@MalignoAlonso/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "jotajotavm",
+    "url": "https://www.youtube.com/@jotajotavm/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "JustDjango",
+    "url": "https://www.youtube.com/@justdjango/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Kala360Gamer",
+    "url": "https://www.youtube.com/@Kala360Gamer/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Karan Kumar",
+    "url": "https://www.youtube.com/@krn-751/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Kiko Palomares",
+    "url": "https://www.youtube.com/@kikopalomares/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Leigh en Español",
+    "url": "https://www.youtube.com/@LeighenEspañol/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Leonidas Esteban",
+    "url": "https://www.youtube.com/@LeonidasEsteban/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "LinuxScoop",
+    "url": "https://www.youtube.com/@linuxscoop/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "linuxware",
+    "url": "https://www.youtube.com/@iqpi18/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Luis Cambra",
+    "url": "https://www.youtube.com/@LuisCambraps/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Make it Real",
+    "url": "https://www.youtube.com/@MakeitrealCamp1/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "makigas",
+    "url": "https://www.youtube.com/@makigas/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "ManzDev",
+    "url": "https://www.youtube.com/@ManzDev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Martín Gesualdo",
+    "url": "https://www.youtube.com/@migesualdo/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Microsoft Developer",
+    "url": "https://www.youtube.com/@MicrosoftDeveloper/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Microsoft IoT Developers",
+    "url": "https://www.youtube.com/@MicrosoftIoTDevelopers/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "midulive",
+    "url": "https://www.youtube.com/@midulive/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Migma",
+    "url": "https://www.youtube.com/@xMigma/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Moldeo Interactive",
+    "url": "https://www.youtube.com/@moldeointeractive/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "MoureDev TV",
+    "url": "https://www.youtube.com/@mouredevtv/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Mr. Resumen",
+    "url": "https://www.youtube.com/@MrResumen/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Mundos Apple Pro",
+    "url": "https://www.youtube.com/@MundosApplePro/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Món de llengua - Dr. Zalbidea",
+    "url": "https://www.youtube.com/@Móndellengua-Dr.Zalbidea/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "NASeros",
+    "url": "https://www.youtube.com/@naseros/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Nekszer",
+    "url": "https://www.youtube.com/@NEKSZER/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "nicobytes",
+    "url": "https://www.youtube.com/@nicobytes/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "No es Brujería, es Tecnología",
+    "url": "https://www.youtube.com/@brujeriatech/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Noticias Tech y ya!",
+    "url": "https://www.youtube.com/@NoticiasTechyya/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Octarine Code",
+    "url": "https://www.youtube.com/@OctarineCode/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Online Tutorials",
+    "url": "https://www.youtube.com/@OnlineTutorialsYT/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "PhoneGapSpain",
+    "url": "https://www.youtube.com/@PhoneGapSpain/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Pildoras de programación",
+    "url": "https://www.youtube.com/@pildorasdeprogramacion/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "pildorasinformaticas",
+    "url": "https://www.youtube.com/@pildorasinformaticas/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Pirple",
+    "url": "https://www.youtube.com/@Pirple/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Platzi",
+    "url": "https://www.youtube.com/@Platzi/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Programación en español",
+    "url": "https://www.youtube.com/@programacion-es/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Programming w/ Professor Sluiter",
+    "url": "https://www.youtube.com/@shadsluiter/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Programming with Mosh",
+    "url": "https://www.youtube.com/@programmingwithmosh/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "React-Native by Wilhelm",
+    "url": "https://www.youtube.com/@reactuikit/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Ready Set Click",
+    "url": "https://www.youtube.com/@readysetclick9870/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "render2web",
+    "url": "https://www.youtube.com/@render2web/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "RobotSolar",
+    "url": "https://www.youtube.com/@robotsolar7783/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Sergio Alejandro Campos - EXCELeINFO",
+    "url": "https://www.youtube.com/@SergioAlejandroCampos/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Simon Grimm",
+    "url": "https://www.youtube.com/@galaxies_dev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Sin Rueda Tecnológica",
+    "url": "https://www.youtube.com/@sinruedatecnologica/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Software Lion",
+    "url": "https://www.youtube.com/@softwarelion-oficial/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Sonfil",
+    "url": "https://www.youtube.com/@Sonfil/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Sonny Sangha",
+    "url": "https://www.youtube.com/@SonnySangha/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Sosteniblevida",
+    "url": "https://www.youtube.com/@Sosteniblevida/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Soy Dalto",
+    "url": "https://www.youtube.com/@soydalto/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "subelealruido",
+    "url": "https://www.youtube.com/@subelealruido/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Super Excel",
+    "url": "https://www.youtube.com/@super-excel/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Tech Point Fundamentals",
+    "url": "https://www.youtube.com/@TechPointFundamentals/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "TechHut",
+    "url": "https://www.youtube.com/@TechHut/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "TecnoBinaria",
+    "url": "https://www.youtube.com/@Tecnobinaria/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "TecnoXplora",
+    "url": "https://www.youtube.com/@TecnoXplora/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "TEDx Talks",
+    "url": "https://www.youtube.com/@TEDx/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "The Coder Cave | Programación y Tecnología",
+    "url": "https://www.youtube.com/@TheCoderCave/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "TIFF Trailers",
+    "url": "https://www.youtube.com/@TIFFTrailers/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Toni Dev",
+    "url": "https://www.youtube.com/@tonidev_/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Topes de Gama",
+    "url": "https://www.youtube.com/@TopesdeGama/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Tu Area De Informatica",
+    "url": "https://www.youtube.com/@TuAreaDeInformatica/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "tutorialesJJ",
+    "url": "https://www.youtube.com/@tutorialesJJ/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "tutorialsEU",
+    "url": "https://www.youtube.com/@tutorialsEU/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Unity",
+    "url": "https://www.youtube.com/@unity/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Victor Abarca",
+    "url": "https://www.youtube.com/@VictorAbarca/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Vida MRR - Programacion web",
+    "url": "https://www.youtube.com/@vidamrr/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Video Tutoriales Android",
+    "url": "https://www.youtube.com/@VideoTutorialesAndroidMovil/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
+    "name": "Web Dev Simplified",
+    "url": "https://www.youtube.com/@WebDevSimplified/videos",
+    "enabled": true,
+    "max_videos": 2
+  }
+]
