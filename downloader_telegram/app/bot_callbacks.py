@@ -6,41 +6,10 @@ from telegram.ext import ContextTypes
 
 logger = logging.getLogger("bot_callbacks")
 
-from bot_commands import (
-    _format_status, _format_queue, _format_logs,
-)
 from bot_inline_keyboards import (
-    kb_status, kb_tip, kb_concept, kb_tool,
-    kb_saludo, kb_cola, kb_pausar, kb_noticias,
+    kb_tip, kb_concept, kb_tool,
+    kb_saludo, kb_noticias,
 )
-from pipeline_bridge import get_status, get_queue_count, get_logs, send_control
-
-
-async def cb_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: refrescar status."""
-    query = update.callback_query
-    await query.answer()
-    status = get_status()
-    text = _format_status(status)
-    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb_status())
-
-
-async def cb_queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: ver cola."""
-    query = update.callback_query
-    await query.answer()
-    queue = get_queue_count()
-    text = _format_queue(queue)
-    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb_cola())
-
-
-async def cb_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: ver logs."""
-    query = update.callback_query
-    await query.answer()
-    logs = get_logs(count=15)
-    text = _format_logs(logs)
-    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb_status())
 
 
 async def cb_tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,7 +33,7 @@ async def cb_tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         msg = build_daily_message(tips)
         logger.info(f"cb_tip: msg len={len(msg)}")
-        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=kb_tip())
+        await query.edit_message_text(msg, reply_markup=kb_tip())
         logger.info("cb_tip: sent OK")
     except Exception as e:
         logger.error(f"cb_tip error: {e}", exc_info=True)
@@ -92,12 +61,12 @@ async def cb_concept(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         c = concepts[0]
         text = (
-            f"💡 **{c.get('title', 'Concepto')}**\n\n"
+            f"💡 {c.get('title', 'Concepto')}\n\n"
             f"{c.get('explanation', c.get('summary', ''))[:1000]}\n\n"
-            f"```{c.get('code_example', '')[:1500]}```"
+            f"```\n{c.get('code_example', '')[:1500]}\n```"
         )
         logger.info(f"cb_concept: text len={len(text)}")
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb_concept())
+        await query.edit_message_text(text, reply_markup=kb_concept())
         logger.info("cb_concept: sent OK")
     except Exception as e:
         logger.error(f"cb_concept error: {e}", exc_info=True)
@@ -124,7 +93,7 @@ async def cb_tool(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ No hay tools.", reply_markup=kb_tool())
             return
         msg = build_daily_message(tools)
-        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=kb_tool())
+        await query.edit_message_text(msg, reply_markup=kb_tool())
     except Exception as e:
         await query.edit_message_text(f"❌ Error: {e}", reply_markup=kb_tool())
 
@@ -161,7 +130,6 @@ async def cb_saludo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             image_bytes = fallback_pil(saludo, publico)
         if image_bytes:
             image_bytes = _superponer_texto(image_bytes, frase, saludo)
-            # Para fotos no podemos edit, enviar nueva
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=image_bytes,
@@ -178,30 +146,5 @@ async def cb_noticias(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Botón: más noticias."""
     query = update.callback_query
     await query.answer()
-    # Reutilizar cmd_noticias
     from bot_commands import cmd_noticias
     await cmd_noticias(update, context)
-
-
-async def cb_pipeline_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: pausar pipeline."""
-    query = update.callback_query
-    await query.answer()
-    send_control("pause")
-    await query.edit_message_text("⏸ Grabación pausada.", reply_markup=kb_pausar())
-
-
-async def cb_pipeline_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: reanudar pipeline."""
-    query = update.callback_query
-    await query.answer()
-    send_control("resume")
-    await query.edit_message_text("▶️ Grabación reanudada.", reply_markup=kb_status())
-
-
-async def cb_upload_force(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: forzar subida."""
-    query = update.callback_query
-    await query.answer()
-    send_control("force_upload")
-    await query.edit_message_text("⬆️ Subida forzada enviada.", reply_markup=kb_status())

@@ -38,13 +38,12 @@ services:
       - ../data/comprimidos:/comprimidos
     environment:
       UPLOADER_INTERVALO: "60"
-      # Reenvío automático al canal de solo-reenvío (diarios de la boticaria)
       UPLOADER_FORWARD_CHANNEL: "-1004359591062"
       UPLOADER_FORWARD_KEYWORD: "diarios_boticaria"
     command: python -u /app/app/subir_videos.py /comprimidos
 
   #          ============================================================
-  #          Bot API interactivo (comandos + botones inline + @mención IA)
+  #          Bot API (@jorbencas_bot)
   #          ============================================================
   telegram_bot:
     build:
@@ -54,31 +53,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./app:/app/app
-      - ../data:/data
       - /home/jorge/dev/test_githubActions:/data/test_githubActions
-      - /home/jorge/dev/devjobs/TwitchRecorder:/data/pipeline
+      - /home/jorge/dev/devjobs/data/descargas:/data/descargas
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - BOT_ADMINS=${BOT_ADMINS}
-      - BOT_MENTION_MODE=true
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen2.5:1.5b
-      - PIPELINE_DATA=/data
       - TEST_GH_DIR=/data/test_githubActions
+      - DOWNLOAD_DIR=/data/descargas
     command: python -u /app/app/telegram_bot.py
-
-  #          ============================================================
-  #          Ollama (modelo local para @mención)
-  #          ============================================================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-
-volumes:
-  ollama_data:

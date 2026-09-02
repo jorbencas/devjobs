@@ -1,9 +1,12 @@
-"""bot_commands.py — Handlers de comandos del bot (/status, /tip, etc.)."""
+"""bot_commands.py — Handlers de comandos del bot (/tip, /descarga, etc.)."""
 import asyncio
 import json
 import os
 import random
+import re
 import sys
+import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -11,78 +14,60 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot_inline_keyboards import (
-    kb_help, kb_status, kb_tip, kb_concept, kb_tool,
-    kb_saludo, kb_cola, kb_grabar, kb_pausar, kb_noticias,
+    kb_help, kb_tip, kb_concept, kb_tool,
+    kb_saludo, kb_noticias,
 )
-from pipeline_bridge import get_status, get_queue_count, get_logs, send_control
 
 # ── Ruta a test_githubActions para importar generadores ──
 TEST_GH_DIR = Path(os.environ.get("TEST_GH_DIR", "/data/test_githubActions"))
 if str(TEST_GH_DIR / "scripts") not in sys.path:
     sys.path.insert(0, str(TEST_GH_DIR / "scripts"))
 
+# ── Config descarga ──
+DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "/data/descargas"))
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
 # ══════════════════════════════════════════════════════════════
 #  UTILIDADES
 # ══════════════════════════════════════════════════════════════
 
-def _format_status(status: dict) -> str:
-    """Formatea el estado del pipeline para Telegram."""
-    if not status:
-        return "📡 **Pipeline sin actividad**\n\nNo hay servicios reportando estado."
-
-    lines = ["📡 **Estado del Pipeline**\n"]
-
-    rec = status.get("recorder", {})
-    if rec:
-        ch = rec.get("channel", "?")
-        plat = rec.get("platform", "?")
-        file = rec.get("file", "")
-        lines.append(f"🎬 **Grabando:** {ch} ({plat})")
-        if file:
-            lines.append(f"   📁 {file}")
-    else:
-        lines.append("🎬 **Grabando:** inactivo")
-
-    mon = status.get("monitor", {})
-    if mon:
-        mf = mon.get("file", "?")
-        lines.append(f"⚙️ **Comprimiendo:** {mf}")
-    else:
-        lines.append("⚙️ **Comprimiendo:** inactivo")
-
-    upl = status.get("uploader", {})
-    if upl:
-        uf = upl.get("file", "?")
-        lines.append(f"⬆️ **Subiendo:** {uf}")
-    else:
-        lines.append("⬆️ **Subiendo:** inactivo")
-
-    queue = get_queue_count()
-    lines.append(f"\n📋 **Cola:** {queue['grabaciones']} grabaciones · {queue['comprimidos']} comprimidos")
-
-    return "\n".join(lines)
+def extract_url(text: str) -> str | None:
+    """Extrae la primera URL de un texto."""
+    url_pattern = re.compile(
+        r'https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)',
+        re.IGNORECASE
+    )
+    match = url_pattern.search(text)
+    return match.group(0) if match else None
 
 
-def _format_queue(queue: dict) -> str:
-    """Formatea la cola de archivos."""
-    lines = ["📋 **Cola de archivos**\n"]
-    lines.append(f"📹 Grabaciones/test: {queue['grabaciones']}")
-    lines.append(f"📦 Comprimidos: {queue['comprimidos']}")
-    lines.append(f"⬆️ Subiendo: {queue['subiendo']}")
-    return "\n".join(lines)
+def download_with_ytdlp(url: str, output_dir: Path) -> dict:
+    """Descarga un vídeo con yt-dlp. Devuelve {success, file, error}."""
+    try:
+        cmd = [
+            "yt-dlp",
+            "--no-playlist",
+            "-f", "best[ext=mp4]/best",
+            "--merge-output-format", "mp4",
+            "-o", str(output_dir / "%(title)s.%(ext)s"),
+            "--no-overwrites",
+            url,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            return {"success": False, "error": result.stderr[:500]}
 
-
-def _format_logs(logs: list) -> str:
-    """Formatea las líneas de log."""
-    if not logs:
-        return "📝 Sin logs recientes."
-    lines = ["📝 **Últimos logs**\n"]
-    for entry in logs:
-        ts = entry.get("ts", "")[-8:]  # HH:MM:SS
-        src = entry.get("src", "?")
-        msg = entry.get("msg", "")
-        lines.append(f"`{ts}` [{src}] {msg}")
-    return "\n".join(lines)
+        # Buscar el archivo descargado
+        files = sorted(output_dir.glob("*.*"), key=os.path.getmtime, reverse=True)
+        for f in files:
+            if f.suffix in ('.mp4', '.mkv', '.webm', '.mp3', '.m4a'):
+                return {"success": True, "file": str(f)}
+        return {"success": False, "error": "No se encontró el archivo descargado"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout: la descarga tardó más de 5 minutos"}
+    except FileNotFoundError:
+        return {"success": False, "error": "yt-dlp no está instalado"}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -92,44 +77,38 @@ def _format_logs(logs: list) -> str:
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start — Mensaje de bienvenida."""
     text = (
-        "🤖 **Bienvenido al Bot Pipeline & IA**\n\n"
-        "Usa /ayuda para ver todos los comandos disponibles.\n"
-        "También puedes mencionarme (@mencion) en el grupo para preguntarme cualquier cosa."
+        "👋 ¡Hola! Soy @jorbencas_bot\n\n"
+        "Puedo ayudarte con:\n"
+        "• Descargar vídeos de cualquier web\n"
+        "• Tips de programación\n"
+        "• Conceptos y herramientas IA\n"
+        "• Noticias de tecnología\n\n"
+        "Usa /ayuda para ver todos los comandos."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text)
 
 
 async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/ayuda — Pantalla de ayuda con todos los comandos."""
+    """/ayuda — Pantalla de ayuda."""
     text = (
-        "╔══════════════════════════════════════╗\n"
-        "║       🤖 BOT PIPELINE & IA          ║\n"
-        "╠══════════════════════════════════════╣\n"
-        "║                                      ║\n"
-        "║  📡 **PIPELINE**                     ║\n"
-        "║  /status    — Estado del sistema     ║\n"
-        "║  /grabar    — Forzar grabación       ║\n"
-        "║  /pausar    — Pausar grabación       ║\n"
-        "║  /reanudar  — Reanudar grabación     ║\n"
-        "║  /cola      — Ver archivos en cola   ║\n"
-        "║  /subir     — Forzar subida          ║\n"
-        "║  /logs      — Últimos logs           ║\n"
-        "║                                      ║\n"
-        "║  💡 **CONTENIDO IA**                 ║\n"
-        "║  /tip       — Tip de programación    ║\n"
-        "║  /concepto  — Concepto con código    ║\n"
-        "║  /tool      — Herramienta AI        ║\n"
-        "║  /saludo    — Imagen de saludo       ║\n"
-        "║  /noticias  — Últimas noticias       ║\n"
-        "║                                      ║\n"
-        "║  ⚙️ **UTILIDADES**                   ║\n"
-        "║  /ping      — Comprobar conexión     ║\n"
-        "║  /ayuda     — Esta pantalla          ║\n"
-        "║                                      ║\n"
-        "║  💡 TIP: Usa botones para navegar    ║\n"
-        "╚══════════════════════════════════════╝"
+        "🤖 @jorbencas_bot\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📥 DESCARGAS\n"
+        "  /descarga URL — Descargar vídeo de cualquier web\n"
+        "  /download URL — Igual que /descarga\n"
+        "  También puedes mencionarme con una URL\n\n"
+        "💡 CONTENIDO\n"
+        "  /tip — Tip de programación\n"
+        "  /concepto — Concepto con código\n"
+        "  /tool — Herramienta IA\n"
+        "  /saludo — Imagen de saludo\n"
+        "  /noticias — Últimas noticias tech\n\n"
+        "⚙️ UTILIDADES\n"
+        "  /ping — Comprobar conexión\n"
+        "  /ayuda — Esta pantalla\n\n"
+        "💡 Tip: Usa los botones para navegar"
     )
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_help())
+    await update.message.reply_text(text, reply_markup=kb_help())
 
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,72 +117,53 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ══════════════════════════════════════════════════════════════
-#  PIPELINE
+#  DESCARGA
 # ══════════════════════════════════════════════════════════════
 
-async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/status — Estado del pipeline."""
-    status = get_status()
-    text = _format_status(status)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_status())
+async def cmd_descarga(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str = None):
+    """/descarga URL — Descargar vídeo."""
+    if url is None:
+        args = context.args if context.args else []
+        url = args[0] if args else None
 
-
-async def cmd_cola(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/cola — Ver archivos en cola."""
-    queue = get_queue_count()
-    text = _format_queue(queue)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_cola())
-
-
-async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/logs — Últimos logs."""
-    logs = get_logs(count=15)
-    text = _format_logs(logs)
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_status())
-
-
-async def cmd_grabar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/grabar @canal — Forzar grabación."""
-    canal = " ".join(context.args) if context.args else None
-    if not canal:
+    if not url:
         await update.message.reply_text(
-            "Uso: /grabar @canal\nEjemplo: /grabar @midudev",
-            reply_markup=kb_grabar()
+            "📥 Uso: /descarga URL\n"
+            "Ejemplo: /descarga https://www.youtube.com/watch?v=..."
         )
         return
-    send_control("force_record", channel=canal)
-    await update.message.reply_text(
-        f"🎬 Orden enviada: grabar **{canal}**",
-        parse_mode="Markdown",
-        reply_markup=kb_grabar()
-    )
 
+    if not url.startswith(("http://", "https://")):
+        await update.message.reply_text("❌ URL no válida. Debe empezar con http:// o https://")
+        return
 
-async def cmd_pausar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/pausar — Pausar grabación."""
-    send_control("pause")
-    await update.message.reply_text(
-        "⏸ Grabación pausada.",
-        reply_markup=kb_pausar()
-    )
+    await update.message.reply_chat_action("upload_video")
+    status_msg = await update.message.reply_text(f"⬇️ Descargando...\n{url[:60]}...")
 
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, download_with_ytdlp, url, DOWNLOAD_DIR
+        )
 
-async def cmd_reanudar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/reanudar — Reanudar grabación."""
-    send_control("resume")
-    await update.message.reply_text(
-        "▶️ Grabación reanudada.",
-        reply_markup=kb_status()
-    )
-
-
-async def cmd_subir(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/subir — Forzar subida."""
-    send_control("force_upload")
-    await update.message.reply_text(
-        "⬆️ Orden de subida forzada enviada.",
-        reply_markup=kb_status()
-    )
+        if result["success"]:
+            file_path = Path(result["file"])
+            file_size = file_path.stat().st_size / (1024 * 1024)
+            await status_msg.edit_text(
+                f"✅ Descarga completada\n"
+                f"📁 {file_path.name}\n"
+                f"📊 {file_size:.1f} MB"
+            )
+            # Enviar el archivo
+            with open(file_path, "rb") as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=file_path.name,
+                    caption=f"📥 {file_path.name}"
+                )
+        else:
+            await status_msg.edit_text(f"❌ Error: {result['error'][:200]}")
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Error inesperado: {str(e)[:200]}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -222,7 +182,6 @@ async def cmd_tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = load_history()
         sent_titles = history.get("sent_titles", [])
 
-        # Intentar Gemini primero, fallback a DB
         tips = generate_tips_gemini(1, None, sent_titles)
         if not tips:
             tips = select_tips_from_db(database, history, count=1)
@@ -231,7 +190,7 @@ async def cmd_tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         msg = build_daily_message(tips)
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=kb_tip())
+        await update.message.reply_text(msg, reply_markup=kb_tip())
     except Exception as e:
         await update.message.reply_text(f"❌ Error generando tip: {e}", reply_markup=kb_tip())
 
@@ -257,11 +216,11 @@ async def cmd_concepto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         c = concepts[0]
         text = (
-            f"💡 **{c.get('title', 'Concepto')}**\n\n"
+            f"💡 {c.get('title', 'Concepto')}\n\n"
             f"{c.get('explanation', c.get('summary', ''))[:1000]}\n\n"
-            f"```{c.get('code_example', '')[:1500]}```"
+            f"```\n{c.get('code_example', '')[:1500]}\n```"
         )
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_concept())
+        await update.message.reply_text(text, reply_markup=kb_concept())
     except Exception as e:
         await update.message.reply_text(f"❌ Error generando concepto: {e}", reply_markup=kb_concept())
 
@@ -287,7 +246,7 @@ async def cmd_tool(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         msg = build_daily_message(tools)
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=kb_tool())
+        await update.message.reply_text(msg, reply_markup=kb_tool())
     except Exception as e:
         await update.message.reply_text(f"❌ Error generando tool: {e}", reply_markup=kb_tool())
 
@@ -348,16 +307,15 @@ async def cmd_noticias(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not items:
             await update.message.reply_text("📰 Sin noticias nuevas.", reply_markup=kb_noticias())
             return
-        # Mostrar las 5 más recientes
         recent = items[:5]
-        lines = ["📰 **Últimas noticias**\n"]
+        lines = ["📰 Últimas noticias\n"]
         for i, item in enumerate(recent, 1):
             title = item.get("title", item.get("titulo", "Sin título"))
             source = item.get("source", item.get("fuente", ""))
-            lines.append(f"{i}. **{title}**")
+            lines.append(f"{i}. {title}")
             if source:
                 lines.append(f"   _{source}_")
         text = "\n".join(lines)
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb_noticias())
+        await update.message.reply_text(text, reply_markup=kb_noticias())
     except Exception as e:
         await update.message.reply_text(f"❌ Error leyendo noticias: {e}", reply_markup=kb_noticias())

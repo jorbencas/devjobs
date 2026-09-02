@@ -3,20 +3,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def kb_help() -> InlineKeyboardMarkup:
-    """Botón en /help para ir a /status."""
+    """Botón en /help."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚀 Ver estado del pipeline", callback_data="status:refresh")]
-    ])
-
-
-def kb_status() -> InlineKeyboardMarkup:
-    """Botones después de /status."""
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🔄 Actualizar", callback_data="status:refresh"),
-            InlineKeyboardButton("📋 Cola", callback_data="queue:show"),
-            InlineKeyboardButton("📝 Logs", callback_data="logs:show"),
-        ]
+        [InlineKeyboardButton("📥 Descargar vídeo", callback_data="download:start")]
     ])
 
 
@@ -57,36 +46,6 @@ def kb_saludo() -> InlineKeyboardMarkup:
     """Botones después de /saludo."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Otro saludo", callback_data="saludo:next")]
-    ])
-
-
-def kb_cola() -> InlineKeyboardMarkup:
-    """Botones después de /cola."""
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🔄 Actualizar", callback_data="queue:refresh"),
-            InlineKeyboardButton("⬆️ Subir primero", callback_data="upload:force"),
-        ]
-    ])
-
-
-def kb_grabar() -> InlineKeyboardMarkup:
-    """Botones después de /grabar."""
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("⏸ Pausar", callback_data="pipeline:pause"),
-            InlineKeyboardButton("📊 Estado", callback_data="status:refresh"),
-        ]
-    ])
-
-
-def kb_pausar() -> InlineKeyboardMarkup:
-    """Botones después de /pausar."""
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("▶️ Reanudar", callback_data="pipeline:resume"),
-            InlineKeyboardButton("📊 Estado", callback_data="status:refresh"),
-        ]
     ])
 
 
