@@ -160,6 +160,8 @@ async def cmd_descarga(update: Update, context: ContextTypes.DEFAULT_TYPE, url: 
                     filename=file_path.name,
                     caption=f"📥 {file_path.name}"
                 )
+            # Borrar archivo local después de enviar
+            file_path.unlink(missing_ok=True)
         else:
             await status_msg.edit_text(f"❌ Error: {result['error'][:200]}")
     except Exception as e:
