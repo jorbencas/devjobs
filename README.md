@@ -170,6 +170,23 @@ Para quitar el auto-arranque:
 `sudo systemctl disable twitch-stream-pipeline.service`
 Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
 
+### Pipeline YouTube → Telegram (cron automático)
+
+El pipeline de YouTube se ejecuta automáticamente cada día de 01:00 a 18:00:
+
+```bash
+# Cron configurado
+0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
+
+# Ver logs
+cat data/yt-pipeline/logs/cron_$(date +%Y%m%d).log
+
+# Parar manualmente
+cd yt-to-telegram && docker compose down
+```
+
+Ver [`yt-to-telegram/README.md`](yt-to-telegram/README.md) para más detalles.
+
 ---
 
 ## 📦 Instalación Rápida (Docker)
