@@ -1,0 +1,21 @@
+[Unit]
+Description=Telegram Bot API (pipeline + IA + @mención)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+
+# 1) Ollama (modelo local para @mención)
+ExecStart=/usr/bin/docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml up -d ollama
+
+# 2) Bot API (comandos + botones + @mención)
+ExecStart=/usr/bin/docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml up -d telegram_bot
+
+ExecStop=/usr/bin/docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml stop telegram_bot
+ExecStop=/usr/bin/docker compose -f /home/jorge/dev/devjobs/downloader_telegram/docker-compose.yml stop ollama
+
+[Install]
+WantedBy=multi-user.target

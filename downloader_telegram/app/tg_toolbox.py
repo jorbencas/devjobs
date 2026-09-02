@@ -147,7 +147,7 @@ TIPOS_MEDIA = ["vídeo", "foto", "audio", "voice", "documento", "sticker", "gif"
                "encuesta", "contacto", "ubicación"]
 
 
-def styled_panel(content, title="", style=BG):
+def styled_panel(content, title="", style="blue"):
     return Panel(content, title=title, border_style=style, expand=True)
 
 
@@ -2820,12 +2820,12 @@ def _tesseract_ok():
     return shutil.which("tesseract") is not None
 
 
-def _buscar_caption_fotos(client, termino, limite=200):
+async def _buscar_caption_fotos(client, termino, limite=200):
     """Recorre los mensajes guardados ('me') y devuelve los que son FOTOS cuyo
     caption contiene el término. Devuelve lista de (msg, motivo)."""
     res = []
     try:
-        for msg in client.iter_messages("me", search=termino, filter=InputMessagesFilterPhotos,
+        async for msg in client.iter_messages("me", search=termino, filter=InputMessagesFilterPhotos,
                                         limit=limite, wait_time=2):
             if getattr(msg, "media", None) and isinstance(getattr(msg, "media", None), MessageMediaPhoto):
                 res.append((msg, "caption"))
@@ -2845,8 +2845,6 @@ def _ocr_de_imagen(ruta):
 
 
 async def _buscar_fotos_en_guardados(client):
-    console.print(styled_panel("[bold white]BUSCAR FOTOS EN GUARDADOS[/bold white]", title="🔎", style=BG))
-
     termino = inquirer.text("Texto a buscar (p. ej. 'apaches'):").execute().strip()
     if not termino:
         styled_warn("Sin texto de búsqueda.")
@@ -2866,20 +2864,9 @@ async def _buscar_fotos_en_guardados(client):
 
     styled_info(f"Buscando '{termino}' en 'Mensajes guardados'...")
 
-    # Cliente temporal con sesión separada para evitar SQLite lock
-    api_id, api_hash = cargar_credenciales()
-    tmp_session = str(tmp_dir / "buscar.session")
-    tmp_client = TelegramClient(tmp_session, api_id, api_hash)
-    await tmp_client.connect()
-    if not await tmp_client.is_user_authorized():
-        styled_warn("Sesión temporal no autorizada.")
-        await tmp_client.disconnect()
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        return
-
     try:
         if en_caption:
-            for msg, motivo in _buscar_caption_fotos(tmp_client, termino, limite):
+            for msg, motivo in await _buscar_caption_fotos(client, termino, limite):
                 resultados.append((msg, motivo))
 
         if por_ocr:
@@ -2889,14 +2876,14 @@ async def _buscar_fotos_en_guardados(client):
                 n = 0
                 skipped = 0
                 try:
-                    async for msg in tmp_client.iter_messages("me", filter=InputMessagesFilterPhotos,
+                    async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
                                                               limit=limite, wait_time=2):
                         n += 1
                         styled_info(f"  OCR: {n}/{limite}...")
                         if any(msg.id == m.id for m, _ in resultados):
                             continue
                         try:
-                            ruta = await tmp_client.download_media(msg, file=tmp_dir)
+                            ruta = await client.download_media(msg, file=tmp_dir)
                         except Exception:
                             skipped += 1
                             if skipped > 5:
@@ -2910,9 +2897,7 @@ async def _buscar_fotos_en_guardados(client):
                 except Exception as e:
                     styled_warn(f"Conexión perdida tras {n} fotos (skipped={skipped}): {e}")
     finally:
-        await tmp_client.disconnect()
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     if not resultados:
         styled_warn(f"No se encontró ninguna foto con '{termino}' (descripción u OCR).")
@@ -2973,8 +2958,6 @@ async def _confirmar_editable(client, msg_id):
 
 
 async def _editar_caption_guardados(client):
-    console.print(styled_panel("[bold white]EDITAR DESCRIPCIONES EN GUARDADOS[/bold white]",
-                               title="✏️", style=BG))
     styled_info("""
 Este módulo AÑADE texto a la descripción de un mensaje de 'Mensajes guardados',
 sin sustituir lo que ya tiene y sin descargar el archivo.
@@ -3363,9 +3346,12 @@ async def main():
     while True:
         console.clear()
         console.print()
-        console.print(styled_panel(
-            "[bold white]Telegram Toolbox[/bold white]\n[dim]Gestión: descargas · canales · foros · temas · subida[/dim]",
-            title="📦 TELEGRAM TOOLBOX", style=f"bold {FG}"))
+        console.print(Panel(
+            "[bold white]Telegram Toolbox[/bold white]\n"
+            "[bold green]Descargas · Canales · Foros · Temas · Subida[/bold green]",
+            title="📦 TELEGRAM TOOLBOX",
+            border_style="blue"
+        ))
         console.print()
         choice = inquirer.select(
             "Selecciona módulo:",

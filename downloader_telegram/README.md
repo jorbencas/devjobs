@@ -29,6 +29,7 @@
 
 - [Requisitos](#requisitos)
 - [Despliegue](#despliegue)
+- [Bot API interactivo](#bot-api-interactivo-telegram_botpy)
 - [Uploader a Telegram](#uploader-a-telegram-subir_videospy)
 - [CLI consolidada](#cli-consolidada-tg_toolboxpy)
 - [Estructura](#estructura)
@@ -70,6 +71,120 @@ source .venv/bin/activate
 pip install telethon mtranslate cryptography cryptg rich inquirerpy
 python test_download_protected_content_telegram.py
 ```
+
+---
+
+## 🤖 Bot API interactivo (`telegram_bot.py`)
+
+Bot de Telegram con **comandos**, **botones inline** y **respuestas IA por @mención**. Un solo bot que gestiona el pipeline, genera contenido IA y responde preguntas.
+
+### Características
+
+| Función | Detalle |
+|---|---|
+| 📡 Pipeline control | Ver estado, pausar/reanudar grabación, forzar subida, ver cola y logs |
+| 💡 Contenido IA | Tips de programación, conceptos con código, herramientas AI, saludos con imagen |
+| 🧠 Bot IA por @mención | Responde preguntas con Qwen 2.5 via Ollama (local) |
+| 📰 Noticias | Muestra las últimas noticias scrapeadas |
+| 🎨 Imágenes | Genera imágenes de saludo con Gemini AI |
+| ⬆️ Botones inline | Navegación por botones en cada respuesta |
+
+### Comandos disponibles
+
+| Comando | Descripción | Botones |
+|---|---|---|
+| `/start` | Mensaje de bienvenida | — |
+| `/ayuda` | Pantalla de ayuda completa | 🚀 Ver estado |
+| `/ping` | Comprobar conexión del bot | — |
+| `/status` | Estado del pipeline (grabando/comprimiendo/subiendo) | 🔄 Actualizar, 📋 Cola, 📝 Logs |
+| `/grabar @canal` | Forzar grabación de un canal | ⏸ Pausar, 📊 Estado |
+| `/pausar` | Pausar grabación | ▶️ Reanudar, 📊 Estado |
+| `/reanudar` | Reanudar grabación | 📊 Estado |
+| `/cola` | Ver archivos en cola (grabaciones + comprimidos) | 🔄 Actualizar, ⬆️ Subir primero |
+| `/subir` | Forzar subida de archivos pendientes | 🔄 Actualizar |
+| `/logs` | Últimos logs del pipeline | 🔄 Actualizar, 📊 Estado |
+| `/tip` | Tip de programación (Gemini + DB) | 🔄 Otro tip, 💡 Concepto, 🛠 Tool |
+| `/concepto` | Concepto con código de ejemplo | 🔄 Otro, 💡 Tip, 🛠 Tool |
+| `/tool` | Herramienta AI (Gemini + DB) | 🔄 Otro, 💡 Tip, 📖 Concepto |
+| `/saludo` | Imagen de saludo generada por IA | 🎨 Otro saludo |
+| `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
+
+### Bot IA por @mención
+
+En grupos, el bot responde cuando lo mencionas:
+
+```
+Usuario: @MiBot ¿qué es un closure?
+Bot: 🧠 Un closure es una función que...
+
+Usuario: @MiBot explícame Docker
+Bot: 🧠 Docker es una plataforma de...
+```
+
+Usa **Qwen 2.5 1.5B** via Ollama ( modelo local, sin coste de API).
+
+### Variables de entorno
+
+| Variable | Descripción | Default |
+|---|---|---|
+| `BOT_TOKEN` | Token del bot (de @BotFather) | **requerido** |
+| `GEMINI_API_KEY` | API key de Google Gemini | para tips/tools/saludos |
+| `BOT_ADMINS` | IDs de admins (separados por coma) | vacío |
+| `BOT_MENTION_MODE` | Activar respuestas por @mención | `true` |
+| `OLLAMA_URL` | URL de Ollama | `http://ollama:11434` |
+| `OLLAMA_MODEL` | Modelo de Ollama | `qwen2.5:1.5b` |
+| `PIPELINE_DATA` | Ruta a datos del pipeline | `/data` |
+| `TEST_GH_DIR` | Ruta a test_githubActions | `/data/test_githubActions` |
+
+### Arrancar el bot
+
+```bash
+cd downloader_telegram
+
+# Configurar variables
+export BOT_TOKEN="tu-token-de-BotFather"
+export GEMINI_API_KEY="tu-api-key"
+
+# Arrancar bot + Ollama
+docker compose up -d telegram_bot ollama
+
+# Ver logs
+docker compose logs -f telegram_bot
+```
+
+### Arquitectura
+
+```
+┌─────────────────────────────────────────────┐
+│         🤖 BOT API (python-telegram-bot)    │
+├─────────────────────────────────────────────┤
+│  📡 Pipeline control (status, grabar, etc)  │
+│  💡 Contenido IA (tips, tools, saludos)     │
+│  🧠 Bot IA por @mención (Qwen 2.5)         │
+│  📰 Noticias scrapeadas                     │
+└──────────┬──────────────┬──────────────────┘
+           │              │
+    Lee/escribe       Lee/escribe
+    status.json       scripts/
+           │              │
+           v              v
+┌──────────────────┐  ┌──────────────────┐
+│  Pipeline data   │  │ test_githubActions│
+│  /recordings/    │  │  scripts/         │
+│  /comprimidos/   │  │  utils/           │
+│  control.json    │  │  tips_database    │
+└──────────────────┘  └──────────────────┘
+```
+
+### IPC (Comunicación entre servicios)
+
+El bot se comunica con los servicios del pipeline via archivos JSON:
+
+- **`pipeline_status.json`**: Cada servicio (recorder, monitor, uploader) escribe su estado
+- **`pipeline_control.json`**: El bot escribe órdenes (pausar, reanudar, forzar)
+- **`pipeline_logs.json`**: Logs recientes de todos los servicios
+
+Esto permite que el bot controle el pipeline sin dependencias directas.
 
 ---
 
@@ -322,12 +437,14 @@ El servicio corre con `restart: unless-stopped`, vigila `/comprimidos` cada 60 s
 
 ### Docker y dos instancias sin conflicto
 
-El `docker-compose.yml` define dos servicios:
+El `docker-compose.yml` define cuatro servicios:
 
 | Servicio | Sesión | Uso |
 |---|---|---|
 | `telegram` | `sessions/tg_toolbox.session` | Cli interactivo (descargas manuales) |
 | `uploader` | `sessions/uploader.session` | Subida automática del pipeline |
+| `telegram_bot` | — | Bot API interactivo (comandos + @mención) |
+| `ollama` | — | Modelo local para respuestas IA |
 
 Cada uno monta su **propio** archivo de sesión, por lo que pueden ejecutarse simultáneamente sin pisarse.
 
@@ -662,6 +779,11 @@ downloader_telegram/
 │   ├── tg_toolbox.py                         # CLI unificada (menú interactivo)
 │   ├── cli_base.py                           # utilidades autónomas del CLI (credenciales, ruteo, subida)
 │   ├── subir_videos.py                       # uploader automático a grupos (pipeline)
+│   ├── telegram_bot.py                       # Bot API interactivo (comandos + botones + @mención)
+│   ├── bot_commands.py                       # Handlers de comandos (/status, /tip, etc.)
+│   ├── bot_callbacks.py                      # Handlers de botones inline
+│   ├── bot_inline_keyboards.py               # Teclados inline reutilizables
+│   ├── pipeline_bridge.py                    # IPC: status.json + control.json + logs.json
 │   ├── migrar_temas.py                       # migración de canales a temas de foros
 │   ├── gestion_canales.py                    # crear/archivar canales + temas + migrar/borrar
 │   └── test_download_protected_content_telegram.py  # descargador clásico (legacy)
@@ -675,7 +797,9 @@ downloader_telegram/
 │   └── uploader.session                      # sesión del daemon uploader
 ├── Descargas_Telegram/                       # (gitignored) carpeta de descargas del cli
 ├── Dockerfile                                # imagen Python + dependencias + ffmpeg
-├── docker-compose.yml                        # servicios telegram (cli) + uploader
+├── Dockerfile.bot                            # imagen del bot API
+├── docker-compose.yml                        # servicios telegram (cli) + uploader + bot + ollama
+├── requirements_bot.txt                      # dependencias del bot API
 ├── .env.example                              # plantilla de credenciales
 ├── LICENSE                                   # MIT
 └── README.md

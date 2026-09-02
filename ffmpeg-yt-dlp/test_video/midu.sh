@@ -2112,16 +2112,51 @@ confirmar_eliminacion_originales() {
             _mb=$((_sz / 1024 / 1024))
             printf '  %s)  %s  (%sMB)\n' "$((i + 1))" "${perm_list[$i]}" "$_mb"
         done
-        echo -e "  ${DIM}Elige los que quieras BORRAR (números separados por espacios, ej: 1 3 5).${NC}"
-        echo -e "  ${DIM}Enter = no borrar nada.${NC}"
-        read -rp "  ¿Eliminar? [números]: " sel </dev/tty
+        echo -e "  ${DIM}Elige los que quieras BORRAR:${NC}"
+        echo -e "  ${DIM}  • Rangos: 1-5${NC}"
+        echo -e "  ${DIM}  • Comas: 1,3,5${NC}"
+        echo -e "  ${DIM}  • 'all' o 'a' = borrar todos${NC}"
+        echo -e "  ${DIM}  • Enter = no borrar nada${NC}"
+        read -rp "  ¿Eliminar? [selección]: " sel </dev/tty
         if [[ -n "$sel" ]]; then
-            for n in $sel; do
-                if [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#perm_list[@]} )); then
-                    _target="${perm_list[n - 1]}"
-                    rm -f "$_target"
-                    echo -e "  ${CYAN}Eliminado: $_target${NC}"
-                fi
+            local to_delete=()
+            if [[ "${sel,,}" == "all" || "${sel,,}" == "a" ]]; then
+                to_delete=("${perm_list[@]}")
+            else
+                # Soporta: comas, rangos (1-5)
+                IFS=',' read -ra parts <<< "$sel"
+                for part in "${parts[@]}"; do
+                    part=$(echo "$part" | xargs)
+                    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                        local rstart="${BASH_REMATCH[1]}"
+                        local rend="${BASH_REMATCH[2]}"
+                        if (( rstart >= 1 && rend <= ${#perm_list[@]} && rstart <= rend )); then
+                            for ((j=rstart-1; j<rend; j++)); do
+                                to_delete+=("${perm_list[$j]}")
+                            done
+                        else
+                            echo -e "${RED}✗${NC} Rango $part fuera de rango"
+                        fi
+                    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+                        if (( part >= 1 && part <= ${#perm_list[@]} )); then
+                            to_delete+=("${perm_list[$((part - 1))]}")
+                        else
+                            echo -e "${RED}✗${NC} Número $part fuera de rango"
+                        fi
+                    fi
+                done
+            fi
+            # Eliminar duplicados y borrar
+            local seen=()
+            for _target in "${to_delete[@]}"; do
+                local skip=false
+                for _s in "${seen[@]+"${seen[@]}"}"; do
+                    [[ "$_s" == "$_target" ]] && skip=true && break
+                done
+                $skip && continue
+                seen+=("$_target")
+                rm -f "$_target"
+                echo -e "  ${CYAN}Eliminado: $_target${NC}"
             done
         else
             echo -e "  ${DIM}Nada eliminado. Originales conservados.${NC}"

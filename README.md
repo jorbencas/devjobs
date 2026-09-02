@@ -31,7 +31,7 @@ Repositorio de herramientas avanzadas para la gestión de activos digitales, aut
 | # | Herramienta | Descripción | Docker | README |
 |---|-------------|-------------|--------|--------|
 | 1 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir, comprimir | ✅ | [README](pdfmanager/README.md) |
-| 2 | `downloader_telegram/` | Descargador masivo, clonador y vigilante de Telegram | ✅ | [README](downloader_telegram/README.md) |
+| 2 | `downloader_telegram/` | Descargador masivo, clonador, vigilante y **bot API interactivo** | ✅ | [README](downloader_telegram/README.md) |
 | 3 | `hdfull-downloader/` | Descargador de películas HDFull con Docker + noVNC | ✅ | [README](hdfull-downloader/README.md) |
 | 4 | `TwitchRecorder/` | Grabador automático de directos de Twitch/YouTube/Kick | ✅ | [README](TwitchRecorder/README.md) |
 | 5 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo con ffmpeg + yt-dlp | ✅ | [README](ffmpeg-yt-dlp/README.md) |
@@ -95,13 +95,14 @@ tema/serie sin que tengas que hacer nada.
 > entrada del monitor). Si TwitchRecorder está parado vacía; al grabar un directo
 > se llena temporalmente hasta que el monitor la procesa.
 
-### Las 3 piezas
+### Las 3 piezas + Bot
 
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
 | 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
 | 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
 | 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
+| 🤖 Bot | `downloader_telegram/` | `telegram_bot` | Bot API interactivo: control del pipeline + contenido IA + respuestas por @mención |
 
 ### Arrancar el pipeline
 
@@ -109,6 +110,9 @@ tema/serie sin que tengas que hacer nada.
 cd TwitchRecorder && docker compose up -d twitchrecorder
 cd ../ffmpeg-yt-dlp && docker compose up -d monitor
 cd ../downloader_telegram && docker compose up -d uploader
+
+# Bot API interactivo (opcional)
+cd ../downloader_telegram && docker compose up -d telegram_bot ollama
 ```
 
 > **Aliases para controlarlo:** `bash servicios/instalar_aliases.sh && source ~/.bashrc`

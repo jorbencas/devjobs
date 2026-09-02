@@ -10,6 +10,7 @@
         3A. pdfmanager             3D. aula-downloader
         3B. downloader_telegram    3E. TwitchRecorder
         3C. hdfull-downloader      3F. ffmpeg-yt-dlp
+        3G. Bot API (telegram_bot + ollama)
   4. PIPELINE: directo sendo sama → Telegram (plogs, pipe_*)  [une 3 proyectos]
   5. PIPELINE vía SYSTEMD (auto-arranque al BOOT)
   6. MONTAR en otra máquina (Windows + WSL2)
@@ -26,6 +27,10 @@ Si un proyecto corre en 2 MODOS, cada modo tiene sus propios alias:
    *_logs / *_stop / *_restart   → instancia DAEMON (la de PRODUCCIÓN, 24/7)
    *_manual_*                    → instancia para PROBAR a mano (normalmente --rm)
    *_down                        → parar TODO el proyecto (ambas instancias)
+
+Si un proyecto tiene BOT API, tiene sus propios alias:
+   tg_bot / tg_bot_logs / tg_bot_stop / tg_bot_restart / tg_bot_rebuild
+   tg_bot_sys_start / tg_bot_sys_stop / tg_bot_sys_status
 
 Las herramientas MANUALES son CLIs interactivas (menú con teclado): se lanzan
 con `docker compose run --rm` (servicios con `stdin_open` + `tty`), así que
@@ -210,6 +215,65 @@ convierte `*_completed.mp4` → `*_compressed.mp4`.
 
 Notas: `ff_logs` es lo que pones para seguir la compresión del monitor.
 
+------------------------------------------------------------------------------
+3G. BOT API (telegram_bot + ollama)
+------------------------------------------------------------------------------
+Qué hace: Bot API interactivo con python-telegram-bot. Control del pipeline,
+contenido IA y respuestas por @mención con Qwen 2.5 vía Ollama.
+
+  Arrancar:
+    tg_bot               Arrancar bot + ollama
+    tg_bot_sys_start     Arrancar vía systemd (auto-arranque al boot)
+
+  Parar / reiniciar:
+    tg_bot_stop          Parar bot + ollama
+    tg_bot_restart       Reiniciar bot + ollama
+    tg_bot_sys_stop      Parar vía systemd
+    tg_bot_sys_status    Ver estado systemd
+
+  Rebuild (cambios en código):
+    tg_bot_rebuild       Rebuild imagen del bot + arrancar
+
+  Logs:
+    tg_bot_logs          Ver logs del bot en tiempo real
+
+  Comandos del bot en Telegram:
+    /start               Mensaje de bienvenida
+    /ayuda               Ayuda con botón 🚀
+    /ping                Latencia del bot
+    /status              Estado del pipeline (IPC vía JSON)
+    /grabar <kw>         Forzar grabación de un canal
+    /pausar              Pausar el pipeline
+    /reanudar            Reanudar el pipeline
+    /subir               Subir siguiente vídeo de la cola
+    /cola                Ver vídeos en cola
+    /logs                Ver logs recientes del pipeline
+    /tip                 Consejo aleatorio (15 categorías)
+    /concepto            Concepto de programación aleatorio
+    /tool                Herramienta/tech aleatoria
+    /saludo              Saludo personalizado
+    /noticias            Últimas noticias tech
+
+  @mención en grupos:
+    Si mencionas al bot en un grupo, responde con IA (Qwen 2.5 vía Ollama).
+
+  IPC (comunicación entre servicios):
+    El bot lee/escribe archivos JSON para comunicarse con el pipeline:
+      - pipeline_status.json  → estado actual (grabando, comprimiendo, etc.)
+      - pipeline_control.json → comandos (pausar, reanudar, etc.)
+      - pipeline_logs.json    → logs recientes
+    Los servicios del pipeline (recorder, monitor, uploader) actualizan estos
+    archivos; el bot los lee para mostrar el estado y enviar comandos.
+
+  Configuración (.env):
+    BOT_TOKEN=<token de @BotFather>
+    GEMINI_API_KEY=<clave API Gemini>
+    BOT_ADMINS=<user_id1,user_id2>  (opcional, para comandos restringidos)
+
+  Arranque automático (systemd):
+    El servicio telegram-bot.service arranca ollama + telegram_bot al boot.
+    Ver sección 5 para gestión vía systemd.
+
 ==============================================================================
   4. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM
 ==============================================================================
@@ -254,15 +318,24 @@ data/backups/            Grabaciones antiguas archivadas
 Los 3 daemons del pipeline (grabar → comprimir → subir) se levantan solos al
 encender el PC gracias al servicio systemd. Gestión (requiere sudo):
 
-sudo systemctl status   twitch-stream-pipeline.service   # estado
-sudo systemctl restart  twitch-stream-pipeline.service   # reiniciar
-sudo systemctl stop     twitch-stream-pipeline.service   # parar (hasta el boot)
-sudo systemctl disable  twitch-stream-pipeline.service   # quitar el auto-arranque
+sudo systemctl status   twitch-stream-pipeline.service   # estado del pipeline
+sudo systemctl restart  twitch-stream-pipeline.service   # reiniciar pipeline
+sudo systemctl stop     twitch-stream-pipeline.service   # parar pipeline
+sudo systemctl disable  twitch-stream-pipeline.service   # quitar auto-arranque
+
+El bot API también tiene su propio servicio systemd:
+sudo systemctl status   telegram-bot.service             # estado del bot
+sudo systemctl restart  telegram-bot.service             # reiniciar bot
+sudo systemctl stop     telegram-bot.service             # parar bot
+sudo systemctl disable  telegram-bot.service             # quitar auto-arranque
 
 Operación manual (alias de ~/.bashrc):
 pipe_sys_start        # Arrancar el pipeline
 pipe_sys_stop         # Parar todo
 pipe_sys_status       # Ver estado
+tg_bot_sys_start      # Arrancar el bot
+tg_bot_sys_stop       # Parar el bot
+tg_bot_sys_status     # Ver estado del bot
 
 # Nota: tras pipe_recreate/pipe_up los contenedores ya están arriba; systemctl
 # solo es una alternativa para gestionarlos. Detalle del servicio: ver README.md.
@@ -335,6 +408,9 @@ pipe_sys_status       # Ver estado
    - Ver los logs de los 3 servicios:  plogs
    - Si no hay sesión de Telegram:     bash servicios/pipe_setup.sh
      (pide teléfono + código de verificación, SOLO la primera vez)
+   - Arrancar el bot:                  tg_bot
+     (o con systemd:                   sudo systemctl start telegram-bot.service)
+   - Configurar el bot:                editar .env en downloader_telegram/ con BOT_TOKEN + GEMINI_API_KEY
    - Ver los vídeos generados en Windows:
      \\wsl$\<distro>\<tu_devjobs>\Videos\comprimidos
 

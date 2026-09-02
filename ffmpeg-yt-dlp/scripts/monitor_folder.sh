@@ -27,6 +27,12 @@ CORTE_MARGEN="${CORTE_MARGEN:-300}"
 DIRECTO_COMPLETO="${DIRECTO_COMPLETO:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# IPC para comunicación con el bot de Telegram
+PIPELINE_DATA="${PIPELINE_DATA:-/data}"
+if [[ -f "$SCRIPT_DIR/pipeline_ipc.sh" ]]; then
+    source "$SCRIPT_DIR/pipeline_ipc.sh"
+fi
+
 # Extensiones de vídeo soportadas
 VIDEO_EXTENSIONS="mp4|mkv|avi|mov|webm|flv|ts|m4v|mpg|mpeg"
 
@@ -64,6 +70,12 @@ compress_video() {
     local tmp_output="${output}.tmp"
 
     log "${CYAN}Comprimiendo:${NC} $filename"
+
+    # IPC: notificar al bot que estamos comprimiendo
+    if type ipc_update_status &>/dev/null; then
+        ipc_update_status monitor status=compressing file="$filename" started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        ipc_append_log monitor "Comprimiendo $filename"
+    fi
 
     # Detectar episodios para recortar extremos y guardar metadata para el uploader
     local det_json="${OUTPUT_DIR}/${name}_episodios.json"
@@ -229,6 +241,12 @@ compress_video() {
 
         log "${GREEN}✓${NC} $filename → ${output_mb}MB (-${savings}%)"
 
+        # IPC: notificar al bot que terminamos
+        if type ipc_remove_status &>/dev/null; then
+            ipc_remove_status monitor
+            ipc_append_log monitor "Compresión completada: $filename → ${output_mb}MB (-${savings}%)"
+        fi
+
         # Mover original a carpeta procesados
         mkdir -p "$PROCESSED_DIR"
         mv "$input" "$PROCESSED_DIR/$filename"
@@ -305,6 +323,12 @@ log "CRF: $CRF | Preset: $PRESET | Códec: $CODEC"
 log "Polling cada ${POLL_INTERVAL}s"
 log "Presiona Ctrl+C para detener"
 echo ""
+
+# IPC: notificar al bot que el monitor está activo
+if type ipc_update_status &>/dev/null; then
+    ipc_update_status monitor status=idle started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ipc_append_log monitor "Monitor de vídeo iniciado"
+fi
 
 # Procesar vídeos existentes primero
 log "Procesando vídeos existentes..."
