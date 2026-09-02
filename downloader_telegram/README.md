@@ -76,15 +76,15 @@ python test_download_protected_content_telegram.py
 
 ## 🤖 Bot API interactivo (`telegram_bot.py`)
 
-Bot de Telegram con **comandos**, **botones inline** y **respuestas IA por @mención**. Un solo bot que gestiona el pipeline, genera contenido IA y responde preguntas.
+Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. Un solo bot que genera contenido IA y descarga vídeos de cualquier plataforma.
 
 ### Características
 
 | Función | Detalle |
 |---|---|
-| 📡 Pipeline control | Ver estado, pausar/reanudar grabación, forzar subida, ver cola y logs |
 | 💡 Contenido IA | Tips de programación, conceptos con código, herramientas AI, saludos con imagen |
-| 🧠 Bot IA por @mención | Responde preguntas con Qwen 2.5 via Ollama (local) |
+| 📥 Descarga vídeos | Descarga de cualquier plataforma via yt-dlp (YouTube, Twitch, etc.) |
+| 🎬 Conversión automática | Convierte a MP4 H.264/AAC, genera thumbnail, envía como vídeo |
 | 📰 Noticias | Muestra las últimas noticias scrapeadas |
 | 🎨 Imágenes | Genera imágenes de saludo con Gemini AI |
 | ⬆️ Botones inline | Navegación por botones en cada respuesta |
@@ -94,34 +94,36 @@ Bot de Telegram con **comandos**, **botones inline** y **respuestas IA por @menc
 | Comando | Descripción | Botones |
 |---|---|---|
 | `/start` | Mensaje de bienvenida | — |
-| `/ayuda` | Pantalla de ayuda completa | 🚀 Ver estado |
+| `/ayuda` | Pantalla de ayuda completa | — |
 | `/ping` | Comprobar conexión del bot | — |
-| `/status` | Estado del pipeline (grabando/comprimiendo/subiendo) | 🔄 Actualizar, 📋 Cola, 📝 Logs |
-| `/grabar @canal` | Forzar grabación de un canal | ⏸ Pausar, 📊 Estado |
-| `/pausar` | Pausar grabación | ▶️ Reanudar, 📊 Estado |
-| `/reanudar` | Reanudar grabación | 📊 Estado |
-| `/cola` | Ver archivos en cola (grabaciones + comprimidos) | 🔄 Actualizar, ⬆️ Subir primero |
-| `/subir` | Forzar subida de archivos pendientes | 🔄 Actualizar |
-| `/logs` | Últimos logs del pipeline | 🔄 Actualizar, 📊 Estado |
 | `/tip` | Tip de programación (Gemini + DB) | 🔄 Otro tip, 💡 Concepto, 🛠 Tool |
 | `/concepto` | Concepto con código de ejemplo | 🔄 Otro, 💡 Tip, 🛠 Tool |
 | `/tool` | Herramienta AI (Gemini + DB) | 🔄 Otro, 💡 Tip, 📖 Concepto |
 | `/saludo` | Imagen de saludo generada por IA | 🎨 Otro saludo |
 | `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
+| `/descarga URL` | Descargar vídeo de cualquier plataforma | — |
+| `/download URL` | Alias de /descarga | — |
 
-### Bot IA por @mención
+### Descarga de vídeos
 
-En grupos, el bot responde cuando lo mencionas:
+El bot descarga vídeos de cualquier plataforma soportada por yt-dlp:
 
 ```
-Usuario: @MiBot ¿qué es un closure?
-Bot: 🧠 Un closure es una función que...
-
-Usuario: @MiBot explícame Docker
-Bot: 🧠 Docker es una plataforma de...
+Usuario: /descarga https://www.youtube.com/watch?v=...
+Bot: 📥 Descargando...
+Bot: 🎬 [Vídeo enviado con thumbnail]
 ```
 
-Usa **Qwen 2.5 1.5B** via Ollama ( modelo local, sin coste de API).
+**Flujo:**
+1. Descarga el vídeo con yt-dlp
+2. Convierte a MP4 H.264/AAC (compatible con Telegram)
+3. Genera thumbnail
+4. Envía como vídeo con preview
+5. Elimina el archivo local
+
+**Funciona en:**
+- Chat privado: envía cualquier URL
+- Grupos: menciona al bot con una URL (`@jorbencas_bot URL`)
 
 ### Variables de entorno
 
@@ -130,11 +132,8 @@ Usa **Qwen 2.5 1.5B** via Ollama ( modelo local, sin coste de API).
 | `BOT_TOKEN` | Token del bot (de @BotFather) | **requerido** |
 | `GEMINI_API_KEY` | API key de Google Gemini | para tips/tools/saludos |
 | `BOT_ADMINS` | IDs de admins (separados por coma) | vacío |
-| `BOT_MENTION_MODE` | Activar respuestas por @mención | `true` |
-| `OLLAMA_URL` | URL de Ollama | `http://ollama:11434` |
-| `OLLAMA_MODEL` | Modelo de Ollama | `qwen2.5:1.5b` |
-| `PIPELINE_DATA` | Ruta a datos del pipeline | `/data` |
-| `TEST_GH_DIR` | Ruta a test_githubActions | `/data/test_githubActions` |
+| `TEST_GH_DIR` | Ruta a test_githubActions | `/data/.test_githubActions` |
+| `DOWNLOAD_DIR` | Ruta de descargas | `/data/descargas` |
 
 ### Arrancar el bot
 
@@ -145,8 +144,8 @@ cd downloader_telegram
 export BOT_TOKEN="tu-token-de-BotFather"
 export GEMINI_API_KEY="tu-api-key"
 
-# Arrancar bot + Ollama
-docker compose up -d telegram_bot ollama
+# Arrancar bot
+docker compose up -d telegram_bot
 
 # Ver logs
 docker compose logs -f telegram_bot
@@ -158,33 +157,22 @@ docker compose logs -f telegram_bot
 ┌─────────────────────────────────────────────┐
 │         🤖 BOT API (python-telegram-bot)    │
 ├─────────────────────────────────────────────┤
-│  📡 Pipeline control (status, grabar, etc)  │
 │  💡 Contenido IA (tips, tools, saludos)     │
-│  🧠 Bot IA por @mención (Qwen 2.5)         │
+│  📥 Descarga vídeos (yt-dlp + ffmpeg)       │
 │  📰 Noticias scrapeadas                     │
 └──────────┬──────────────┬──────────────────┘
            │              │
     Lee/escribe       Lee/escribe
-    status.json       scripts/
+    descargas/        scripts/
            │              │
            v              v
 ┌──────────────────┐  ┌──────────────────┐
-│  Pipeline data   │  │ test_githubActions│
-│  /recordings/    │  │  scripts/         │
-│  /comprimidos/   │  │  utils/           │
-│  control.json    │  │  tips_database    │
+│  Descargas bot   │  │ test_githubActions│
+│  *.mp4           │  │  scripts/         │
+│                  │  │  utils/           │
+│                  │  │  tips_database    │
 └──────────────────┘  └──────────────────┘
 ```
-
-### IPC (Comunicación entre servicios)
-
-El bot se comunica con los servicios del pipeline via archivos JSON:
-
-- **`pipeline_status.json`**: Cada servicio (recorder, monitor, uploader) escribe su estado
-- **`pipeline_control.json`**: El bot escribe órdenes (pausar, reanudar, forzar)
-- **`pipeline_logs.json`**: Logs recientes de todos los servicios
-
-Esto permite que el bot controle el pipeline sin dependencias directas.
 
 ---
 
