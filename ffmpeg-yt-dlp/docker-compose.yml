@@ -26,8 +26,8 @@ services:
       bash /app/scripts/monitor_folder.sh --completed-only --codec libx264 -c 23 -p medium -t 4 /watch"
     volumes:
       - ./:/app
-      - ../data/grabaciones/test:/watch
-      - ../data/comprimidos:/comprimidos
+      - ../data/pipeline/grabaciones/test:/watch
+      - ../data/pipeline/comprimidos:/comprimidos
     environment:
       - OUTPUT_DIR=/comprimidos
       - POLL_INTERVAL=30

@@ -48,7 +48,7 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 │ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
 │  (grabar)     │    mover a test/  │  monitor *720p*    │      a 720p         │  uploader (subir) │
 └──────────────┘                    └──────────────────┘                      └──────────────────┘
-   data/grabaciones/test/          data/comprimidos/                          N grupos
+   data/pipeline/grabaciones/      data/pipeline/comprimidos/                    N grupos
 ```
 
 ### Flujo completo (paso a paso)
@@ -60,7 +60,7 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 2. **Keyword** — lee el **título/descripción** del directo y lo incrusta en el
    nombre: `sendosama_2026-08-13_20-15-00_KW_<keyword>_completed.mp4`. La keyword
    viaja intacta por todo el pipeline.
-3. **Cola de espera** (`data/grabaciones/test/`): si `copy_to_test: true`, al
+3. **Cola de espera** (`data/pipeline/grabaciones/test/`): si `copy_to_test: true`, al
    terminar el directo TwitchRecorder **mueve** la grabación a esta carpeta como
    `*_completed.mp4`. Es el punto de entrada del compresor.
    *(Sidecar opcional `*_descripcion.json`: describe la fuente; ver "Configuración
@@ -68,9 +68,9 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 4. **Comprimir** — `ffmpeg-yt-dlp` (`monitor`) vigila esa carpeta cada 30 s,
    detecta los `*_completed.mp4` y los convierte a **720p** (con garantía <2 GB).
    Detecta episodios por OCR (genera `*_episodios.json` con el caption) y deja el
-   resultado como `*_compressed.mp4` en `data/comprimidos/`, moviendo el original
+   resultado como `*_compressed.mp4` en `data/pipeline/comprimidos/`, moviendo el original
    a `comprimidos/.processed`.
-5. **Subir** — `downloader_telegram` (`uploader`) vigila `data/comprimidos/` y
+5. **Subir** — `downloader_telegram` (`uploader`) vigila `data/pipeline/comprimidos/` y
    por cada `*_compressed.mp4` no enviado extrae el **canal** y la **keyword**,
    elige el destino (tema de foro por canal/keyword, o grupo), sube el vídeo con
    su caption, y al terminar **borra todo el residuo** (el `.mp4`, el sidecar
@@ -82,15 +82,32 @@ tema/serie sin que tengas que hacer nada.
 
 ### Carpetas del pipeline
 
+```
+data/
+├── pipeline/                    ← Pipeline (grabación → compresión → subida)
+│   ├── grabaciones/2026/        Grabaciones en bruto por fecha
+│   ├── grabaciones/test/        Cola de espera *_completed.mp4
+│   ├── comprimidos/             *_compressed.mp4 listos
+│   ├── comprimidos/.processed/  Originales ya comprimidos
+│   ├── partes/                  Partes divididas (>2GB)
+│   └── backups/                 Backups de config del CLI
+├── jorbencas_bot/               ← Bot de Telegram
+│   ├── .test_githubActions/     Código AI (tips, tools, noticias)
+│   └── *.mp4                    Descargas del bot (yt-dlp)
+```
+
 | Carpeta | Contenido | Quién escribe / lee |
 |---|---|---|
-| `data/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder` escribe |
-| `data/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder` escribe / `monitor` lee |
-| `data/comprimidos/` | `*_compressed.mp4` listos | `monitor` escribe / `uploader` lee |
-| `data/comprimidos/.processed/` | Originales ya comprimidos | `monitor` escribe / `uploader` limpia tras subir |
-| `data/backups/` | Backups de config del CLI | `tg_toolbox.py` (export/import) |
+| `data/pipeline/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder` escribe |
+| `data/pipeline/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder` escribe / `monitor` lee |
+| `data/pipeline/comprimidos/` | `*_compressed.mp4` listos | `monitor` escribe / `uploader` lee |
+| `data/pipeline/comprimidos/.processed/` | Originales ya comprimidos | `monitor` escribe / `uploader` limpia tras subir |
+| `data/pipeline/partes/` | Partes divididas (>2GB) | `uploader` lee / `monitor` divide |
+| `data/pipeline/backups/` | Backups de config del CLI | `tg_toolbox.py` (export/import) |
+| `data/jorbencas_bot/` | Descargas del bot (`/descarga`) | `telegram_bot` escribe |
+| `data/jorbencas_bot/.test_githubActions/` | Código AI (tips, tools, noticias) | `telegram_bot` lee |
 
-> **Detalle:** la carpeta `test/` es solo la **bandeja de espera** entre el
+> **Detalle:** la carpeta `grabaciones/test/` es solo la **bandeja de espera** entre el
 > recorder y el compresor (ficamos claros: no es para probar nada, es el punto de
 > entrada del monitor). Si TwitchRecorder está parado vacía; al grabar un directo
 > se llena temporalmente hasta que el monitor la procesa.
@@ -100,7 +117,7 @@ tema/serie sin que tengas que hacer nada.
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
 | 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
-| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
+| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `pipeline/comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
 | 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
 | 🤖 Bot | `downloader_telegram/` | `telegram_bot` | Bot API interactivo: control del pipeline + contenido IA + respuestas por @mención |
 

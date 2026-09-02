@@ -13,7 +13,7 @@ services:
       - ./config/enviados.json:/app/config/enviados.json
       - ./sessions/tg_menu.session:/app/sessions/tg_menu.session
       - ./Descargas_Telegram:/app/Descargas_Telegram
-      - ../data/comprimidos:/comprimidos
+      - ../data/pipeline/comprimidos:/comprimidos
     environment:
       - TG_TOOLBOX_SESION=/app/sessions/tg_menu.session
     stdin_open: true
@@ -34,8 +34,8 @@ services:
       - ./config/enviados.json:/app/config/enviados.json
       - ./sessions/tg_toolbox.session:/app/sessions/tg_toolbox.session
       - ./sessions/uploader.session:/app/sessions/uploader.session
-      - ../data/partes:/app/partes
-      - ../data/comprimidos:/comprimidos
+      - ../data/pipeline/partes:/app/partes
+      - ../data/pipeline/comprimidos:/comprimidos
     environment:
       UPLOADER_INTERVALO: "60"
       UPLOADER_FORWARD_CHANNEL: "-1004359591062"
@@ -53,12 +53,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./app:/app/app
-      - /home/jorge/dev/test_githubActions:/data/test_githubActions
-      - /home/jorge/dev/devjobs/data/descargas:/data/descargas
+      - /home/jorge/dev/test_githubActions:/data/.test_githubActions
+      - /home/jorge/dev/devjobs/data/jorbencas_bot:/data/descargas
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - BOT_ADMINS=${BOT_ADMINS}
-      - TEST_GH_DIR=/data/test_githubActions
+      - TEST_GH_DIR=/data/.test_githubActions
       - DOWNLOAD_DIR=/data/descargas
     command: python -u /app/app/telegram_bot.py

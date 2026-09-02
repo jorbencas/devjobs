@@ -25,6 +25,8 @@ from telegram.ext import (
 # ── Config ──
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BOT_ADMINS = [int(x) for x in os.environ.get("BOT_ADMINS", "").split(",") if x.strip()]
+DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "/data/descargas"))
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -110,8 +112,47 @@ def main():
                 "Envíame una URL con /descarga o mencíoname con una URL para descargarla."
             )
 
+    async def handle_mention_edited(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Responde cuando un mensaje editado contiene @mención con URL."""
+        if not update.edited_message or not update.edited_message.text:
+            return
+        text = update.edited_message.text
+        bot_username = context.bot.username
+        if f"@{bot_username}" not in text:
+            return
+        url = extract_url(text)
+        if url:
+            # Crear un objeto update simulado para reutilizar cmd_descarga
+            class FakeUpdate:
+                def __init__(self, msg):
+                    self.message = msg
+            fake_update = FakeUpdate(update.edited_message)
+            await cmd_descarga(fake_update, context, url=url)
+
+    # ── Filtros y handlers ──
     mention_filter = filters.Entity("mention") & filters.ChatType.GROUPS
+
+    # 1. Mensajes editados con @mención en grupos (más específico)
+    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE & mention_filter, handle_mention_edited))
+
+    # 2. Mensajes reenviados con @mención en grupos
+    app.add_handler(MessageHandler(mention_filter & filters.FORWARDED, handle_mention_with_url))
+
+    # 3. Mensajes normales con @mención en grupos
     app.add_handler(MessageHandler(mention_filter, handle_mention_with_url))
+
+    # 4. En privado: cualquier mensaje con URL se descarga directamente
+    async def handle_private_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """En privado, si el mensaje contiene una URL, la descarga."""
+        if not update.message or not update.message.text:
+            return
+        if update.message.text.startswith("/"):
+            return  # Ignorar comandos
+        url = extract_url(update.message.text)
+        if url:
+            await cmd_descarga(update, context, url=url)
+
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_private_url))
 
     # ── Iniciar polling ──
     logger.info("Bot listo. Polling...")

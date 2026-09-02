@@ -42,6 +42,89 @@ def extract_url(text: str) -> str | None:
     return match.group(0) if match else None
 
 
+def get_video_duration(file_path: Path) -> float:
+    """Obtiene la duración del vídeo en segundos con ffprobe."""
+    try:
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "csv=p=0",
+            str(file_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return float(result.stdout.strip())
+    except Exception:
+        return 0.0
+
+
+def compress_for_telegram(input_path: Path, output_dir: Path, max_size_mb: int = 50) -> dict:
+    """Comprime vídeo para Telegram igual que el monitor (CRF 28, 2 pasadas si hace falta)."""
+    file_size_mb = input_path.stat().st_size / (1024 * 1024)
+
+    output_path = output_dir / f"{input_path.stem}_tele.mp4"
+    tmp_path = output_dir / f"{input_path.stem}_tele.mp4.tmp"
+
+    # Obtener duración
+    duration = get_video_duration(input_path)
+
+    # ffmpeg args iguales al monitor: CRF 28, fast, solo v+1er audio
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(input_path),
+        "-c:v", "libx264", "-crf", "28", "-preset", "fast",
+        "-c:a", "aac", "-b:a", "128k",
+        "-map", "0:v:0", "-map", "0:a:0",
+        "-map_metadata", "0",
+        "-movflags", "+faststart",
+        "-f", "mp4",
+        str(tmp_path)
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+
+    if result.returncode != 0 or not tmp_path.exists():
+        if tmp_path.exists():
+            tmp_path.unlink()
+        return {"success": True, "file": str(input_path)}
+
+    # Si pesa más de max_size_mb, 2 pasadas
+    tmp_size = tmp_path.stat().st_size
+    max_bytes = max_size_mb * 1024 * 1024
+    if tmp_size > max_bytes and duration > 0:
+        # Calcular bitrate para caber
+        audio_bps = 128000
+        audio_bytes = int(duration * audio_bps / 8)
+        video_bytes = max_bytes - audio_bytes
+        video_bps = int(video_bytes * 8 / duration)
+        if video_bps > 0:
+            # Pasada 1
+            subprocess.run([
+                "ffmpeg", "-y", "-i", str(input_path),
+                "-c:v", "libx264", "-b:v", str(video_bps),
+                "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
+            ], capture_output=True, timeout=1800)
+            # Pasada 2
+            subprocess.run([
+                "ffmpeg", "-y", "-i", str(input_path),
+                "-c:v", "libx264", "-b:v", str(video_bps),
+                "-preset", "fast", "-pass", "2",
+                "-c:a", "aac", "-b:a", "128k",
+                "-map", "0:v:0", "-map", "0:a:0",
+                "-map_metadata", "0",
+                "-movflags", "+faststart",
+                "-f", "mp4", str(tmp_path)
+            ], capture_output=True, timeout=1800)
+            # Limpiar logs de 2 pasadas
+            for f in Path(".").glob("ffmpeg2pass-*.log*"):
+                f.unlink(missing_ok=True)
+
+    # Renombrar tmp → final
+    tmp_path.rename(output_path)
+    new_size = output_path.stat().st_size / (1024 * 1024)
+
+    return {"success": True, "file": str(output_path), "new_size": new_size}
+
+
 def download_with_ytdlp(url: str, output_dir: Path) -> dict:
     """Descarga un vídeo con yt-dlp. Devuelve {success, file, error}."""
     try:
@@ -94,9 +177,10 @@ async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 @jorbencas_bot\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "📥 DESCARGAS\n"
-        "  /descarga URL — Descargar vídeo de cualquier web\n"
+        "  /descarga URL — Descargar y comprimir para Telegram\n"
         "  /download URL — Igual que /descarga\n"
-        "  También puedes mencionarme con una URL\n\n"
+        "  También puedes mencionarme con una URL\n"
+        "  En privado, envía directamente una URL\n\n"
         "💡 CONTENIDO\n"
         "  /tip — Tip de programación\n"
         "  /concepto — Concepto con código\n"
@@ -106,7 +190,7 @@ async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚙️ UTILIDADES\n"
         "  /ping — Comprobar conexión\n"
         "  /ayuda — Esta pantalla\n\n"
-        "💡 Tip: Usa los botones para navegar"
+        "💡 Tip: Los vídeos >50MB se comprimen automáticamente"
     )
     await update.message.reply_text(text, reply_markup=kb_help())
 
@@ -148,18 +232,50 @@ async def cmd_descarga(update: Update, context: ContextTypes.DEFAULT_TYPE, url: 
         if result["success"]:
             file_path = Path(result["file"])
             file_size = file_path.stat().st_size / (1024 * 1024)
+
+            # Si es vídeo, comprimir para Telegram (siempre)
+            if file_path.suffix in ('.mp4', '.mkv', '.webm'):
+                await status_msg.edit_text(
+                    f"⬇️ Descargado: {file_size:.1f} MB\n"
+                    f"⚙️ Convirtiendo para Telegram..."
+                )
+                compress_result = await asyncio.get_event_loop().run_in_executor(
+                    None, compress_for_telegram, file_path, DOWNLOAD_DIR, 50
+                )
+                if compress_result["success"]:
+                    file_path = Path(compress_result["file"])
+                    file_size = file_path.stat().st_size / (1024 * 1024)
+
             await status_msg.edit_text(
                 f"✅ Descarga completada\n"
                 f"📁 {file_path.name}\n"
                 f"📊 {file_size:.1f} MB"
             )
-            # Enviar el archivo
+            # Enviar como vídeo con thumbnail
+            thumb_path = file_path.parent / f"{file_path.stem}_thumb.jpg"
+            thumb_bytes = None
+            try:
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", str(file_path),
+                    "-ss", "00:00:01", "-vframes", "1",
+                    "-vf", "scale=320:-1",
+                    str(thumb_path)
+                ], capture_output=True, timeout=30)
+                if thumb_path.exists():
+                    thumb_bytes = thumb_path.read_bytes()
+                    thumb_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
             with open(file_path, "rb") as f:
-                await update.message.reply_document(
-                    document=f,
-                    filename=file_path.name,
-                    caption=f"📥 {file_path.name}"
-                )
+                kwargs = {
+                    "video": f,
+                    "filename": file_path.name,
+                    "caption": f"📥 {file_path.name}"
+                }
+                if thumb_bytes:
+                    kwargs["thumbnail"] = thumb_bytes
+                await update.message.reply_video(**kwargs)
             # Borrar archivo local después de enviar
             file_path.unlink(missing_ok=True)
         else:

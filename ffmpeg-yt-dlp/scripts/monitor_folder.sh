@@ -6,8 +6,8 @@
 set -e
 
 # ── Configuración ────────────────────────────────────────────────────
-WATCH_DIR="${1:-$HOME/data/grabaciones/test}"
-OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/comprimidos}"
+WATCH_DIR="${1:-$HOME/data/pipeline/grabaciones/test}"
+OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
 LOG_FILE="$OUTPUT_DIR/log_$(date +%Y-%m-%d).txt"
 PROCESSED_DIR="$OUTPUT_DIR/.processed"
 CRF="${CRF:-28}"
@@ -277,7 +277,7 @@ show_help() {
     echo "Uso: $0 [opciones] [carpeta_a_vigilar]"
     echo ""
     echo "Opciones:"
-    echo "  -o, --output DIR     Directorio de salida (default: ~/data/comprimidos)"
+    echo "  -o, --output DIR     Directorio de salida (default: ~/data/pipeline/comprimidos)"
     echo "  -c, --crf VALUE      Calidad CRF (default: 28, menor = mejor)"
     echo "  -p, --preset NAME    Preset de velocidad (default: fast)"
     echo "  --codec NAME         Códec de vídeo (default: libx264)"
