@@ -1,10 +1,10 @@
 #!/bin/bash
 # Muestra los contenedores ACTIVOS, separando los del pipeline del resto.
-# Pipeline: twitchrecorder | ffmpeg_monitor | telegram-uploader
+# Pipeline: twitchrecorder-sendo | ffmpeg_monitor-sendo | telegram-uploader-sendo
 # Uso:  bash servicios/pipe_ps.sh   (o un alias)
 set -euo pipefail
 
-PIPELINE="twitchrecorder|ffmpeg_monitor|telegram-uploader"
+PIPELINE="twitchrecorder-sendo|ffmpeg_monitor-sendo|telegram-uploader-sendo"
 
 if ! docker info >/dev/null 2>&1; then
     echo "[!] El daemon de Docker no está corriendo."
@@ -27,7 +27,7 @@ linea() {
 
 echo "================ PIPELINE (grabar -> comprimir -> subir) ================"
 printf "%-20s %-9s %s\n" "NOMBRE" "ESTADO" "INFO"
-for c in twitchrecorder ffmpeg_monitor telegram-uploader; do
+for c in twitchrecorder-sendo ffmpeg_monitor-sendo telegram-uploader-sendo; do
     if docker ps -a --filter "name=^/${c}$" --format '{{.Names}}' | grep -q .; then
         linea "$c"
     else

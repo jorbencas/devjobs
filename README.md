@@ -53,7 +53,7 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 
 ### Flujo completo (paso a paso)
 
-1. **Grabar** — `TwitchRecorder` (`twitchrecorder`) comprueba si el canal está en
+1. **Grabar** — `TwitchRecorder` (`twitchrecorder-sendo`) comprueba si el canal está en
    directo (según `config.json`) y graba con calidad original. Si el canal define
    varias fuentes, coge la primera que esté online. Si cambia de plataforma a
    medio directo (p. ej. Twitch→Kick), concatena las partes en un solo archivo.
@@ -98,8 +98,8 @@ data/
 
 | Carpeta | Contenido | Quién escribe / lee |
 |---|---|---|
-| `data/pipeline/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder` escribe |
-| `data/pipeline/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder` escribe / `monitor` lee |
+| `data/pipeline/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder-sendo` escribe |
+| `data/pipeline/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder-sendo` escribe / `monitor` lee |
 | `data/pipeline/comprimidos/` | `*_compressed.mp4` listos | `monitor` escribe / `uploader` lee |
 | `data/pipeline/comprimidos/.processed/` | Originales ya comprimidos | `monitor` escribe / `uploader` limpia tras subir |
 | `data/pipeline/partes/` | Partes divididas (>2GB) | `uploader` lee / `monitor` divide |
@@ -116,7 +116,7 @@ data/
 
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
-| 1. Grabar | `TwitchRecorder/` | `twitchrecorder` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
+| 1. Grabar | `TwitchRecorder/` | `twitchrecorder-sendo` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
 | 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `pipeline/comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
 | 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
 | 🤖 Bot | `downloader_telegram/` | `telegram_bot` | Bot API interactivo: control del pipeline + contenido IA + respuestas por @mención |
@@ -136,7 +136,7 @@ cd ../downloader_telegram && docker compose up -d telegram_bot ollama
 > instala dos bloques idempotentes: el del pipeline (`plogs`, `pipe_up/down/ps`,
 > `pipe_recreate/rebuild`, etc.) y uno **por-proyecto**. Regla: `pipe_*` =
 > los 3 daemons del pipeline a la vez; `*_logs`/`*_stop`/`*_restart` = daemon
-> individual (p. ej. `ff_logs` para el `ffmpeg_monitor`, `ff_stop` para pararlo);
+> individual (p. ej. `ff_logs` para el `ffmpeg_monitor-sendo`, `ff_stop` para pararlo);
 > `*_manual_*` = la versión para probar a mano. La lista completa está en
 > `docker_help.txt` (sección 3 y 4).
 

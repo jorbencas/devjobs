@@ -359,17 +359,17 @@ crear/archivar canales, crear temas y migrar contenido:
 
 ```bash
 # Crear un canal privado con foro (temas) y archivarlo
-docker exec telegram-uploader python /app/gestion_canales.py --crear-canal "micanal" --foro
-docker exec telegram-uploader python /app/gestion_canales.py --archivar -100999888777
+docker exec telegram-uploader-sendo python /app/gestion_canales.py --crear-canal "micanal" --foro
+docker exec telegram-uploader-sendo python /app/gestion_canales.py --archivar -100999888777
 
 # Crear temas en el foro
-docker exec telegram-uploader python /app/gestion_canales.py --crear-temas=-100999888777:"General,serie1,serie2"
+docker exec telegram-uploader-sendo python /app/gestion_canales.py --crear-temas=-100999888777:"General,serie1,serie2"
 
 # Re-subida (sin borrar) de un canal origen a un tema de un foro concreto
-docker exec telegram-uploader python /app/gestion_canales.py --migrar=-100999888777:123:-100111222333
+docker exec telegram-uploader-sendo python /app/gestion_canales.py --migrar=-100999888777:123:-100111222333
 
 # Borrar un canal (pide confirmación)
-docker exec telegram-uploader python /app/gestion_canales.py --borrar-canal=-100111222333
+docker exec telegram-uploader-sendo python /app/gestion_canales.py --borrar-canal=-100111222333
 ```
 
 **Migración:** el primer canal `midu`/`mouredev` se sustituyó por el foro

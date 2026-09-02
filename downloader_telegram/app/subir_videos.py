@@ -882,6 +882,184 @@ async def run_create_topics(api_id, api_hash, grupo, titulos):
     await client.disconnect()
 
 
+async def run_delete_videos(api_id, api_hash, grupo, topic_ids=None, dry_run=False, channel_filter=None, force=False):
+    """Elimina todos los mensajes de vídeo de un grupo (o de topics específicos).
+
+    Flujo de seguridad:
+      1. Primer escaneo: lista todos los videos sin eliminar nada
+      2. Pide confirmación numérica al usuario (cantidad exacta)
+      3. Segunda confirmación: "ESCRIBE EL NÚMERO para confirmar"
+      4. Solo entonces procede a borrar
+
+    Args:
+        grupo: ID del grupo de Telegram
+        topic_ids: Lista de topic IDs a limpiar (None = todos los topics)
+        dry_run: Si es True, solo muestra los mensajes sin eliminar
+        channel_filter: Lista de nombres de canal a filtrar (None = todos)
+        force: Si es True, salta las confirmaciones interactivas
+    """
+    from telethon.tl.types import DocumentAttributeFilename
+
+    log("INFO", f"Modo delete-videos: escaneando grupo {grupo}"
+        + (f" (topics: {topic_ids})" if topic_ids else " (todos los topics)")
+        + (f" (canales: {channel_filter})" if channel_filter else ""))
+
+    client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+    try:
+        await _conectar(client)
+    except SystemExit:
+        await client.disconnect()
+        raise
+
+    try:
+        target = int(grupo)
+    except (TypeError, ValueError):
+        log("ERR", f"ID de grupo inválido: {grupo}")
+        await client.disconnect()
+        return
+
+    # Buscar la entidad del chat
+    chat = None
+    async for d in client.iter_dialogs():
+        if getattr(d, "id", None) == target:
+            chat = getattr(d, "entity", None)
+            break
+
+    if chat is None:
+        log("ERR", f"No se encontró el grupo '{grupo}' en los diálogos.")
+        await client.disconnect()
+        return
+
+    chat_title = getattr(chat, "title", str(grupo))
+    log("OK", f"Grupo encontrado: {chat_title}")
+
+    # ── PASO 1: Escaneo completo (sin borrar nada) ──
+    video_msgs = []
+    async for msg in client.iter_messages(chat, limit=None):
+        if msg.video is None:
+            continue
+        if topic_ids:
+            msg_topic = getattr(msg, "message_thread_id", None)
+            if msg_topic not in topic_ids:
+                continue
+
+        # Obtener filename del video para filtrar por canal
+        filename = ""
+        if msg.video and msg.video.attributes:
+            for attr in msg.video.attributes:
+                if isinstance(attr, DocumentAttributeFilename):
+                    filename = attr.file_name or ""
+                    break
+
+        caption = msg.message or ""
+
+        # Filtrar por canal si se especifica
+        if channel_filter:
+            match = False
+            for ch in channel_filter:
+                ch_lower = ch.lower()
+                if ch_lower in filename.lower() or ch_lower in caption.lower():
+                    match = True
+                    break
+            if not match:
+                continue
+
+        video_msgs.append((msg, filename, caption))
+
+    total = len(video_msgs)
+    if total == 0:
+        log("OK", "No se encontraron videos. Nada que eliminar.")
+        await client.disconnect()
+        return
+
+    # Mostrar resumen del escaneo
+    log("WARN", f"═══════════════════════════════════════════════════")
+    log("WARN", f"  VIDEOS ENCONTRADOS: {total}")
+    log("WARN", f"  Grupo: {chat_title} ({grupo})")
+    if topic_ids:
+        log("WARN", f"  Topics: {topic_ids}")
+    if channel_filter:
+        log("WARN", f"  Filtro de canal: {channel_filter}")
+    log("WARN", f"═══════════════════════════════════════════════════")
+
+    for i, (msg, filename, caption) in enumerate(video_msgs[:30], 1):
+        topic_id = getattr(msg, "message_thread_id", None)
+        topic_info = f"topic={topic_id}" if topic_id else "general"
+        date_str = msg.date.strftime("%Y-%m-%d %H:%M") if msg.date else "?"
+        name_display = filename[:60] if filename else (caption[:60] if caption else "(sin nombre)")
+        log("WARN", f"  {i:3d}. msg={msg.id} | {topic_info} | {date_str} | {name_display}")
+    if total > 30:
+        log("WARN", f"  ... y {total - 30} más")
+
+    if dry_run:
+        log("OK", f"[DRY-RUN] Se eliminarían {total} videos. No se borró nada.")
+        await client.disconnect()
+        return
+
+    # ── PASO 2: Confirmación (saltada con --force) ──
+    if not force:
+        log("WARN", "")
+        log("WARN", f"⚠  Vas a ELIMINAR {total} videos de '{chat_title}'")
+        log("WARN", "   Esta acción es IRREVERSIBLE.")
+        log("WARN", "")
+        try:
+            confirm1 = input(f"   Escribe S para continuar o N para cancelar: ").strip().upper()
+        except (EOFError, KeyboardInterrupt):
+            log("INFO", "Cancelado por el usuario.")
+            await client.disconnect()
+            return
+
+        if confirm1 != "S":
+            log("INFO", "Cancelado. No se eliminó nada.")
+            await client.disconnect()
+            return
+
+        # ── PASO 3: Segunda confirmación (escribir el número exacto) ──
+        log("WARN", "")
+        log("WARN", f"   Para confirmar, escribe el número EXACTO de videos: {total}")
+        log("WARN", "")
+        try:
+            confirm2 = input(f"   Escribe {total} para confirmar: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            log("INFO", "Cancelado por el usuario.")
+            await client.disconnect()
+            return
+
+        if confirm2 != str(total):
+            log("ERR", f"Cancelado. Se esperaba '{total}', se recibió '{confirm2}'. No se eliminó nada.")
+            await client.disconnect()
+            return
+    else:
+        log("WARN", f"[FORCE] Eliminando {total} videos (confirmación omitida con --force)")
+
+    # ── PASO 4: Eliminación ──
+    log("WARN", "")
+    log("WARN", "   Confirmed. Eliminando videos...")
+    log("WARN", "")
+
+    deleted = 0
+    errors = 0
+    for i, (msg, filename, caption) in enumerate(video_msgs, 1):
+        topic_id = getattr(msg, "message_thread_id", None)
+        topic_info = f"topic={topic_id}" if topic_id else "general"
+        try:
+            await client.delete_messages(chat, [msg.id])
+            deleted += 1
+            log("OK", f"  [{i}/{total}] Eliminado msg {msg.id}: {topic_info}")
+        except Exception as e:
+            errors += 1
+            log("ERR", f"  [{i}/{total}] Error msg {msg.id}: {e}")
+
+    log("WARN", "")
+    log("WARN", f"═══════════════════════════════════════════════════")
+    log("OK",   f"  ELIMINADOS: {deleted}/{total}")
+    if errors:
+        log("ERR", f"  ERRORES: {errors}")
+    log("WARN", f"═══════════════════════════════════════════════════")
+
+    await client.disconnect()
+
+
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
     default, grupos, foros = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
@@ -984,6 +1162,11 @@ def main():
     grupo.add_argument("--list-chats", action="store_true", help="Listar chats/grupos")
     grupo.add_argument("--list-topics", metavar="GRUPO", help="Listar los temas (series) de un grupo con foro")
     grupo.add_argument("--create-topics", metavar="GRUPO:TÍT1,TÍT2,...", help="Crear temas en un grupo con foro")
+    grupo.add_argument("--delete-videos", metavar="GRUPO", help="Eliminar todos los videos de un grupo")
+    parser.add_argument("--topics", help="Topic IDs separados por coma (para --delete-videos)")
+    parser.add_argument("--channel", help="Filtrar por nombre de canal (para --delete-videos,ej: 'Programa Con Arnau')")
+    parser.add_argument("--dry-run", action="store_true", help="Solo mostrar sin eliminar (--delete-videos)")
+    parser.add_argument("--force", action="store_true", help="Saltar confirmaciones (--delete-videos,requiere --dry-run previo)")
     parser.add_argument("--folder", help="Filtrar por nombre del chat o carpeta (archivado/principal) (--list-chats)")
     parser.add_argument("--creados", action="store_true", help="Solo chats que creaste tú (--list-chats)")
     parser.add_argument("--once", action="store_true", help="Una sola pasada y salir")
@@ -1013,6 +1196,15 @@ def main():
             grupo, _, titulos = args.create_topics.partition(":")
             lista = [t.strip() for t in titulos.split(",") if t.strip()]
             asyncio.run(run_create_topics(api_id, api_hash, grupo, lista))
+            return
+        if args.delete_videos:
+            topic_ids = None
+            if args.topics:
+                topic_ids = [int(t.strip()) for t in args.topics.split(",") if t.strip()]
+            channel_filter = None
+            if args.channel:
+                channel_filter = [c.strip() for c in args.channel.split(",") if c.strip()]
+            asyncio.run(run_delete_videos(api_id, api_hash, args.delete_videos, topic_ids, args.dry_run, channel_filter, args.force))
             return
         carpetas = [c for c in args.carpetas if c] or ["/comprimidos"]
         asyncio.run(run_autoupload(api_id, api_hash, carpetas, args.intervalo, args.once))

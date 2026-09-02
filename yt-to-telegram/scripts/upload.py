@@ -55,9 +55,13 @@ def get_topic_id(channel_name, topics):
             if topic["id"]:
                 return topic["id"]
     
-    # Buscar en topics existentes
+    # Buscar en topics existentes (formato plano: {"canal": 26} o {"canal": {"id": 26}})
     if channel_name in topics:
-        return topics[channel_name]["id"]
+        val = topics[channel_name]
+        if isinstance(val, int):
+            return val
+        if isinstance(val, dict):
+            return val.get("id")
     
     return None
 
@@ -118,12 +122,25 @@ def format_caption(video):
     return caption
 
 def upload_video(video_path, channel_name, title, publish_date="", video_type="video"):
-    """Sube un vídeo a Telegram en el tema del canal."""
+    """Sube un vídeo a Telegram en el tema del canal.
+    Acepta path directo (str) o dict con 'path' key.
+    Devuelve True si la subida fue exitosa, False si falló."""
+    if isinstance(video_path, dict):
+        video_path = video_path.get("path", "")
+    
     if not BOT_TOKEN or not GROUP_ID:
         logger.error("❌ BOT_TOKEN y TELEGRAM_GROUP_ID son requeridos")
         return False
     
     logger.info(f"⬆️  Subiendo: {Path(video_path).name[:50]}...")
+    
+    # Validar tamaño (Telegram Bot API limit: 50MB)
+    file_size = Path(video_path).stat().st_size
+    max_upload_bytes = 50 * 1024 * 1024  # 50 MB
+    if file_size > max_upload_bytes:
+        logger.error(f"  ❌ Archivo demasiado grande: {file_size/(1024*1024):.0f}MB > 50MB. "
+                     f"Debe reconvertirse con 2 pasadas.")
+        return False
     
     # Cargar topics
     topics = load_topics()
@@ -163,7 +180,8 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
             logger.info(f"  ✅ Subido correctamente")
             return True
         else:
-            logger.error(f"  ❌ Error subiendo: {response.get('description', 'Unknown error')}")
+            desc = response.get("description", "Unknown error")
+            logger.error(f"  ❌ Error subiendo: {desc}")
             return False
     except Exception as e:
         logger.error(f"  ❌ Error subiendo: {e}")
@@ -231,17 +249,18 @@ def main():
     # Subir vídeos
     uploaded = []
     for video in pending:
-        # Crear tema si no existe
-        topic_id = create_topic(video["channel"], topics)
+        # Obtener topic_id del canal
+        topic_id = get_topic_id(video["channel"], topics)
         if not topic_id:
-            # Si no se puede crear tema, usar "General"
-            logger.warning(f"  ⚠️  No se pudo crear tema para {video['channel']}, usando General")
+            logger.warning(f"  ⚠️  No hay tema para {video['channel']}, usando General")
             topic_id = get_topic_id("General", topics)
-            if not topic_id:
-                topic_id = create_topic("General", topics)
+        
+        if not topic_id:
+            logger.error(f"  ❌ No se encontró tema para {video['channel']}")
+            continue
         
         # Subir vídeo
-        if upload_video(video, topic_id):
+        if upload_video(video["path"], video["channel"], video["title"], video.get("publish_date", "")):
             move_to_uploaded(video)
             uploaded.append(video)
     

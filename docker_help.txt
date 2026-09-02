@@ -132,7 +132,7 @@ Qué hace: gestor de PDFs (desbloquear, unir, dividir, comprimir). App interacti
 Qué hace: descargador masivo / clonador de Telegram. En el pipeline actúa como
 el "uploader" que sube los vídeos comprimidos a los grupos.
 
-  DAEMON — uploader (parte del pipeline)     contenedor: telegram-uploader
+  DAEMON — uploader (parte del pipeline)     contenedor: telegram-uploader-sendo
     tg_logs       Ver logs del subidor
     tg_stop       Pararlo
     tg_restart    Reiniciarlo
@@ -176,7 +176,7 @@ Qué hace: descargador de vídeos de aula Moodle/Vimeo con Python puro.
 Qué hace: grabador automático de directos de Twitch/YouTube/Kick. En el pipeline
 graba el directo y lo deja como `*_completed.mp4` en data/grabaciones/test/.
 
-  DAEMON — producción (parte del pipeline)   contenedor: twitchrecorder
+  DAEMON — producción (parte del pipeline)   contenedor: twitchrecorder-sendo
     tw_logs       Ver logs del grabador
     tw_stop       Pararlo
     tw_restart    Reiniciarlo
@@ -197,7 +197,7 @@ Qué hace: conversor/optimizador de vídeo (midu.sh) + un "monitor" que comprime
 automáticamente a 720p las grabaciones entrantes. En el pipeline es quien
 convierte `*_completed.mp4` → `*_compressed.mp4`.
 
-  DAEMON — monitor (parte del pipeline)      contenedor: ffmpeg_monitor
+  DAEMON — monitor (parte del pipeline)      contenedor: ffmpeg_monitor-sendo
     ff_logs       Ver la conversión en curso (cómo va el ffmpeg_monitor)
     ff_stop       Pararlo
     ff_restart    Reiniciarlo
@@ -216,18 +216,18 @@ convierte `*_completed.mp4` → `*_compressed.mp4`.
 Notas: `ff_logs` es lo que pones para seguir la compresión del monitor.
 
 ------------------------------------------------------------------------------
-3G. BOT API (telegram_bot + ollama)
+3G. BOT API (telegram_bot)
 ------------------------------------------------------------------------------
-Qué hace: Bot API interactivo con python-telegram-bot. Control del pipeline,
-contenido IA y respuestas por @mención con Qwen 2.5 vía Ollama.
+Qué hace: Bot API interactivo con python-telegram-bot. Descarga de vídeos por
+URL, contenido IA (tips, conceptos, tools, saludos, noticias).
 
   Arrancar:
-    tg_bot               Arrancar bot + ollama
+    tg_bot               Arrancar bot
     tg_bot_sys_start     Arrancar vía systemd (auto-arranque al boot)
 
   Parar / reiniciar:
-    tg_bot_stop          Parar bot + ollama
-    tg_bot_restart       Reiniciar bot + ollama
+    tg_bot_stop          Parar bot
+    tg_bot_restart       Reiniciar bot
     tg_bot_sys_stop      Parar vía systemd
     tg_bot_sys_status    Ver estado systemd
 
@@ -239,40 +239,75 @@ contenido IA y respuestas por @mención con Qwen 2.5 vía Ollama.
 
   Comandos del bot en Telegram:
     /start               Mensaje de bienvenida
-    /ayuda               Ayuda con botón 🚀
+    /ayuda               Ayuda con botón
     /ping                Latencia del bot
-    /status              Estado del pipeline (IPC vía JSON)
-    /grabar <kw>         Forzar grabación de un canal
-    /pausar              Pausar el pipeline
-    /reanudar            Reanudar el pipeline
-    /subir               Subir siguiente vídeo de la cola
-    /cola                Ver vídeos en cola
-    /logs                Ver logs recientes del pipeline
+    /descarga URL        Descargar vídeo y comprimir para Telegram
+    /download URL        Igual que /descarga
     /tip                 Consejo aleatorio (15 categorías)
     /concepto            Concepto de programación aleatorio
     /tool                Herramienta/tech aleatoria
-    /saludo              Saludo personalizado
+    /saludo              Imagen de saludo personalizada
     /noticias            Últimas noticias tech
 
   @mención en grupos:
-    Si mencionas al bot en un grupo, responde con IA (Qwen 2.5 vía Ollama).
+    Si mencionas al bot en un grupo con una URL, descarga el vídeo.
 
-  IPC (comunicación entre servicios):
-    El bot lee/escribe archivos JSON para comunicarse con el pipeline:
-      - pipeline_status.json  → estado actual (grabando, comprimiendo, etc.)
-      - pipeline_control.json → comandos (pausar, reanudar, etc.)
-      - pipeline_logs.json    → logs recientes
-    Los servicios del pipeline (recorder, monitor, uploader) actualizan estos
-    archivos; el bot los lee para mostrar el estado y enviar comandos.
+  En privado:
+    Envía directamente una URL y la descarga.
 
   Configuración (.env):
     BOT_TOKEN=<token de @BotFather>
-    GEMINI_API_KEY=<clave API Gemini>
+    GEMINI_API_KEY=<clave API Gemini (opcional, fallback a DB local)>
     BOT_ADMINS=<user_id1,user_id2>  (opcional, para comandos restringidos)
 
-  Arranque automático (systemd):
-    El servicio telegram-bot.service arranca ollama + telegram_bot al boot.
-    Ver sección 5 para gestión vía systemd.
+  Contenedores:
+    telegram-bot         Bot API (Dockerfile.bot, python-telegram-bot + yt-dlp)
+    telegram-uploader-sendo  Uploader daemon (Dockerfile, Telethon user client)
+
+------------------------------------------------------------------------------
+3H. YT-TO-TELEGRAM (pipeline YouTube → Telegram)
+------------------------------------------------------------------------------
+Qué hace: Descarga vídeos de 158 canales de YouTube, los convierte para
+Telegram (h264/aac, CRF 28, 2 pasadas si >50MB) y los sube al grupo
+"Stream Tecnologia" con topics por canal. Archivo en data/yt-pipeline/.
+
+  Contenedor: yt-to-telegram (docker-compose en yt-to-telegram/)
+  Servicios: yt-pipeline (completo), yt-download, yt-convert, yt-upload (test)
+
+  Arrancar pipeline completo:
+    cd yt-to-telegram && docker compose up -d yt-pipeline
+
+  Logs:
+    docker compose -f yt-to-telegram/docker-compose.yml logs -f yt-pipeline
+
+  Parar:
+    docker compose -f yt-to-telegram/docker-compose.yml down
+
+  Solo descargar (test):
+    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-download
+
+  Solo convertir (test):
+    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-convert
+
+  Solo subir (test):
+    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-upload
+
+  Carpetas:
+    data/yt-pipeline/downloads/    Vídeos descargados de YouTube
+    data/yt-pipeline/converted/    Vídeos convertidos para Telegram
+    data/yt-pipeline/uploaded/     Histórico de vídeos subidos
+    data/yt-pipeline/logs/         Logs de uploads/conversiones
+
+  Config:
+    yt-to-telegram/config/channels.json   158 canales (nombre, URL, enabled)
+    yt-to-telegram/config/topics.json     Mapping canal → topic_id
+    yt-to-telegram/.env                   BOT_TOKEN + TELEGRAM_GROUP_ID
+
+  Conversión (misma que monitor_folder.sh):
+    ffmpeg -c:v libx264 -crf 28 -preset fast -vf scale=-2:720
+    -c:a aac -b:a 128k -map 0:v:0 -map 0:a:0 -map_metadata 0
+    -movflags +faststart -f mp4
+    2 pasadas si >50MB Telegram limit
 
 ==============================================================================
   4. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM
@@ -306,10 +341,24 @@ data/grabaciones/test/   Grabaciones terminadas (*_KW_<kw>_completed.mp4)
 data/comprimidos/        Videos listos para subir (*_KW_<kw>_compressed.mp4)
 data/backups/            Grabaciones antiguas archivadas
 
+--- Conversión (todos los pipelines usan lo mismo) ---
+  ffmpeg -c:v libx264 -crf 28 -preset fast -vf scale=-2:720
+  -c:a aac -b:a 128k -map 0:v:0 -map 0:a:0 -map_metadata 0
+  -movflags +faststart -f mp4
+  2 pasadas si >50MB (Telegram) o >1900MB (uploader)
+
 # Config (grupos.json, credenciales, sesiones, ruteo por keyword): ver
 # downloader_telegram/README.md (sección "Uploader a Telegram")
 # NO uses `docker compose down` a secas en downloader_telegram / TwitchRecorder /
 # ffmpeg-yt-dlp (pararían también al daemon del pipeline). Para parar los 3 usa pipe_down.
+
+--- Eliminar videos de Telegram (uso manual) ---
+  cd downloader_telegram
+  docker compose run --rm uploader python /app/app/subir_videos.py --delete-videos GRUPO_ID
+  # O con topics específicos:
+  docker compose run --rm uploader python /app/app/subir_videos.py --delete-videos GRUPO_ID --topics 26,27,28
+  # dry-run (solo mostrar, no borrar):
+  docker compose run --rm uploader python /app/app/subir_videos.py --delete-videos GRUPO_ID --dry-run
 
 ==============================================================================
   5. PIPELINE VÍA SYSTEMD (AUTO-ARRANQUE AL BOOT)

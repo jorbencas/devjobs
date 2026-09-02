@@ -1,8 +1,8 @@
 #!/bin/bash
 # Logs del pipeline completo con color por contenedor:
-#   twitchrecorder    -> azul
-#   ffmpeg_monitor    -> amarillo
-#   telegram-uploader -> rojo
+#   twitchrecorder-sendo    -> azul
+#   ffmpeg_monitor-sendo    -> amarillo
+#   telegram-uploader-sendo -> rojo
 # Uso:  bash servicios/pipeline_logs.sh
 # Nota: --tail 50 para que al arrancar ya muestre las últimas líneas de cada
 # contenedor, y luego -f lo deja en directo. Los colores van por variable de
@@ -13,11 +13,11 @@ G=$'\033[33m'   # amarillo
 R=$'\033[31m'   # rojo
 RST=$'\033[0m'
 
-for c in twitchrecorder ffmpeg_monitor telegram-uploader; do
+for c in twitchrecorder-sendo ffmpeg_monitor-sendo telegram-uploader-sendo; do
     case "$c" in
-        twitchrecorder)     COL="$B" ;;
-        ffmpeg_monitor)     COL="$G" ;;
-        telegram-uploader)  COL="$R" ;;
+        twitchrecorder-sendo)     COL="$B" ;;
+        ffmpeg_monitor-sendo)     COL="$G" ;;
+        telegram-uploader-sendo)  COL="$R" ;;
     esac
     docker logs -f --tail 50 "$c" 2>&1 \
       | sed -u "s#^#${COL}[${c}]${RST} #" &

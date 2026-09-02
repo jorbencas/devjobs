@@ -25,7 +25,7 @@ services:
   #          ============================================================
   uploader:
     build: .
-    container_name: telegram-uploader
+    container_name: telegram-uploader-sendo
     restart: unless-stopped
     volumes:
       - ./config/config.bin:/app/config/config.bin

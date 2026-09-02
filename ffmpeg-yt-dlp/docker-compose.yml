@@ -17,13 +17,13 @@ services:
 
   monitor:
     image: alpine:latest
-    container_name: ffmpeg_monitor
+    container_name: ffmpeg_monitor-sendo
     restart: unless-stopped
     user: root
     command: >-
       sh -c "apk add --no-cache ffmpeg bash findutils python3 tesseract-ocr tesseract-ocr-data-eng &&
       mkdir -p /watch /comprimidos &&
-      bash /app/scripts/monitor_folder.sh --completed-only --codec libx264 -c 23 -p medium -t 4 /watch"
+      bash /app/scripts/monitor_folder.sh --completed-only --codec libx264 -c 28 -p fast -t 4 /watch"
     volumes:
       - ./:/app
       - ../data/pipeline/grabaciones/test:/watch

@@ -182,13 +182,13 @@ Añadir al array en `config/channels.json`:
 Editar `scripts/convert.py` y cambiar la línea:
 
 ```python
-"-vf", "scale='trunc(ow/2)*2:trunc(oh/2)*2'",
+"-vf", "scale=-2:720",
 ```
 
 Por ejemplo, para 1080p:
 
 ```python
-"-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+"-vf", "scale=-2:1080",
 ```
 
 ## Troubleshooting

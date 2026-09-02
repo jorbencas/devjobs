@@ -49,11 +49,12 @@ def convert_video(video_path, output_dir):
 
     duration = get_video_duration(video_file)
 
-    # Comando exacto del monitor: libx264 CRF 28 fast + aac 128k
+    # Comando exacto del monitor: libx264 CRF 28 fast + aac 128k + 720p
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_file),
         "-c:v", "libx264", "-crf", "28", "-preset", "fast",
+        "-vf", "scale=-2:720",
         "-c:a", "aac", "-b:a", "128k",
         "-map", "0:v:0", "-map", "0:a:0",
         "-map_metadata", "0",
@@ -83,12 +84,14 @@ def convert_video(video_path, output_dir):
                 # Pasada 1
                 subprocess.run([
                     "ffmpeg", "-y", "-i", str(video_file),
+                    "-vf", "scale=-2:720",
                     "-c:v", "libx264", "-b:v", str(video_bps),
                     "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
                 ], capture_output=True, timeout=1800)
                 # Pasada 2
                 subprocess.run([
                     "ffmpeg", "-y", "-i", str(video_file),
+                    "-vf", "scale=-2:720",
                     "-c:v", "libx264", "-b:v", str(video_bps),
                     "-preset", "fast", "-pass", "2",
                     "-c:a", "aac", "-b:a", "128k",

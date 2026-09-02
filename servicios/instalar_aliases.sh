@@ -35,8 +35,8 @@ alias pipe_topics='bash $SCRIPT_DIR/pipe_topics.sh'
 alias pipe_once='bash $SCRIPT_DIR/pipe_once.sh'
 alias pipe_rebuild='bash $SCRIPT_DIR/pipe_rebuild.sh'
 alias pipe_test='bash $SCRIPT_DIR/pipe_test_upload.sh'
-alias pipe_up='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d twitchrecorder && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d uploader'
-alias pipe_recreate='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d --force-recreate twitchrecorder && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d --force-recreate monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d --force-recreate uploader'
+alias pipe_up='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d twitchrecorder-sendo && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d uploader'
+alias pipe_recreate='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml up -d --force-recreate twitchrecorder-sendo && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml up -d --force-recreate monitor && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d --force-recreate uploader'
 alias pipe_down='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml down && docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml down && docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml down'
 alias pipe_ps='bash $SCRIPT_DIR/pipe_ps.sh'
 alias pipe_sys_start='sudo systemctl start twitch-stream-pipeline.service'
@@ -74,8 +74,8 @@ alias pdf_down='docker compose -f $DEVJOBS/pdfmanager/docker-compose.yml down'
 # ---------- downloader_telegram ----------
 # DAEMON (uploader, parte del pipeline):
 alias tg_logs='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml logs -f uploader'
-alias tg_stop='docker stop telegram-uploader'
-alias tg_restart='docker restart telegram-uploader'
+alias tg_stop='docker stop telegram-uploader-sendo'
+alias tg_restart='docker restart telegram-uploader-sendo'
 # BOT API (telegram_bot + ollama):
 alias tg_bot='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml up -d telegram_bot ollama'
 alias tg_bot_stop='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml stop telegram_bot ollama'
@@ -106,19 +106,19 @@ alias al_down='docker compose -f $DEVJOBS/aula-downloader/docker-compose.yml dow
 
 # ---------- TwitchRecorder ----------
 # DAEMON (producción, parte del pipeline):
-alias tw_logs='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml logs -f twitchrecorder'
-alias tw_stop='docker stop twitchrecorder'
-alias tw_restart='docker restart twitchrecorder'
+alias tw_logs='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml logs -f twitchrecorder-sendo'
+alias tw_stop='docker stop twitchrecorder-sendo'
+alias tw_restart='docker restart twitchrecorder-sendo'
 # MANUAL (prueba puntual):
-alias tw_run='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder'
-alias tw_dry='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder --dry-run'
+alias tw_run='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder-sendo'
+alias tw_dry='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml run --rm twitchrecorder-sendo --dry-run'
 alias tw_down='docker compose -f $DEVJOBS/TwitchRecorder/docker-compose.yml down'
 
 # ---------- ffmpeg-yt-dlp ----------
 # DAEMON (monitor, parte del pipeline) —— ver conversión en curso:
 alias ff_logs='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml logs -f monitor'
-alias ff_stop='docker stop ffmpeg_monitor'
-alias ff_restart='docker restart ffmpeg_monitor'
+alias ff_stop='docker stop ffmpeg_monitor-sendo'
+alias ff_restart='docker restart ffmpeg_monitor-sendo'
 # MANUAL (midu, interactivo): SOLO el servicio downloader (no toca al monitor)
 alias ff_midu='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml run --rm downloader'
 alias ff_manual_stop='docker compose -f $DEVJOBS/ffmpeg-yt-dlp/docker-compose.yml stop downloader'

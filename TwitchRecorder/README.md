@@ -338,13 +338,13 @@ El contenedor se reinicia solo si el PC se reinicia (`restart: unless-stopped`).
 > principal, y como ambas comparten `config.json`, un mismo canal podía emitir
 > dos vídeos duplicados (p. ej. uno por YouTube y otro por Twitch del mismo
 > directo). Levanta siempre el servicio canónico con `docker compose up -d`; el
-> `container_name: twitchrecorder` fijo impide que haya dos contenedores con el
+> `container_name: twitchrecorder-sendo` fijo impide que haya dos contenedores con el
 > mismo nombre.
 
 ### Dry-run (sin grabar)
 
 ```bash
-docker compose run --rm twitchrecorder --dry-run
+docker compose run --rm twitchrecorder-sendo --dry-run
 ```
 
 Detecta el directo pero no graba. Ideal para verificar que la config funciona.
@@ -614,7 +614,7 @@ se queda colgada a la espera de que un plugin procese el JS; con `deno` no hay a
 
 | Comando | Qué hace |
 |---|---|
-| `docker compose up -d twitchrecorder` | Arranca el daemon en background |
+| `docker compose up -d twitchrecorder-sendo` | Arranca el daemon en background |
 | `docker compose down` | Para todo |
 | `docker compose run --rm run` | Ejecuta una vez |
 | `docker compose run --rm run --dry-run` | Simula sin grabar |

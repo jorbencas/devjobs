@@ -112,7 +112,7 @@ def process_single_video(video_info, channel_name):
 
     # 3. Subir a Telegram
     logger.info(f"  ⬆️  Subiendo a Telegram...")
-    upload_video(
+    uploaded_ok = upload_video(
         video_path=converted_file,
         channel_name=channel_name,
         title=title,
@@ -120,12 +120,16 @@ def process_single_video(video_info, channel_name):
         video_type=video_type
     )
 
-    # 4. Mover a uploaded/
-    uploaded_channel = UPLOADED_DIR / channel_name.replace("/", "_")
-    uploaded_channel.mkdir(parents=True, exist_ok=True)
-    dest = uploaded_channel / Path(converted_file).name
-    shutil.move(converted_file, dest)
-    logger.info(f"  📁 Movido a uploaded: {dest.name}")
+    # 4. Mover a uploaded/ SOLO si la subida fue exitosa
+    if uploaded_ok:
+        uploaded_channel = UPLOADED_DIR / channel_name.replace("/", "_")
+        uploaded_channel.mkdir(parents=True, exist_ok=True)
+        dest = uploaded_channel / Path(converted_file).name
+        shutil.move(converted_file, dest)
+        logger.info(f"  📁 Movido a uploaded: {dest.name}")
+    else:
+        logger.warning(f"  ⚠️  No se movió a uploaded (subida fallida). "
+                       f"El archivo queda en converted/ para reintentar.")
 
     return True
 

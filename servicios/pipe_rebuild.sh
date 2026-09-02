@@ -18,4 +18,4 @@ cd "$ROOT/downloader_telegram"
 docker compose build && docker compose up -d --force-recreate uploader
 
 echo "Pipeline reconstruido y recreado."
-docker ps --filter name=twitchrecorder --filter name=ffmpeg_monitor --filter name=telegram-uploader --format "table {{.Names}}\t{{.Status}}"
+docker ps --filter name=twitchrecorder-sendo --filter name=ffmpeg_monitor-sendo --filter name=telegram-uploader-sendo --format "table {{.Names}}\t{{.Status}}"

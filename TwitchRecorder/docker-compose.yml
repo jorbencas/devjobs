@@ -1,7 +1,7 @@
 services:
   twitchrecorder:
     build: .
-    container_name: twitchrecorder
+    container_name: twitchrecorder-sendo
     restart: unless-stopped
     volumes:
       - ./config.json:/app/config.json:ro

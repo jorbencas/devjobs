@@ -67,11 +67,12 @@ def compress_for_telegram(input_path: Path, output_dir: Path, max_size_mb: int =
     # Obtener duración
     duration = get_video_duration(input_path)
 
-    # ffmpeg args iguales al monitor: CRF 28, fast, solo v+1er audio
+    # ffmpeg args iguales al monitor: CRF 28, fast, solo v+1er audio, 720p
     cmd = [
         "ffmpeg", "-y",
         "-i", str(input_path),
         "-c:v", "libx264", "-crf", "28", "-preset", "fast",
+        "-vf", "scale=-2:720",
         "-c:a", "aac", "-b:a", "128k",
         "-map", "0:v:0", "-map", "0:a:0",
         "-map_metadata", "0",
@@ -90,30 +91,32 @@ def compress_for_telegram(input_path: Path, output_dir: Path, max_size_mb: int =
     # Si pesa más de max_size_mb, 2 pasadas
     tmp_size = tmp_path.stat().st_size
     max_bytes = max_size_mb * 1024 * 1024
-    if tmp_size > max_bytes and duration > 0:
-        # Calcular bitrate para caber
-        audio_bps = 128000
-        audio_bytes = int(duration * audio_bps / 8)
-        video_bytes = max_bytes - audio_bytes
-        video_bps = int(video_bytes * 8 / duration)
-        if video_bps > 0:
-            # Pasada 1
-            subprocess.run([
-                "ffmpeg", "-y", "-i", str(input_path),
-                "-c:v", "libx264", "-b:v", str(video_bps),
-                "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
-            ], capture_output=True, timeout=1800)
-            # Pasada 2
-            subprocess.run([
-                "ffmpeg", "-y", "-i", str(input_path),
-                "-c:v", "libx264", "-b:v", str(video_bps),
-                "-preset", "fast", "-pass", "2",
-                "-c:a", "aac", "-b:a", "128k",
-                "-map", "0:v:0", "-map", "0:a:0",
-                "-map_metadata", "0",
-                "-movflags", "+faststart",
-                "-f", "mp4", str(tmp_path)
-            ], capture_output=True, timeout=1800)
+        if tmp_size > max_bytes and duration > 0:
+            # Calcular bitrate para caber
+            audio_bps = 128000
+            audio_bytes = int(duration * audio_bps / 8)
+            video_bytes = max_bytes - audio_bytes
+            video_bps = int(video_bytes * 8 / duration)
+            if video_bps > 0:
+                # Pasada 1
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", str(input_path),
+                    "-vf", "scale=-2:720",
+                    "-c:v", "libx264", "-b:v", str(video_bps),
+                    "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
+                ], capture_output=True, timeout=1800)
+                # Pasada 2
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", str(input_path),
+                    "-vf", "scale=-2:720",
+                    "-c:v", "libx264", "-b:v", str(video_bps),
+                    "-preset", "fast", "-pass", "2",
+                    "-c:a", "aac", "-b:a", "128k",
+                    "-map", "0:v:0", "-map", "0:a:0",
+                    "-map_metadata", "0",
+                    "-movflags", "+faststart",
+                    "-f", "mp4", str(tmp_path)
+                ], capture_output=True, timeout=1800)
             # Limpiar logs de 2 pasadas
             for f in Path(".").glob("ffmpeg2pass-*.log*"):
                 f.unlink(missing_ok=True)
