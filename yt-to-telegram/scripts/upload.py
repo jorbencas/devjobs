@@ -117,20 +117,39 @@ def format_caption(video):
     
     return caption
 
-def upload_video(video, topic_id):
-    """Sube un vídeo a Telegram en un tema específico."""
-    logger.info(f"⬆️  Subiendo: {video['filename'][:50]}...")
+def upload_video(video_path, channel_name, title, publish_date="", video_type="video"):
+    """Sube un vídeo a Telegram en el tema del canal."""
+    if not BOT_TOKEN or not GROUP_ID:
+        logger.error("❌ BOT_TOKEN y TELEGRAM_GROUP_ID son requeridos")
+        return False
     
-    caption = format_caption(video)
+    logger.info(f"⬆️  Subiendo: {Path(video_path).name[:50]}...")
     
-    # Usar telethon o python-telegram-bot para subir
-    # Por ahora usamos curl como fallback
+    # Cargar topics
+    topics = load_topics()
+    
+    # Obtener topic_id
+    topic_id = topics.get(channel_name)
+    if not topic_id:
+        # Si no hay topic, intentar crear uno
+        topic_id = create_topic(channel_name, topics)
+        if not topic_id:
+            logger.warning(f"  ⚠️  No se pudo crear tema para {channel_name}")
+            return False
+    
+    # Formatear caption
+    caption = f"📺 <b>{title}</b>\n\n"
+    caption += f"🔗 Canal: {channel_name}\n"
+    if publish_date:
+        caption += f"📅 Publicado: {publish_date}\n"
+    
+    # Subir vídeo
     cmd = [
         "curl", "-s",
         "-X", "POST",
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo",
         "-F", f"chat_id={GROUP_ID}",
-        "-F", f"video=@{video['path']}",
+        "-F", f"video=@{video_path}",
         "-F", f"message_thread_id={topic_id}",
         "-F", f"caption={caption}",
         "-F", "parse_mode=HTML"

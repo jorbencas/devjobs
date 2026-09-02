@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+recordings/
+data/
+logs/
+tests/
+install.bat
+install.sh
+run.sh
+create_task.ps1
+README.md
+.dockerignore
+Dockerfile
+docker-compose.yml
