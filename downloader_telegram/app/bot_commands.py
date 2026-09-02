@@ -91,7 +91,7 @@ def compress_for_telegram(input_path: Path, output_dir: Path, max_size_mb: int =
     # Si pesa más de max_size_mb, 2 pasadas
     tmp_size = tmp_path.stat().st_size
     max_bytes = max_size_mb * 1024 * 1024
-        if tmp_size > max_bytes and duration > 0:
+    if tmp_size > max_bytes and duration > 0:
             # Calcular bitrate para caber
             audio_bps = 128000
             audio_bytes = int(duration * audio_bps / 8)
