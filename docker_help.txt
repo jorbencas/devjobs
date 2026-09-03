@@ -219,7 +219,7 @@ Notas: `ff_logs` es lo que pones para seguir la compresión del monitor.
 3G. BOT API (telegram_bot)
 ------------------------------------------------------------------------------
 Qué hace: Bot API interactivo con python-telegram-bot. Descarga de vídeos por
-URL, contenido IA (tips, conceptos, tools, saludos, noticias).
+URL, contenido IA (tips, conceptos, tools, noticias).
 
   Arrancar:
     tg_bot               Arrancar bot
@@ -246,7 +246,6 @@ URL, contenido IA (tips, conceptos, tools, saludos, noticias).
     /tip                 Consejo aleatorio (15 categorías)
     /concepto            Concepto de programación aleatorio
     /tool                Herramienta/tech aleatoria
-    /saludo              Imagen de saludo personalizada
     /noticias            Últimas noticias tech
 
   @mención en grupos:
