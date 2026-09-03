@@ -42,13 +42,6 @@ def kb_tool() -> InlineKeyboardMarkup:
     ])
 
 
-def kb_saludo() -> InlineKeyboardMarkup:
-    """Botones después de /saludo."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎨 Otro saludo", callback_data="saludo:next")]
-    ])
-
-
 def kb_noticias() -> InlineKeyboardMarkup:
     """Botones después de /noticias."""
     return InlineKeyboardMarkup([

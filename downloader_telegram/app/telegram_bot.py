@@ -2,7 +2,7 @@
 """telegram_bot.py — Bot API interactivo con python-telegram-bot.
 
 Combina:
-  - Contenido IA (tips, conceptos, tools, saludos, noticias)
+  - Contenido IA (tips, conceptos, tools, noticias)
   - Descarga de vídeos por URL (/descarga, /download)
 """
 import asyncio
@@ -65,7 +65,7 @@ def main():
     # ── Comandos ──
     from bot_commands import (
         cmd_start, cmd_ayuda, cmd_ping,
-        cmd_tip, cmd_concepto, cmd_tool, cmd_saludo, cmd_noticias,
+        cmd_tip, cmd_concepto, cmd_tool, cmd_noticias,
         cmd_descarga,
     )
 
@@ -77,7 +77,6 @@ def main():
     app.add_handler(CommandHandler("tip", cmd_tip))
     app.add_handler(CommandHandler("concepto", cmd_concepto))
     app.add_handler(CommandHandler("tool", cmd_tool))
-    app.add_handler(CommandHandler("saludo", cmd_saludo))
     app.add_handler(CommandHandler("noticias", cmd_noticias))
 
     app.add_handler(CommandHandler("descarga", cmd_descarga))
@@ -85,13 +84,12 @@ def main():
 
     # ── Callbacks (botones inline) ──
     from bot_callbacks import (
-        cb_tip, cb_concept, cb_tool, cb_saludo, cb_noticias,
+        cb_tip, cb_concept, cb_tool, cb_noticias,
     )
 
     app.add_handler(CallbackQueryHandler(cb_tip, pattern="^tip:"))
     app.add_handler(CallbackQueryHandler(cb_concept, pattern="^concept:"))
     app.add_handler(CallbackQueryHandler(cb_tool, pattern="^tool:"))
-    app.add_handler(CallbackQueryHandler(cb_saludo, pattern="^saludo:"))
     app.add_handler(CallbackQueryHandler(cb_noticias, pattern="^noticias:"))
 
     # ── @Mención con URL en grupos ──

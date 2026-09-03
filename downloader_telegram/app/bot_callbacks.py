@@ -8,7 +8,7 @@ logger = logging.getLogger("bot_callbacks")
 
 from bot_inline_keyboards import (
     kb_tip, kb_concept, kb_tool,
-    kb_saludo, kb_noticias,
+    kb_noticias,
 )
 
 
@@ -96,50 +96,6 @@ async def cb_tool(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(msg, reply_markup=kb_tool())
     except Exception as e:
         await query.edit_message_text(f"❌ Error: {e}", reply_markup=kb_tool())
-
-
-async def cb_saludo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Botón: otro saludo."""
-    query = update.callback_query
-    await query.answer()
-    try:
-        from saludo_imagen import (
-            load_config, load_history, now_local,
-            _greeting_for_hour, _festivo, _temporada,
-            _pick, _pick_frase, _build_prompt,
-            generate_image, fallback_pollinations, fallback_pil,
-            _superponer_texto
-        )
-        load_config()
-        history = load_history()
-        now = now_local()
-        saludo = _greeting_for_hour(now.hour)
-        festivo_nombre, festivo_temas = _festivo(now)
-        temporada = _temporada(now)
-        estilo = _pick("estilos", history.get("keys", []), "estilo")
-        publico = _pick("publicos", history.get("keys", []), "publico")
-        emocion = _pick("emociones", history.get("keys", []), "emocion")
-        materia = _pick("materias", history.get("keys", []), "materia")
-        frase = _pick_frase(saludo, history.get("keys", []))
-        prompt = _build_prompt(saludo, frase, now, festivo_nombre, festivo_temas,
-                               estilo, publico, emocion, materia, temporada)
-        image_bytes = generate_image(prompt)
-        if not image_bytes:
-            image_bytes = fallback_pollinations(saludo, publico, materia, estilo, emocion, temporada)
-        if not image_bytes:
-            image_bytes = fallback_pil(saludo, publico)
-        if image_bytes:
-            image_bytes = _superponer_texto(image_bytes, frase, saludo)
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=image_bytes,
-                caption=f"✨ {frase} ✨\n{saludo}!",
-                reply_markup=kb_saludo()
-            )
-        else:
-            await query.edit_message_text("❌ No se pudo generar imagen.", reply_markup=kb_saludo())
-    except Exception as e:
-        await query.edit_message_text(f"❌ Error: {e}", reply_markup=kb_saludo())
 
 
 async def cb_noticias(update: Update, context: ContextTypes.DEFAULT_TYPE):
