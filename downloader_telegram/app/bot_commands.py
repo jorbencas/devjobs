@@ -4,6 +4,7 @@ import json
 import os
 import random
 import re
+import shutil
 import sys
 import subprocess
 import tempfile
@@ -134,14 +135,18 @@ def download_with_ytdlp(url: str, output_dir: Path) -> dict:
         cmd = [
             "yt-dlp",
             "--no-playlist",
-            "-f", "best[ext=mp4]/best",
+            "-f", "bv+ba/b",
             "--merge-output-format", "mp4",
             "-o", str(output_dir / "%(title)s.%(ext)s"),
             "--no-overwrites",
             url,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if result.returncode != 0:
+            # Fallback: intentar HLS directo
+            hls_result = download_hls_fallback(url, output_dir)
+            if hls_result["success"]:
+                return hls_result
             return {"success": False, "error": result.stderr[:500]}
 
         # Buscar el archivo descargado
@@ -154,6 +159,173 @@ def download_with_ytdlp(url: str, output_dir: Path) -> dict:
         return {"success": False, "error": "Timeout: la descarga tardó más de 5 minutos"}
     except FileNotFoundError:
         return {"success": False, "error": "yt-dlp no está instalado"}
+
+
+def download_hls_fallback(url: str, output_dir: Path) -> dict:
+    """Fallback: buscar HLS streams en la página y descargarlos."""
+    import re
+    import requests
+    from urllib.parse import urljoin
+
+    HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+
+    def parse_master_m3u8(content, base_url):
+        result = {'audio': None, 'video': None}
+        current_type = None
+        for line in content.split('\n'):
+            line = line.strip()
+            if line.startswith('#EXT-X-MEDIA:'):
+                uri_match = re.search(r'URI="([^"]+)"', line)
+                if uri_match:
+                    full_url = urljoin(base_url, uri_match.group(1))
+                    if 'TYPE=AUDIO' in line:
+                        result['audio'] = full_url
+                else:
+                    current_type = 'audio' if 'TYPE=AUDIO' in line else None
+            elif line.startswith('#EXT-X-STREAM-INF:'):
+                current_type = 'video'
+            elif line and not line.startswith('#'):
+                full_url = urljoin(base_url, line)
+                if current_type in result:
+                    result[current_type] = full_url
+                current_type = None
+        return result
+
+    def parse_m3u8(content, base_url):
+        segments = []
+        init_url = None
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('#EXT-X-MAP:'):
+                uri_match = re.search(r'URI="([^"]+)"', line)
+                if uri_match:
+                    init_url = urljoin(base_url, uri_match.group(1))
+                continue
+            if line.startswith('#'):
+                continue
+            segments.append(urljoin(base_url, line))
+        return init_url, segments
+
+    def download_file(dl_file_url, output_file, session):
+        try:
+            resp = session.get(dl_file_url, timeout=60)
+            if resp.status_code == 200:
+                with open(output_file, 'wb') as f:
+                    f.write(resp.content)
+                return True
+        except Exception:
+            pass
+        return False
+
+    try:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+
+        # Obtener la página
+        resp = session.get(url, timeout=30)
+        if resp.status_code != 200:
+            return {"success": False, "error": f"HTTP {resp.status_code}"}
+
+        # Buscar URLs HLS en la página
+        hls_urls = re.findall(r'https?://[^\s"\']+\.m3u8[^\s"\']*', resp.text)
+        if not hls_urls:
+            # Buscar en sources/videoplayer
+            video_urls = re.findall(r'(?:src|source|file)\s*[:=]\s*["\']([^"\']+\.m3u8[^"\']*)', resp.text)
+            hls_urls.extend(video_urls)
+
+        if not hls_urls:
+            return {"success": False, "error": "No se encontraron streams HLS"}
+
+        # Usar la primera URL HLS encontrada
+        hls_url = hls_urls[0]
+        resp = session.get(hls_url, timeout=30)
+        if resp.status_code != 200:
+            return {"success": False, "error": f"Error obteniendo m3u8: {resp.status_code}"}
+
+        # Parsear master playlist
+        playlists = parse_master_m3u8(resp.text, hls_url)
+
+        seg_dir = output_dir / f"_hls_seg_{hash(url) % 10000}"
+        seg_dir.mkdir(parents=True, exist_ok=True)
+        all_files = []
+
+        # Descargar vídeo
+        if playlists['video']:
+            resp = session.get(playlists['video'], timeout=30)
+            if resp.status_code == 200:
+                init_url, segments = parse_m3u8(resp.text, playlists['video'])
+                if init_url:
+                    init_file = seg_dir / "video_init.mp4"
+                    if download_file(init_url, str(init_file), session):
+                        all_files.append(init_file)
+                for j, seg_url in enumerate(segments):
+                    seg_file = seg_dir / f"video_{j:04d}.m4s"
+                    if download_file(seg_url, str(seg_file), session):
+                        all_files.append(seg_file)
+
+        # Descargar audio
+        audio_files = []
+        if playlists['audio']:
+            resp = session.get(playlists['audio'], timeout=30)
+            if resp.status_code == 200:
+                init_url, segments = parse_m3u8(resp.text, playlists['audio'])
+                if init_url:
+                    init_file = seg_dir / "audio_init.mp4"
+                    if download_file(init_url, str(init_file), session):
+                        audio_files.append(init_file)
+                for j, seg_url in enumerate(segments):
+                    seg_file = seg_dir / f"audio_{j:04d}.m4s"
+                    if download_file(seg_url, str(seg_file), session):
+                        audio_files.append(seg_file)
+
+        if not all_files:
+            return {"success": False, "error": "No se pudieron descargar segmentos"}
+
+        # Concatenar vídeo
+        video_out = seg_dir / "video_only.mp4"
+        with open(video_out, 'wb') as outfile:
+            for f in all_files:
+                with open(f, 'rb') as infile:
+                    outfile.write(infile.read())
+
+        # Concatenar audio
+        audio_out = seg_dir / "audio_only.m4s"
+        if audio_files:
+            with open(audio_out, 'wb') as outfile:
+                for f in audio_files:
+                    with open(f, 'rb') as infile:
+                        outfile.write(infile.read())
+
+        # Mezclar con ffmpeg
+        title_match = re.search(r'<title[^>]*>([^<]+)</title>', resp.text, re.IGNORECASE)
+        title = re.sub(r'[^\w\s-]', '', title_match.group(1).strip())[:50] if title_match else "video"
+        final_output = output_dir / f"{title}.mp4"
+
+        if audio_files and audio_out.exists():
+            subprocess.run([
+                'ffmpeg', '-y',
+                '-i', str(video_out),
+                '-i', str(audio_out),
+                '-c:v', 'copy', '-c:a', 'copy',
+                '-movflags', '+faststart',
+                str(final_output)
+            ], capture_output=True, timeout=300)
+        else:
+            shutil.copy2(str(video_out), str(final_output))
+
+        # Limpiar
+        shutil.rmtree(seg_dir, ignore_errors=True)
+
+        if final_output.exists() and final_output.stat().st_size > 0:
+            return {"success": True, "file": str(final_output)}
+        return {"success": False, "error": "Error al generar el archivo final"}
+
+    except Exception as e:
+        return {"success": False, "error": f"HLS fallback: {str(e)[:200]}"}
 
 
 # ══════════════════════════════════════════════════════════════

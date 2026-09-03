@@ -1,0 +1,12 @@
+--- a/yt_dlp/extractor/odnoklassniki.py
++++ b/yt_dlp/extractor/odnoklassniki.py
+@@ -288,7 +288,8 @@
+ 
+         metadata = flashvars.get('metadata')
+         if metadata:
+-            metadata = self._parse_json(metadata, video_id)
++            if isinstance(metadata, str):
++                metadata = self._parse_json(metadata, video_id)
+         else:
+             data = {}
+             st_location = flashvars.get('location')

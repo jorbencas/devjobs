@@ -175,7 +175,7 @@ Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
 El pipeline de YouTube se ejecuta automáticamente cada día de 01:00 a 18:00:
 
 ```bash
-# Cron configurado
+# Cron configurado (01:00 → 18:00 mismo día)
 0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
 
 # Ver logs

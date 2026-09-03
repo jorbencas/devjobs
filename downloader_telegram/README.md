@@ -104,7 +104,7 @@ Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. 
 
 ### Descarga de vídeos
 
-El bot descarga vídeos de cualquier plataforma soportada por yt-dlp:
+El bot descarga vídeos de cualquier plataforma soportada por yt-dlp + HLS fallback:
 
 ```
 Usuario: /descarga https://www.youtube.com/watch?v=...
@@ -113,11 +113,16 @@ Bot: 🎬 [Vídeo enviado con thumbnail]
 ```
 
 **Flujo:**
-1. Descarga el vídeo con yt-dlp
-2. Convierte a MP4 H.264/AAC (compatible con Telegram)
-3. Genera thumbnail
-4. Envía como vídeo con preview
-5. Elimina el archivo local
+1. Descarga el vídeo con yt-dlp (formato `bv+ba/b` para YouTube)
+2. Si yt-dlp falla → busca streams HLS en la página y los descarga
+3. Convierte a MP4 H.264/AAC (compatible con Telegram)
+4. Genera thumbnail
+5. Envía como vídeo con preview
+6. Elimina el archivo local
+
+**Timeout:** 30 minutos (para vídeos largos o conexiones lentas)
+
+**Plataformas soportadas:** YouTube, ok.ru, Twitch, TikTok, Dailymotion, Vimeo, +1000 sitios
 
 **Funciona en:**
 - Chat privado: envía cualquier URL

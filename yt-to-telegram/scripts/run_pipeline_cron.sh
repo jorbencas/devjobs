@@ -4,7 +4,7 @@
 #
 # Flujo:
 # 1. Arranca el servicio yt-pipeline con docker compose up -d
-# 2. Para a las 18:00 del día siguiente con docker compose down
+# 2. Para a las 18:00 del mismo día con docker compose down
 # 3. Si quedan videos, los anota en pending_videos.log
 # 4. La siguiente vez que se ejecute, continúa con esos videos
 
@@ -18,8 +18,8 @@ RUNNING_MARKER="/tmp/yt-pipeline-cron-running"
 
 # Timestamps
 START_TS=$(date +%s)
-# 18:00 del día siguiente = 41 horas desde las 01:00
-STOP_TS=$((START_TS + 41 * 3600))
+# 18:00 del mismo día = 17 horas desde las 01:00
+STOP_TS=$((START_TS + 17 * 3600))
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"

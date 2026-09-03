@@ -219,16 +219,16 @@ Este pipeline es **completamente independiente** del pipeline de TwitchRecorder:
 
 ## Cron (automático diario)
 
-El pipeline se ejecuta automáticamente cada día con un cron job:
+El pipeline se ejecuta automáticamente cada día de 01:00 a 18:00:
 
 ```bash
-# Cron configurado (01:00 → 18:00+1)
+# Cron configurado (01:00 → 18:00 mismo día)
 0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
 ```
 
 **Flujo del cron:**
 1. **01:00** → `docker compose up -d yt-pipeline` (arranca el servicio)
-2. **18:00+1** → `docker compose down` (para el servicio)
+2. **18:00** → `docker compose down` (para el servicio, mismo día)
 3. Comprueba cada 5 min si el contenedor sigue activo
 4. Si el contenedor para inesperadamente, sale del bucle
 5. Registra videos pendientes en `data/yt-pipeline/logs/pending_videos.log`
