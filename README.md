@@ -236,6 +236,7 @@ Artículos técnicos en [blog-jorbencas.vercel.app](https://blog-jorbencas.verce
 
 | Proyecto | Artículo |
 |----------|----------|
+| `devjobs/` | [Devjobs Automation Suite: Pipelines de Video, Bots IA y Scrapers](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite/) |
 | `ffmpeg-yt-dlp/` | [FFmpeg + yt-dlp Pipeline: 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/) |
 | `ffmpeg-yt-dlp/` | [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/) |
 | `ffmpeg-yt-dlp/` | [Docker: ffmpeg y yt-dlp en WSL](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/) |
