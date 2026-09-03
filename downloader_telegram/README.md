@@ -82,11 +82,10 @@ Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. 
 
 | Función | Detalle |
 |---|---|
-| 💡 Contenido IA | Tips de programación, conceptos con código, herramientas AI, saludos con imagen |
+| 💡 Contenido IA | Tips de programación, conceptos con código, herramientas AI |
 | 📥 Descarga vídeos | Descarga de cualquier plataforma via yt-dlp (YouTube, Twitch, etc.) |
 | 🎬 Conversión automática | Convierte a MP4 H.264/AAC, genera thumbnail, envía como vídeo |
 | 📰 Noticias | Muestra las últimas noticias scrapeadas |
-| 🎨 Imágenes | Genera imágenes de saludo con Gemini AI |
 | ⬆️ Botones inline | Navegación por botones en cada respuesta |
 
 ### Comandos disponibles
@@ -99,7 +98,6 @@ Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. 
 | `/tip` | Tip de programación (Gemini + DB) | 🔄 Otro tip, 💡 Concepto, 🛠 Tool |
 | `/concepto` | Concepto con código de ejemplo | 🔄 Otro, 💡 Tip, 🛠 Tool |
 | `/tool` | Herramienta AI (Gemini + DB) | 🔄 Otro, 💡 Tip, 📖 Concepto |
-| `/saludo` | Imagen de saludo generada por IA | 🎨 Otro saludo |
 | `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
 | `/descarga URL` | Descargar vídeo de cualquier plataforma | — |
 | `/download URL` | Alias de /descarga | — |
@@ -130,7 +128,7 @@ Bot: 🎬 [Vídeo enviado con thumbnail]
 | Variable | Descripción | Default |
 |---|---|---|
 | `BOT_TOKEN` | Token del bot (de @BotFather) | **requerido** |
-| `GEMINI_API_KEY` | API key de Google Gemini | para tips/tools/saludos |
+| `GEMINI_API_KEY` | API key de Google Gemini | para tips/tools |
 | `BOT_ADMINS` | IDs de admins (separados por coma) | vacío |
 | `TEST_GH_DIR` | Ruta a test_githubActions | `/data/.test_githubActions` |
 | `DOWNLOAD_DIR` | Ruta de descargas | `/data/descargas` |
@@ -157,7 +155,7 @@ docker compose logs -f telegram_bot
 ┌─────────────────────────────────────────────┐
 │         🤖 BOT API (python-telegram-bot)    │
 ├─────────────────────────────────────────────┤
-│  💡 Contenido IA (tips, tools, saludos)     │
+│  💡 Contenido IA (tips, tools)              │
 │  📥 Descarga vídeos (yt-dlp + ffmpeg)       │
 │  📰 Noticias scrapeadas                     │
 └──────────┬──────────────┬──────────────────┘
