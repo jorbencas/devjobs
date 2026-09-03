@@ -169,7 +169,8 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
         "-F", f"video=@{video_path}",
         "-F", f"message_thread_id={topic_id}",
         "-F", f"caption={caption}",
-        "-F", "parse_mode=HTML"
+        "-F", "parse_mode=HTML",
+        "-F", "supports_streaming=true"
     ]
     
     try:
