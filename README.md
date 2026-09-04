@@ -57,6 +57,9 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
    directo (según `config.json`) y graba con calidad original. Si el canal define
    varias fuentes, coge la primera que esté online. Si cambia de plataforma a
    medio directo (p. ej. Twitch→Kick), concatena las partes en un solo archivo.
+   - **Horarios por canal**: `days` + `start_time` por canal (ej: midudev lunes-jueves 18:00)
+   - **Prioridad por día**: `dias_plataforma` (ej: domingo YouTube primero, resto web/twitch/kick)
+   - **Detección de episodios**: OCR automático configurable por fuente (`detectar`, `corte`, `descripcion`)
 2. **Keyword** — lee el **título/descripción** del directo y lo incrusta en el
    nombre: `sendosama_2026-08-13_20-15-00_KW_<keyword>_completed.mp4`. La keyword
    viaja intacta por todo el pipeline.
@@ -79,6 +82,45 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
 
 Resultado: un directo grabado a las 21:00 aparece ya comprimido y subido a su
 tema/serie sin que tengas que hacer nada.
+
+### Configuración del pipeline
+
+```json
+// config.json - Ejemplo con múltiples canales
+{
+    "channels": {
+        "sendosama": {
+            "platform": [
+                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+                { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+                { "platform": "twitch", "detectar": true, "corte": true },
+                { "platform": "kick", "detectar": true, "corte": true }
+            ],
+            "start_time": { "Sunday": "19:00", "*": "21:30" },
+            "dias_plataforma": {
+                "Sunday": ["youtube", "twitch", "web", "kick"],
+                "*": ["web", "twitch", "kick"]
+            }
+        },
+        "midudev": {
+            "platform": [
+                { "platform": "youtube", "descripcion": true },
+                { "platform": "twitch", "detectar": false, "corte": false }
+            ],
+            "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+            "start_time": "18:00"
+        }
+    }
+}
+```
+
+### Contenedores Docker
+
+| Contenedor | Servicio | Qué hace |
+|------------|----------|----------|
+| `twitchrecorder-sendo` | Grabador | Detecta directos, graba con calidad original, concatena partes |
+| `ffmpeg_monitor-sendo` | Compresor | Convierte a 720p, detecta episodios por OCR, gestiona sidecars |
+| `telegram-uploader-sendo` | Subidor | Rutea por keyword, sube a temas de Telegram, limpia residuos |
 
 ### Carpetas del pipeline
 
