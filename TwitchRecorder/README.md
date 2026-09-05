@@ -183,8 +183,8 @@ Cada fuente puede llevar estas marcas opcionales (todas independientes):
   al monitor (sidecar `{"detectar": false}`) y este no hace OCR.
 - **`"corte": true/false`** — control del **corte de extremos por fuente**. Con
   `"corte": true` (o sin especificar) la fuente permite el corte por episodios.
-  Con `"corte": false` el monitor **no recorta** (aunque detecte). El flag
-  global `DIRECTO_COMPLETO` del monitor desactiva el corte para todo.
+  Con `"corte": false` el monitor **no recorta** (aunque detecte). No hay flag
+  global: lo decide siempre el `corte` de cada fuente.
 - **`"descripcion": true`** — al grabar desde esa fuente, el recorder guarda la
   **descripción del directo** (p. ej. la de YouTube) en un sidecar
   `<grabado>_descripcion.json`. Ese sidecar le dice al monitor que **omita la

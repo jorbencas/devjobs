@@ -31,4 +31,3 @@ services:
     environment:
       - OUTPUT_DIR=/comprimidos
       - POLL_INTERVAL=30
-      - DIRECTO_COMPLETO=true

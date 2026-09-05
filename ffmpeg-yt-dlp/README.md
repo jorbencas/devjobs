@@ -183,12 +183,11 @@ bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
 | `--codec NAME` | Códec de vídeo | `libx264` |
 | `-r, --resolution N` | Escalar altura a `N`px (ej: `720`) | sin reescalar |
 | `--completed-only` | Procesar solo `*_completed.*` | off |
-| `--directo-completo` | **No cortar** inicio/fin del directo (mantener todo el vídeo) | off |
 | `--interval SEGS` | Segundos entre comprobaciones | `30` |
 
 #### Variables de entorno
 
-`RESOLUTION`, `COMPLETED_ONLY`, `DIRECTO_COMPLETO`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`, `OCR_STEP`, `CORTE_MARGEN`.
+`RESOLUTION`, `COMPLETED_ONLY`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`, `OCR_STEP`, `CORTE_MARGEN`, `MIN_DURACION`.
 
 #### Servicio Docker `monitor`
 
@@ -219,7 +218,7 @@ docker compose stop monitor   # o docker compose down
 
 Vigila `../data/pipeline/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `../data/pipeline/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
 
-#### Corte de inicio/fin del directo y `DIRECTO_COMPLETO`
+#### Corte de inicio/fin del directo
 
 Por defecto, antes de comprimir el monitor detecta los **episodios** (OCR de la
 franja superior cada `OCR_STEP` segundos) y **recorta los extremos**: deja solo
@@ -229,30 +228,20 @@ segundos, default 300), descartando el pre-roll/espera y el final.
 Esa detección también genera la metadata `*_episodios.json` (p. ej.
 `"Episodio 1-4"`) que usa el uploader como pie/caption en Telegram.
 
-Con **`DIRECTO_COMPLETO=true`** (o el flag `--directo-completo`) el monitor
-**NO corta** el inicio/fin: se mantiene **todo el directo**. La detección de
-episodios sigue ejecutándose (la metadata `*_episodios.json` para el caption
-se sigue generando), pero el corte se ignora.
+El **corte se decide siempre por fuente** vía sidecar `*_descripcion.json`:
+- `descripcion` → omite detección y corte (típico YouTube, directo completo).
+- `corte: false` → no recorta extremos (aunque siga haciendo OCR para el caption).
+- Sin sidecar → recorte normal por episodios.
 
-> **Estado actual:** el servicio Docker `monitor` lo trae **activo de fábrica**
-> (`DIRECTO_COMPLETO=true`) porque de momento no se quiere cortar nada.
-> Para reactivar el corte de extremos, ponlo a `false` (o elimina la línea) en
-> `docker-compose.yml` y recrea el contenedor:
->
-> ```yaml
-> environment:
->   - DIRECTO_COMPLETO=true
-> ```
->
-> ```bash
-> docker compose up -d --force-recreate monitor
-> ```
+> **Estado actual:** en la config de TwitchRecorder, midudev/mouredev y los
+> domingos de sendosama en YouTube llevan `descripcion` (directo completo sin
+> cortes). Las fuentes Twitch/Kick de sendosama cortan por episodios. No hay
+> ningún flag global: lo decide cada sidecar.
 
 > El **corte por canal/fuente** se controla en la config de TwitchRecorder con el
 > flag `"corte"` por fuente (ver README de TwitchRecorder): `"corte": false`
-> desactiva el corte de esa fuente aunque `DIRECTO_COMPLETO` esté a `false`.
-> Además, las fuentes con sidecar `*_descripcion.json` (ver sección siguiente)
-> **nunca** se recortan, independientemente de este flag.
+> desactiva el corte de esa fuente. Las fuentes con sidecar
+> `*_descripcion.json` (ver sección siguiente) **nunca** se recortan.
 
 #### Configuración del directo por fuente (`*_descripcion.json`)
 
@@ -266,8 +255,7 @@ config de la fuente desde la que se grabó. Los campos que puede traer:
 | `corte: false` | **Omite el corte** de extremos (aunque detecte) |
 
 **Detección y corte son independientes.** Sin sidecar → comportamiento normal:
-**OCR + corte**. Además, `DIRECTO_COMPLETO=true` desactiva el corte globalmente
-(sigue haciendo OCR para el caption).
+**OCR + corte**.
 
 Casos reales:
 

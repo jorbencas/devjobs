@@ -6,7 +6,7 @@
 set -e
 
 # ── Configuración ────────────────────────────────────────────────────
-WATCH_DIR="${1:-$HOME/data/pipeline/grabaciones/test}"
+WATCH_DIR="${WATCH_DIR:-$HOME/data/pipeline/grabaciones/test}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
 LOG_FILE="$OUTPUT_DIR/log_$(date +%Y-%m-%d).txt"
 PROCESSED_DIR="$OUTPUT_DIR/.processed"
@@ -22,9 +22,9 @@ COMPLETED_ONLY="${COMPLETED_ONLY:-false}"
 # Detección de episodios (corte de extremos + metadata para el uploader)
 OCR_STEP="${OCR_STEP:-180}"
 CORTE_MARGEN="${CORTE_MARGEN:-300}"
-# directo_completo: si es true, NO se recortan el inicio/fin del directo
-# (se mantiene TODO el vídeo). Por defecto sigue el corte por episodios.
-DIRECTO_COMPLETO="${DIRECTO_COMPLETO:-false}"
+# Integridad: si el vídeo no es legible o dura menos de MIN_DURACION s (p. ej.
+# corte de red al final de la grabación) se descarta antes de procesar.
+MIN_DURACION="${MIN_DURACION:-60}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # IPC para comunicación con el bot de Telegram
@@ -88,7 +88,7 @@ compress_video() {
     #   {"detectar": false}     → fuente SIN detección de episodios (sin OCR).
     #   {"corte": false}        → fuente SIN corte de extremos (aunque detecte).
     # Detección y corte son independientes. Sin sidecar → por defecto se detecta
-    # (OCR) y se puede cortar. DIRECTO_COMPLETO=true desactiva el corte global.
+    # (OCR) y se puede cortar. El corte lo decide siempre el sidecar (`corte`).
     local sc_desc=""
     local sc_detectar="true"
     local sc_corte="true"
@@ -136,17 +136,12 @@ compress_video() {
         fi
     fi
 
-    # Corte de extremos: por fuente (sidecar) y por flag global DIRECTO_COMPLETO.
-    # La detección (OCR) ya se hizo arriba de forma independiente.
+    # Corte de extremos: solo por fuente (sidecar). La detección (OCR) ya se hizo
+    # arriba de forma independiente.
     if [[ "$sc_corte" != "true" ]]; then
         cut_inicio=""
         cut_fin=""
         [[ -z "$sc_desc" ]] && log "  Fuente sin corte (config): se mantiene el vídeo completo"
-    fi
-    if [[ "$DIRECTO_COMPLETO" == "true" ]]; then
-        cut_inicio=""
-        cut_fin=""
-        log "  DIRECTO_COMPLETO=true: se mantiene todo el directo (sin corte de extremos)"
     fi
 
     # Obtener duración para calcular progreso
@@ -264,9 +259,26 @@ compress_video() {
     fi
 }
 
+check_integridad() {
+    local input="$1"
+    local dur
+    # ffprobe falla (vacío) si el contenedor está truncado/corrupto (sin moov).
+    dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input" 2>/dev/null | cut -d. -f1)
+    if [[ -z "$dur" || ! "$dur" =~ ^[0-9]+$ ]] || (( dur < MIN_DURACION )); then
+        log "${RED}✗${NC} $input: no legible o duración < ${MIN_DURACION}s (¿vídeo truncado?). Se mueve a .corruptos."
+        return 1
+    fi
+    return 0
+}
+
 process_pending() {
     local count=0
     while IFS= read -r -d '' file; do
+        if ! check_integridad "$file"; then
+            mkdir -p "$WATCH_DIR/.corruptos"
+            mv "$file" "$WATCH_DIR/.corruptos/" 2>/dev/null || true
+            continue
+        fi
         compress_video "$file" || true
         ((count++))
     done < <(find "$WATCH_DIR" -maxdepth 1 -type f $(video_find_pattern) -print0 2>/dev/null)
@@ -284,8 +296,8 @@ show_help() {
     echo "  -r, --resolution N   Escalar a altura N px con pad 16:9, ej: 720 (default: sin reescalar)"
     echo "  -t, --threads N      Hilos ffmpeg (default: 4)"
     echo "  --completed-only     Procesar solo archivos *_completed.* / *_compressed.*"
-    echo "  --directo-completo   No cortar inicio/fin del directo (mantener todo el vídeo)"
     echo "  --interval SEGS      Intervalo de polling en segundos (default: 30)"
+    echo "  --min-duration S     Duración mínima para procesar (default: 60)"
     echo "  -h, --help           Mostrar ayuda"
     echo ""
     echo "Ejemplo:"
@@ -303,8 +315,8 @@ while [[ $# -gt 0 ]]; do
         -r|--resolution) RESOLUTION="$2"; shift 2 ;;
         -t|--threads)    THREADS="$2"; shift 2 ;;
         --completed-only) COMPLETED_ONLY="true"; shift ;;
-        --directo-completo) DIRECTO_COMPLETO="true"; shift ;;
         --interval)    POLL_INTERVAL="$2"; shift 2 ;;
+        --min-duration) MIN_DURACION="$2"; shift 2 ;;
         -h|--help)     show_help; exit 0 ;;
         -*)            echo -e "${RED}Opción desconocida: $1${NC}"; show_help; exit 1 ;;
         *)             WATCH_DIR="$1"; shift ;;
@@ -319,7 +331,6 @@ log "Salida: $OUTPUT_DIR"
 log "CRF: $CRF | Preset: $PRESET | Códec: $CODEC"
 [[ -n "$RESOLUTION" ]] && log "Resolución: $RESOLUTION (escala)"
 [[ "$COMPLETED_ONLY" == "true" ]] && log "Solo archivos *_completed / *_compressed"
-[[ "$DIRECTO_COMPLETO" == "true" ]] && log "Directo completo: sin corte de inicio/fin"
 log "Polling cada ${POLL_INTERVAL}s"
 log "Presiona Ctrl+C para detener"
 echo ""

@@ -4,6 +4,10 @@ import signal
 import sys
 from datetime import datetime
 
+from utils.config import get_channels_with_platform, load_config, parse_duration
+from utils.logger import log
+from utils.recorder import Recorder
+
 running = True
 
 
@@ -67,6 +71,23 @@ def _get_today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def _canales_colisionan(config: dict, channels: list) -> list:
+    """Devuelve [(canal_a, canal_b, dia, hora)] de canales distintos que emiten a la vez.
+
+    La grabación en paralelo es posible, pero avisar ayuda a decidir si conviene
+    ajustar 'days'/'start_time' (o añadir 'priority') en la config."""
+    programados = {}
+    for channel, platform_name, url, extra in channels:
+        for day in _dias_para(extra, config):
+            hora = _hora_inicio_para(extra, config, day)
+            programados.setdefault((day, hora), []).append(channel)
+    return [
+        (lista[0], ch, day, hora)
+        for (day, hora), lista in programados.items()
+        for ch in lista[1:]
+    ]
+
+
 def run_scheduler(dry_run: bool = False):
     config = load_config()
     channels_with_platform = get_channels_with_platform(config)
@@ -81,12 +102,14 @@ def run_scheduler(dry_run: bool = False):
     log.info("=== TwitchRecorder iniciado ===")
     log.info(f"Canales: {[ch for ch, _, _, _ in channels_with_platform]}")
     log.info(f"Comprobando cada {check_interval}s")
+    for a, b, day, hora in _canales_colisionan(config, channels_with_platform):
+        log.warning(f"COLISIÓN: {a} y {b} coinciden {day} a las {hora} → se grabarán en paralelo (doble carga CPU/disco). Ajusta 'days'/'start_time' si no es deseado.")
     if dry_run:
         log.info("Modo DRY-RUN activo")
 
     recorders = {}
     for channel, platform_name, url, extra in channels_with_platform:
-        recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path)
+        recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path, extra.get("dias_plataforma"))
 
     # Esperar a la hora de inicio más temprana de los canales de hoy
     progs = _programados_hoy(config, channels_with_platform)
