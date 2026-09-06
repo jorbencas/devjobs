@@ -90,6 +90,11 @@ def convert_video(video_path, output_dir):
             "-f", "mp4",
             tmp_path
         ]
+        
+        # Añadir duración explícita si está disponible (mejora miniatura en Telegram)
+        if duration > 0:
+            cmd.insert(-1, "-metadata")
+            cmd.insert(-1, f"duration={duration:.6f}")
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
         if result.returncode != 0 or not Path(tmp_path).exists():
@@ -117,7 +122,7 @@ def convert_video(video_path, output_dir):
                     "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
                 ], capture_output=True, timeout=7200)
                 # Pasada 2
-                subprocess.run([
+                cmd_pass2 = [
                     "ffmpeg", "-y", "-i", str(video_file),
                     "-vf", "scale=-2:720",
                     "-c:v", "libx264", "-b:v", str(video_bps),
@@ -127,7 +132,12 @@ def convert_video(video_path, output_dir):
                     "-map_metadata", "0",
                     "-movflags", "+faststart",
                     "-f", "mp4", tmp_path
-                ], capture_output=True, timeout=7200)
+                ]
+                # Añadir duración explícita si está disponible
+                if duration > 0:
+                    cmd_pass2.insert(-1, "-metadata")
+                    cmd_pass2.insert(-1, f"duration={duration:.6f}")
+                subprocess.run(cmd_pass2, capture_output=True, timeout=7200)
                 for f in Path(".").glob("ffmpeg2pass-*.log*"):
                     f.unlink(missing_ok=True)
 
