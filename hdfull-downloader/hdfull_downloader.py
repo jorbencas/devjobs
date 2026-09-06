@@ -87,11 +87,13 @@ def find_working_domain(url):
                 log(f"Dominio actual {parsed.netloc} accesible (HTTP {r.status_code})")
                 return url
             else:
-                log(f"Dominio {parsed.netloc} bloqueado por Cloudflare")
+                # No cambiar de dominio por Cloudflare: se resuelve en el navegador
+                log(f"Dominio {parsed.netloc} tiene Cloudflare; lo resolverá el navegador")
+                return url
     except Exception:
         pass
 
-    log(f"Dominio {parsed.netloc} no accesible, buscando alternativo...")
+    log(f"Dominio {parsed.netloc} no responde, buscando alternativo...")
 
     # Probar dominios alternativos
     for domain in HDFULL_DOMAINS:
@@ -178,14 +180,26 @@ def login(page, domain):
         log("FALTAN credenciales (HDFULL_USER / HDFULL_PASS)")
         return False
     login_url = f"https://{domain}/login"
+    page.get(login_url)
+    time.sleep(4)
+    if "login" not in page.url.lower():
+        log("LOGIN OK (sesión ya activa)")
+        return True
     for attempt in range(4):
         try:
-            page.get(login_url)
-            time.sleep(6)
-            page.ele("css:#popup_login_form input[name=username]", timeout=8).input(HDFULL_USER)
-            page.ele("css:#popup_login_form input[name=password]", timeout=5).input(HDFULL_PASS)
+            user_el = page.ele("css:#popup_login_form input[name=username]", timeout=3) or \
+                      page.ele("css:input[name=username]", timeout=3)
+            pass_el = page.ele("css:#popup_login_form input[name=password]", timeout=2) or \
+                      page.ele("css:input[name=password]", timeout=2)
+            user_el.input(HDFULL_USER)
+            time.sleep(0.5)
+            pass_el.input(HDFULL_PASS)
             time.sleep(1)
-            page.ele("css:#popup_login_form a[onclick*=doLogin]", timeout=5).click()
+            btn = page.ele("css:#popup_login_form a[onclick*=doLogin]", timeout=2) or \
+                  page.ele("css:form[action*=login] button, button[type=submit], .btn[onclick*=login]",
+                           timeout=2)
+            if btn:
+                btn.click()
             time.sleep(6)
             if "login" not in page.url.lower():
                 log("LOGIN OK")
@@ -199,20 +213,126 @@ def login(page, domain):
     return False
 
 
+PLAYER_KEYWORDS = ("embed", "player", "/video", "/watch", "/ver", "video/",
+                   "stream", "server", "reproduc", "vidsrc", "/tv/", "/ep/",
+                   "gounlimited", "streamtape", "dood", "mixdrop", "filemoon",
+                   "voe", "netu", "uqload", "sendvid", "fembed", "vev.io")
+
+
 def find_player_frame(page):
+    clicked = False
     for _ in range(6):
         try:
             ifs = page.eles("tag:iframe", timeout=4)
             for f in ifs:
-                src = f.attr("src") or ""
-                if "embed" in src or "video" in src or "player" in src:
+                src = (f.attr("src") or f.attr("data-src") or "").strip()
+                if any(k in src.lower() for k in PLAYER_KEYWORDS):
                     fr = page.get_frame(f, timeout=15)
                     if fr:
                         return fr
+            # Fallback: si hay iframes pero ninguno coincide, probar el primero con src
+            for f in ifs:
+                if (f.attr("src") or "").strip():
+                    fr = page.get_frame(f, timeout=10)
+                    if fr:
+                        return fr
+            # Fallback: video ya incrustado directamente en la página principal
+            if page.eles("tag:video", timeout=1):
+                return page
         except Exception:
             pass
+        if not clicked:
+            clicked = True
+            try_click_play(page)
         time.sleep(3)
     return None
+
+
+def try_click_play(page):
+    for sel in (".play-box", "#play", "#play-button", ".playbtn", ".play-btn",
+                ".btn-play", "#btn-play", "a[data-play]", "a[href*='player']",
+                "a[href*='player.php']", ".choose-player a", "a[href*='/ver/']",
+                "a[href*='reproducir']", "[onclick*='player' i]",
+                "[onclick*='play' i]"):
+        try:
+            el = page.ele(f"css:{sel}", timeout=1.5)
+            if el:
+                el.click()
+                log(f"click play: {sel}")
+                time.sleep(4)
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def raw_html_frame_url(page, url):
+    """Intenta sacar el iframe del reproductor del HTML crudo, usando
+    las cookies del navegador (bypasa el render JS que se cuelga)."""
+    try:
+        ck = {c["name"]: c["value"] for c in page.cookies(all_domains=True)}
+        r = requests.get(url, timeout=15, allow_redirects=True, cookies=ck,
+                         headers={"User-Agent":
+                                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/125.0.0.0 Safari/537.36",
+                                  "Referer": url})
+        html = r.text
+        if "just a moment" in html[:2000].lower():
+            log("raw html: bloqueado por Cloudflare (usando página del navegador)")
+            return None
+        for tag in re.findall(r"<iframe[^>]*>", html, flags=re.I):
+            m = re.search(r'\b(?:src|data-src|data-lazy-src)\s*=\s*"([^"]+)"',
+                          tag, flags=re.I)
+            if not m:
+                continue
+            u = m.group(1)
+            if any(k in u.lower() for k in PLAYER_KEYWORDS):
+                return u if u.startswith("http") else urllib.parse.urljoin(url, u)
+        return None
+    except Exception as e:
+        log(f"raw html frame ERR: {e}")
+        return None
+
+
+def dump_diag_no_frame(page):
+    import json
+    lines = []
+    try:
+        lines.append(f"page.url: {page.url}")
+    except Exception as e:
+        lines.append(f"page.url ERR: {e}")
+    try:
+        lines.append(f"page.title: {page.title}")
+    except Exception as e:
+        lines.append(f"page.title ERR: {e}")
+    try:
+        probe = page.run_js("""(() => {
+          const ifr=[...document.querySelectorAll('iframe')].map(f=>(
+            {src:f.src||'', data:f.getAttribute('data-src')||'', id:f.id, cls:(f.className||'')}));
+          const play=[...document.querySelectorAll('a,button,div,span')]
+            .filter(e=>/play|reproduc|ver video|ver pel|descargar|download/i.test(
+              ((e.id||'')+' '+(e.className||'')+' '+(e.textContent||'').trim()).slice(0,120)))
+            .slice(0,25).map(e=>({tag:e.tagName,id:(e.id||'')[:40],cls:(e.className||'')[:60],
+              text:(e.textContent||'').trim()[:50]}));
+          const host=[...document.querySelectorAll(
+            '[id*="player" i],[class*="player" i],[id*="reproduc" i],[id*="video" i],[class*="reproduc" i]')]
+            .slice(0,15).map(e=>({tag:e.tagName,id:(e.id||'')[:40],cls:(e.className||'')[:60]}));
+          return JSON.stringify({ifr, play, host,
+            ready: document.readyState,
+            ifrCountDoc: document.querySelectorAll('iframe').length});
+        })()""", as_expr=True)
+        lines.append("probe: " + str(probe))
+    except Exception as e:
+        lines.append(f"probe ERR: {e}")
+    try:
+        page.get_screenshot(path="/app/diagnostics.png", full_page=True)
+        lines.append("screenshot guardado en /app/diagnostics.png")
+    except Exception as e:
+        lines.append(f"screenshot ERR: {e}")
+    with open("/app/diagnostics.txt", "w") as fh:
+        fh.write("\n".join(str(x) for x in lines))
+    log("Diagnóstico (sin frame) en /app/diagnostics.txt (mira la captura diagnostics.png)")
 
 
 def close_popups(page):
@@ -435,6 +555,13 @@ def save_meta(url, dest):
     log(f"META: {url}")
 
 
+def page_title(page):
+    try:
+        return (page.title or "")[:200]
+    except Exception:
+        return ""
+
+
 def main():
     global TARGET_URL
     TARGET_URL = find_working_domain(TARGET_URL)
@@ -443,6 +570,21 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     page = launch()
 
+    # Resolver Cloudflare del dominio original ANTES de hacer login
+    log("Comprobando Cloudflare (si aparece, resuélvelo en noVNC)...")
+    page.get(TARGET_URL)
+    time.sleep(8)
+    cf_wait = 0
+    while "just a moment" in page_title(page).lower() and cf_wait < 120:
+        if cf_wait % 10 == 0:
+            log(f"PENDIENTE: Cloudflare activo ({cf_wait}s / 120s) - resuélvelo en http://localhost:6080/vnc.html")
+        time.sleep(5)
+        cf_wait += 5
+    if "just a moment" in page_title(page).lower():
+        log("Cloudflare no resuelto a tiempo")
+        page.quit()
+        sys.exit(1)
+
     if not login(page, domain):
         page.quit()
         sys.exit(1)
@@ -450,27 +592,21 @@ def main():
     page.get(TARGET_URL)
     time.sleep(8)
 
-    def get_title():
-        try:
-            return page.title or ""
-        except Exception:
-            return ""
-
-    title = get_title()
+    title = page_title(page)
     log(f"Página: {page.url[:100]} | {title[:70]}")
 
     # Esperar a que se resuelva Cloudflare challenge si está presente
     cf_wait = 0
     cf_timeout = 120
-    title = get_title()
+    title = page_title(page)
     while "just a moment" in title.lower() and cf_wait < cf_timeout:
         if cf_wait % 10 == 0:
             log(f"PENDIENTE: Cloudflare challenge activo ({cf_wait}s / {cf_timeout}s) - resuélvelo en http://localhost:6080/vnc.html")
         time.sleep(5)
         cf_wait += 5
-        title = get_title()
+        title = page_title(page)
 
-    title = get_title()
+    title = page_title(page)
     if "just a moment" in title.lower():
         log("Cloudflare challenge no resuelto a tiempo")
         page.quit()
@@ -480,6 +616,17 @@ def main():
 
     frame = find_player_frame(page)
     if not frame:
+        raw = raw_html_frame_url(page, TARGET_URL)
+        if raw:
+            log(f"Reproductor (HTML crudo): {raw[:90]}")
+            try:
+                page.get(raw)
+                time.sleep(8)
+                frame = find_player_frame(page)
+            except Exception as e:
+                log(f"navegar al embed falló: {e}")
+    if not frame:
+        dump_diag_no_frame(page)
         log("No se encontró el frame del reproductor")
         page.quit()
         sys.exit(1)

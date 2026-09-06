@@ -3,7 +3,10 @@ services:
     build: .
     image: hdfull-downloader:latest
     container_name: hdfull-downloader
-    network_mode: host
+    ports:
+      - "6080:6080"
+      - "5900:5900"
+      - "9312:9312"
     volumes:
       - .:/app
       - profile:/profile

@@ -87,7 +87,7 @@ run_foreground() {
   if [ "$CLEAR_PROFILE" = true ]; then
     extra_args="--clear-profile"
   fi
-  docker compose run --rm hdfull_downloader $extra_args "$url" | tee "$LOGFILE"
+  docker compose run --rm --service-ports hdfull_downloader $extra_args "$url" | tee "$LOGFILE"
   echo "------------------------------------------------------"
   echo "Descarga finalizada. MP4 en downloads/  (logs en $LOGFILE)"
 }

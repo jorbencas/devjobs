@@ -168,21 +168,23 @@ docker compose build --no-cache
 ### Comandos directos (alternativa)
 
 ```sh
-# URL como argumento (recomendado)
-docker compose run --rm hdfull_downloader "https://hdfull.sbs/pelicula/otra-pelicula"
+# URL como argumento (recomendado). --service-ports expone noVNC/VNC
+docker compose run --rm --service-ports hdfull_downloader "https://hdfull.sbs/pelicula/otra-pelicula"
 
 # URL como variable de entorno (fallback)
-docker compose run --rm -e HDFULL_URL="https://hdfull.sbs/pelicula/otra-pelicula" hdfull_downloader
+docker compose run --rm --service-ports -e HDFULL_URL="https://hdfull.sbs/pelicula/otra-pelicula" hdfull_downloader
 
 # Con perfil limpio (borrar cookies/sesión)
-docker compose run --rm hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/otra-pelicula"
+docker compose run --rm --service-ports hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/otra-pelicula"
 ```
+
+> **Importante**: `--service-ports` es obligatorio para que `http://localhost:6080/vnc.html` (noVNC) funcione. Con `./menu.sh` ya viene incluido.
 
 ### Flujo de uso
 
 1. **Configura credenciales** en `.env`
 2. **Lanza el contenedor** con la URL de la película
-3. **Abre noVNC** en `http://localhost:6080/vnc.html` y resuelve el captcha manualmente
+3. **Abre noVNC** en `http://localhost:6080/vnc.html` y resuelve el captcha manualmente (el noVNC solo está activo mientras el contenedor corre; lanza con `--service-ports` o con `./menu.sh`)
 4. **Descarga automática** — una vez superado el captcha, el script detecta la URL real del stream y descarga con ffmpeg
 
 ---
@@ -206,8 +208,9 @@ def fetch_hdfull_domains():
 Flujo:
 1. Descarga la página `dominioshdfull.com` y extrae los dominios `hdfull.*`
 2. Prueba el dominio de la URL original
-3. Si no responde, prueba los dominios alternativos hasta encontrar uno accesible
-4. Reemplaza el dominio en la URL y continúa
+3. Si el dominio original responde pero tiene **Cloudflare**, ya **no cambia de espejo**: se queda en ese dominio y te pide resolver el challenge en noVNC (el navegador lo supera)
+4. Solo si el dominio original no responde (error de red o 404), prueba dominios alternativos hasta encontrar uno accesible
+5. Reemplaza el dominio en la URL y continúa
 
 ---
 
@@ -320,10 +323,10 @@ Si necesitas limpiar las credenciales guardadas o empezar desde cero, usa el fla
 
 ```bash
 # Con docker compose directamente (URL como argumento)
-docker compose run --rm hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
+docker compose run --rm --service-ports hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
 
 # Con docker compose y URL por variable de entorno
-docker compose run --rm -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader --clear-profile
+docker compose run --rm --service-ports -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader --clear-profile
 
 # Con el menú interactivo
 ./menu.sh --clear-profile
@@ -365,13 +368,13 @@ La URL se puede pasar de dos formas:
 docker compose build --no-cache
 
 # Ejecutar (URL como argumento)
-docker compose run --rm hdfull_downloader "https://hdfull.sbs/pelicula/swimming-pool"
+docker compose run --rm --service-ports hdfull_downloader "https://hdfull.sbs/pelicula/swimming-pool"
 
 # Ejecutar (URL como variable de entorno)
-docker compose run --rm -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader
+docker compose run --rm --service-ports -e HDFULL_URL="https://hdfull.sbs/pelicula/swimming-pool" hdfull_downloader
 
 # Ejecutar con perfil limpio (borrar cookies/sesión)
-docker compose run --rm hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
+docker compose run --rm --service-ports hdfull_downloader --clear-profile "https://hdfull.sbs/pelicula/swimming-pool"
 
 # Menú interactivo
 ./menu.sh
@@ -447,7 +450,7 @@ hdfull-downloader/
 
 | Síntoma | Causa | Solución |
 |---|---|---|
-| Pantalla negra en noVNC | Falta WM/`xsetroot` o Chromium minimizado | El `start.sh` ya lanza `openbox` + `xsetroot -solid darkgray` y Chromium con `--start-maximized`; si pasa, re-construye: `docker compose build --no-cache && docker compose run --rm hdfull_downloader` |
+| Pantalla negra en noVNC | Falta WM/`xsetroot` o Chromium minimizado | El `start.sh` ya lanza `openbox` + `xsetroot -solid darkgray` y Chromium con `--start-maximized`; si pasa, re-construye: `docker compose build --no-cache && docker compose run --rm --service-ports hdfull_downloader` |
 | El captcha "no es visible" | Un popup de anuncio tapa la pestaña real | `close_popups()` cierra pestañas secundarias automáticamente cada minuto |
 | `ElementLostError` en el bucle | El frame del reproductor se pierde al navegar | El script re-adquiere el frame con `find_player_frame()` cuando lo detecta |
 | MP4 corrupto / sin `moov` | Fragmento fantasma 404 al final del MPD | Ya resuelto con `-t (duración − 6s)` en `download_hls_dash()` |
