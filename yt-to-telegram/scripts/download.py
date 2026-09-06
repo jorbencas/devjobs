@@ -43,18 +43,21 @@ def save_downloaded_ids(ids):
         json.dump(list(ids), f)
 
 def get_channel_videos(channel, downloaded_ids, max_videos=2):
-    """Obtiene lista de vídeos disponibles de un canal (sin descargar)."""
+    """Obtiene lista de vídeos disponibles de un canal, ordenados del más antiguo al más nuevo."""
     name = channel["name"]
     url = channel["url"]
     
     logger.info(f"  📋 Buscando vídeos de {name}...")
     
+    # Obtener más vídeos de los necesarios para poder ordenar por fecha
+    fetch_count = max(max_videos * 5, 20)
+    
     cmd = [
         "yt-dlp",
         "--remote-components", "ejs:github",
         "--flat-playlist",
-        "--print", "%(id)s|||%(title)s|||%(duration)s|||%(live_status)s",
-        "--playlist-end", str(max_videos * 3),
+        "--print", "%(id)s|||%(title)s|||%(duration)s|||%(live_status)s|||%(upload_date)s",
+        "--playlist-end", str(fetch_count),
         url
     ]
     
@@ -76,24 +79,33 @@ def get_channel_videos(channel, downloaded_ids, max_videos=2):
             title = parts[1]
             duration = parts[2] if len(parts) > 2 else "0"
             live_status = parts[3] if len(parts) > 3 else ""
+            upload_date = parts[4] if len(parts) > 4 else ""
             
             if video_id in downloaded_ids:
                 continue
+            
+            # Formatear fecha: YYYYMMDD → YYYY-MM-DD
+            if upload_date and len(upload_date) == 8 and upload_date.isdigit():
+                upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
             
             videos.append({
                 "id": video_id,
                 "title": title,
                 "duration": duration,
-                "upload_date": "",
+                "upload_date": upload_date,
                 "live_status": live_status,
                 "is_short": int(duration) <= 60 if duration.isdigit() else False,
                 "is_live": live_status in ["is_live", "is_upcoming"]
             })
-            
-            if len(videos) >= max_videos:
-                break
         
-        return videos
+        # Ordenar por fecha de publicación (más antiguo primero)
+        def sort_key(v):
+            d = v.get("upload_date", "")
+            return d if d else "9999-99-99"
+        
+        videos.sort(key=sort_key)
+        
+        return videos[:max_videos]
         
     except subprocess.TimeoutExpired:
         logger.error(f"  ⏰ Timeout listando vídeos del canal")

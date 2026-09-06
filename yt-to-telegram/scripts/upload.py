@@ -20,6 +20,7 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data/yt-pipeline"))
 CONVERTED_DIR = DATA_DIR / "converted"
 UPLOADED_DIR = DATA_DIR / "uploaded"
 LOGS_DIR = DATA_DIR / "logs"
+MESSAGE_IDS_FILE = DATA_DIR / "message_ids.json"
 
 # Configuración de Telegram
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -46,6 +47,30 @@ def save_topics(topics):
     """Guarda el mapping de canales a topics."""
     with open(TOPICS_FILE, "w") as f:
         json.dump(topics, f, indent=2, ensure_ascii=False)
+
+def load_message_ids():
+    """Carga los message_ids guardados por canal."""
+    if MESSAGE_IDS_FILE.exists():
+        with open(MESSAGE_IDS_FILE) as f:
+            return json.load(f)
+    return {}
+
+def save_message_ids(message_ids):
+    """Guarda los message_ids por canal."""
+    with open(MESSAGE_IDS_FILE, "w") as f:
+        json.dump(message_ids, f, indent=2, ensure_ascii=False)
+
+def save_message_id(channel_name, message_id, title=""):
+    """Guarda un message_id para un canal específico."""
+    ids = load_message_ids()
+    if channel_name not in ids:
+        ids[channel_name] = []
+    ids[channel_name].append({
+        "message_id": message_id,
+        "title": title[:100],
+        "saved_at": datetime.now().isoformat()
+    })
+    save_message_ids(ids)
 
 def get_topic_id(channel_name, topics):
     """Obtiene el topic_id para un canal."""
@@ -186,7 +211,9 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
         response = json.loads(result.stdout)
         
         if response.get("ok"):
-            logger.info(f"  ✅ Subido correctamente")
+            msg_id = response["result"]["message_id"]
+            logger.info(f"  ✅ Subido correctamente (message_id: {msg_id})")
+            save_message_id(channel_name, msg_id, title)
             return True
         else:
             desc = response.get("description", "Unknown error")
