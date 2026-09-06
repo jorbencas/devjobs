@@ -35,8 +35,8 @@ def load_topics():
 
 
 async def delete_messages(client, topic_id, channel_name):
-    """Borra todos los mensajes de un topic específico."""
-    print(f"\n🗑️  Borrando mensajes de: {channel_name} (topic {topic_id})")
+    """Borra solo vídeos de un topic específico."""
+    print(f"\n🗑️  Borrando vídeos de: {channel_name} (topic {topic_id})")
     
     deleted = 0
     failed = 0
@@ -46,6 +46,10 @@ async def delete_messages(client, topic_id, channel_name):
         reverse=True,
         reply_to=topic_id
     ):
+        # Solo borrar mensajes que contengan vídeo
+        if not message.video and not (message.media and hasattr(message.media, 'document')):
+            continue
+        
         try:
             await message.delete()
             deleted += 1
@@ -56,7 +60,7 @@ async def delete_messages(client, topic_id, channel_name):
             failed += 1
             print(f"  ⚠️  Error borrando {message.id}: {e}")
     
-    print(f"  ✅ {deleted} borrados, {failed} fallidos")
+    print(f"  ✅ {deleted} vídeos borrados, {failed} fallidos")
     return deleted, failed
 
 
