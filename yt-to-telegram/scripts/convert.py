@@ -152,6 +152,26 @@ def convert_video(video_path, output_dir):
         savings = int((input_size - output_size) * 100 / input_size) if input_size > 0 else 0
 
         logger.info(f"  ✅ Convertido: {output_size:.1f}MB ({savings:+d}%)")
+
+        # Extraer thumbnail (frame a los 5s o 10% de duración)
+        thumb_path = str(Path(output_path).with_suffix('.jpg'))
+        try:
+            thumb_time = min(5, duration * 0.1) if duration > 0 else 5
+            thumb_cmd = [
+                "ffmpeg", "-y",
+                "-i", output_path,
+                "-ss", f"{thumb_time:.1f}",
+                "-vframes", "1",
+                "-vf", "scale=320:-1",
+                "-q:v", "4",
+                thumb_path
+            ]
+            subprocess.run(thumb_cmd, capture_output=True, timeout=30)
+            if Path(thumb_path).exists():
+                logger.info(f"  🖼️  Thumbnail: {Path(thumb_path).name}")
+        except Exception as e:
+            logger.warning(f"  ⚠️  Thumbnail falló: {e}")
+
         return output_path
 
     except subprocess.TimeoutExpired:

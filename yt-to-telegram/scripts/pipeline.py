@@ -107,8 +107,10 @@ def process_single_video(video_info, channel_name):
 
     logger.info(f"  ✅ Convertido: {Path(converted_file).name}")
 
-    # Limpiar archivo descargado original
+    # Limpiar archivo descargado original + thumbnails
     downloaded_file.unlink(missing_ok=True)
+    for ext in ['.jpg', '.webp', '.png']:
+        downloaded_file.with_suffix(ext).unlink(missing_ok=True)
 
     # 3. Subir a Telegram
     logger.info(f"  ⬆️  Subiendo a Telegram...")
@@ -126,8 +128,16 @@ def process_single_video(video_info, channel_name):
         uploaded_channel.mkdir(parents=True, exist_ok=True)
         dest = uploaded_channel / Path(converted_file).name
         shutil.move(converted_file, dest)
+        # Mover thumbnail si existe
+        thumb_src = Path(converted_file).with_suffix('.jpg')
+        if thumb_src.exists():
+            shutil.move(str(thumb_src), str(uploaded_channel / thumb_src.name))
         logger.info(f"  📁 Movido a uploaded: {dest.name}")
     else:
+        # Limpiar thumbnail si la subida falló
+        thumb_src = Path(converted_file).with_suffix('.jpg')
+        if thumb_src.exists():
+            thumb_src.unlink()
         logger.warning(f"  ⚠️  No se movió a uploaded (subida fallida). "
                        f"El archivo queda en converted/ para reintentar.")
 

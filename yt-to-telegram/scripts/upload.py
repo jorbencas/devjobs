@@ -160,7 +160,11 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
     if publish_date:
         caption += f"📅 Publicado: {publish_date}\n"
     
-    # Subir vídeo
+    # Buscar thumbnail (mismo nombre que vídeo pero .jpg)
+    thumb_path = str(Path(video_path).with_suffix('.jpg'))
+    has_thumb = Path(thumb_path).exists()
+    
+    # Subir vídeo con curl
     cmd = [
         "curl", "-s",
         "-X", "POST",
@@ -172,6 +176,10 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
         "-F", "parse_mode=HTML",
         "-F", "supports_streaming=true"
     ]
+    
+    if has_thumb:
+        cmd.extend(["-F", f"thumb=@{thumb_path}"])
+        logger.info(f"  🖼️  Usando thumbnail")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
