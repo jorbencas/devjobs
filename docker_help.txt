@@ -268,33 +268,35 @@ URL, contenido IA (tips, conceptos, tools, noticias).
 ------------------------------------------------------------------------------
 Qué hace: Descarga vídeos de 158 canales de YouTube, los convierte para
 Telegram (h264/aac, CRF 28, 2 pasadas si >50MB) y los sube al grupo
-"Stream Tecnologia" con topics por canal. Archivo en data/yt-pipeline/.
+"Stream Tecnologia" con topics por canal. Borra automáticamente tras subir.
 
   Contenedor: yt-to-telegram (docker-compose en yt-to-telegram/)
   Servicios: yt-pipeline (completo), yt-download, yt-convert, yt-upload (test)
 
-  Arrancar pipeline completo:
-    cd yt-to-telegram && docker compose up -d yt-pipeline
+  Arrancar:
+    yt_up               Arrancar pipeline completo
+
+  Parar / reiniciar:
+    yt_down             Parar pipeline
+    yt_restart          Reiniciar pipeline
+
+  Rebuild (cambios en código):
+    yt_rebuild          Rebuild + arrancar
 
   Logs:
-    docker compose -f yt-to-telegram/docker-compose.yml logs -f yt-pipeline
+    yt_logs             Ver logs en tiempo real
 
-  Parar:
-    docker compose -f yt-to-telegram/docker-compose.yml down
+  Estado:
+    yt_ps               Ver estado del contenedor
 
-  Solo descargar (test):
-    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-download
-
-  Solo convertir (test):
-    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-convert
-
-  Solo subir (test):
-    docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-upload
+  Solo componentes (test):
+    yt_download         Solo descargar
+    yt_convert          Solo convertir
+    yt_upload           Solo subir
 
   Carpetas:
     data/yt-pipeline/downloads/    Vídeos descargados de YouTube
     data/yt-pipeline/converted/    Vídeos convertidos para Telegram
-    data/yt-pipeline/uploaded/     Histórico de vídeos subidos
     data/yt-pipeline/logs/         Logs de uploads/conversiones
 
   Config:
@@ -314,6 +316,10 @@ Telegram (h264/aac, CRF 28, 2 pasadas si >50MB) y los sube al grupo
     - Para: docker compose down (18:00 mismo día)
     - Logs: data/yt-pipeline/logs/cron_YYYYMMDD.log
     - Pendientes: data/yt-pipeline/logs/pending_videos.log
+
+  Eliminar videos de Telegram (uso manual):
+    cd yt-to-telegram
+    docker compose run --rm yt-upload python scripts/delete_uploaded.py GRUPO_ID
 
 ==============================================================================
   4. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM

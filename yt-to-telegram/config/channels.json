@@ -528,6 +528,12 @@
     "max_videos": 2
   },
   {
+    "name": "Jorexdev",
+    "url": "https://www.youtube.com/@Jorexdev/videos",
+    "enabled": true,
+    "max_videos": 2
+  },
+  {
     "name": "Jose Maria Alonso",
     "url": "https://www.youtube.com/@MalignoAlonso/videos",
     "enabled": false,
@@ -561,6 +567,12 @@
     "name": "Kiko Palomares",
     "url": "https://www.youtube.com/@kikopalomares/videos",
     "enabled": false,
+    "max_videos": 2
+  },
+  {
+    "name": "La Inteligencia Artificial",
+    "url": "https://www.youtube.com/@la_inteligencia_artificial/videos",
+    "enabled": true,
     "max_videos": 2
   },
   {

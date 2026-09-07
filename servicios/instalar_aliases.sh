@@ -128,6 +128,18 @@ alias watcher='bash $DEVJOBS/ffmpeg-yt-dlp/preview_watcher.sh'
 alias watcher_daemon='bash $DEVJOBS/ffmpeg-yt-dlp/preview_watcher.sh --daemon'
 alias watcher_stop='bash $DEVJOBS/ffmpeg-yt-dlp/preview_watcher.sh --stop'
 alias watcher_status='bash $DEVJOBS/ffmpeg-yt-dlp/preview_watcher.sh --status'
+
+# ---------- yt-to-telegram (pipeline YouTube → Telegram) ----------
+alias yt_up='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml up -d yt-pipeline'
+alias yt_down='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml down'
+alias yt_logs='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml logs -f yt-pipeline'
+alias yt_restart='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml restart yt-pipeline'
+alias yt_rebuild='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml up -d --build yt-pipeline'
+alias yt_ps='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml ps yt-pipeline'
+# Solo componentes (test):
+alias yt_download='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-download'
+alias yt_convert='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-convert'
+alias yt_upload='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-upload'
 ALIASES2
 fi
 

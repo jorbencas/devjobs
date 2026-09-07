@@ -217,14 +217,19 @@ Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
 El pipeline de YouTube se ejecuta automáticamente cada día de 01:00 a 18:00:
 
 ```bash
+# Gestión rápida (aliases)
+yt_up        # Arrancar pipeline
+yt_down      # Parar pipeline
+yt_logs      # Ver logs en tiempo real
+yt_restart   # Reiniciar pipeline
+yt_rebuild   # Rebuild + arrancar (cambios en código)
+yt_ps        # Ver estado
+
 # Cron configurado (01:00 → 18:00 mismo día)
 0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
 
-# Ver logs
+# Ver logs del cron
 cat data/yt-pipeline/logs/cron_$(date +%Y%m%d).log
-
-# Parar manualmente
-cd yt-to-telegram && docker compose down
 ```
 
 Ver [`yt-to-telegram/README.md`](yt-to-telegram/README.md) para más detalles.
@@ -266,10 +271,15 @@ docker_help   # Muestra todos los comandos Docker y de cada proyecto
 #   pipe_setup   (login Telegram uploader, una vez) | pipe_once (una pasada)
 #   pipe_chats [--creados] · pipe_topics <grupo> · pipe_test [kw] [ruta]
 #   pipe_sys_start / pipe_sys_stop / pipe_sys_status  (systemd)
+# Pipeline YouTube → Telegram:
+#   yt_up (arrancar)  yt_down (parar)  yt_logs (logs)  yt_restart (reiniciar)
+#   yt_rebuild (rebuild + arrancar)  yt_ps (estado)
+#   yt_download / yt_convert / yt_upload (solo componentes, test)
 # Logs en directo por proyecto/instancia:
 #   ff_logs (monitor)  ff_manual_logs (midu)  tw_logs  tg_logs  pdf_logs
+#   yt_logs (pipeline YouTube)
 #   (con *_-stop / *_-restart para parar/reiniciar ese daemon individual)
-# Estado de los contenedores: pipe_ps (pipeline) | docker ps
+# Estado de los contenedores: pipe_ps (pipeline) | yt_ps (YouTube) | docker ps
 ```
 
 ## 📝 Blog

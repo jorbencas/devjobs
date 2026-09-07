@@ -12,7 +12,7 @@ RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh && \
     ln -s /usr/local/bin/deno /usr/bin/deno
 
 # Instalar yt-dlp
-RUN pip install --no-cache-dir yt-dlp
+RUN pip install --no-cache-dir yt-dlp requests
 
 # Crear directorio de trabajo
 WORKDIR /app

@@ -122,23 +122,21 @@ def process_single_video(video_info, channel_name):
         video_type=video_type
     )
 
-    # 4. Mover a uploaded/ SOLO si la subida fue exitosa
+    # 4. Borrar archivos locales SOLO si la subida fue exitosa
     if uploaded_ok:
-        uploaded_channel = UPLOADED_DIR / channel_name.replace("/", "_")
-        uploaded_channel.mkdir(parents=True, exist_ok=True)
-        dest = uploaded_channel / Path(converted_file).name
-        shutil.move(converted_file, dest)
-        # Mover thumbnail si existe
+        # Borrar convertido
+        Path(converted_file).unlink(missing_ok=True)
+        # Borrar thumbnail
         thumb_src = Path(converted_file).with_suffix('.jpg')
         if thumb_src.exists():
-            shutil.move(str(thumb_src), str(uploaded_channel / thumb_src.name))
-        logger.info(f"  📁 Movido a uploaded: {dest.name}")
+            thumb_src.unlink()
+        logger.info(f"  🗑️  Borrado de local: {Path(converted_file).name}")
     else:
         # Limpiar thumbnail si la subida falló
         thumb_src = Path(converted_file).with_suffix('.jpg')
         if thumb_src.exists():
             thumb_src.unlink()
-        logger.warning(f"  ⚠️  No se movió a uploaded (subida fallida). "
+        logger.warning(f"  ⚠️  No se borró (subida fallida). "
                        f"El archivo queda en converted/ para reintentar.")
 
     return True

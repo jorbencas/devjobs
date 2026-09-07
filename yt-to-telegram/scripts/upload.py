@@ -189,39 +189,49 @@ def upload_video(video_path, channel_name, title, publish_date="", video_type="v
     thumb_path = str(Path(video_path).with_suffix('.jpg'))
     has_thumb = Path(thumb_path).exists()
     
-    # Subir vídeo con curl
-    cmd = [
-        "curl", "-s",
-        "-X", "POST",
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo",
-        "-F", f"chat_id={GROUP_ID}",
-        "-F", f"video=@{video_path}",
-        "-F", f"message_thread_id={topic_id}",
-        "-F", f"caption={caption}",
-        "-F", "parse_mode=HTML",
-        "-F", "supports_streaming=true"
-    ]
+    # Subir vídeo con requests (maneja mejor caracteres especiales en filenames)
+    import requests as req
     
-    if has_thumb:
-        cmd.extend(["-F", f"thumb=@{thumb_path}"])
-        logger.info(f"  🖼️  Usando thumbnail")
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+    data = {
+        "chat_id": GROUP_ID,
+        "message_thread_id": topic_id,
+        "caption": caption,
+        "parse_mode": "HTML",
+        "supports_streaming": "true",
+    }
+    files = {}
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        response = json.loads(result.stdout)
+        video_file = open(video_path, "rb")
+        files["video"] = (Path(video_path).name, video_file)
         
-        if response.get("ok"):
-            msg_id = response["result"]["message_id"]
+        if has_thumb:
+            thumb_file = open(thumb_path, "rb")
+            files["thumb"] = (Path(thumb_path).name, thumb_file)
+            logger.info(f"  🖼️  Usando thumbnail")
+        
+        logger.info(f"  📤 Subiendo {Path(video_path).stat().st_size/(1024*1024):.1f}MB...")
+        response = req.post(url, data=data, files=files, timeout=1200)
+        resp_json = response.json()
+        
+        if resp_json.get("ok"):
+            msg_id = resp_json["result"]["message_id"]
             logger.info(f"  ✅ Subido correctamente (message_id: {msg_id})")
             save_message_id(channel_name, msg_id, title)
             return True
         else:
-            desc = response.get("description", "Unknown error")
+            desc = resp_json.get("description", "Unknown error")
             logger.error(f"  ❌ Error subiendo: {desc}")
             return False
     except Exception as e:
         logger.error(f"  ❌ Error subiendo: {e}")
         return False
+    finally:
+        if "video_file" in locals():
+            video_file.close()
+        if "thumb_file" in locals():
+            thumb_file.close()
 
 def move_to_uploaded(video):
     """Mueve un vídeo subido a la carpeta de históricos."""

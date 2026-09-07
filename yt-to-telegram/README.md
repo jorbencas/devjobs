@@ -26,9 +26,6 @@ data/yt-pipeline/
 ├── converted/          ← Vídeos convertidos a 720p
 │   ├── midudev/
 │   └── ...
-├── uploaded/           ← Vídeos ya subidos (histórico)
-│   ├── midudev/
-│   └── ...
 └── logs/               ← Logs de cada operación
     ├── downloads_*.json
     ├── conversions_*.json
@@ -78,21 +75,32 @@ Los canales sin tema propio van a **General**.
 ### Ejecutar pipeline completo
 
 ```bash
-cd yt-to-telegram
-docker compose up -d yt-pipeline
+yt_up
 ```
 
-### Ejecutar pasos individuales
+### Ver logs
+
+```bash
+yt_logs
+```
+
+### Parar pipeline
+
+```bash
+yt_down
+```
+
+### Ejecutar pasos individuales (test)
 
 ```bash
 # Solo descargar
-docker compose up -d yt-download
+yt_download
 
 # Solo convertir
-docker compose up -d yt-convert
+yt_convert
 
 # Solo subir
-docker compose up -d yt-upload
+yt_upload
 ```
 
 ### Ejecutar sin Docker
@@ -101,7 +109,7 @@ docker compose up -d yt-upload
 cd yt-to-telegram/scripts
 
 # Instalar dependencias
-pip install yt-dlp
+pip install yt-dlp requests
 
 # Ejecutar pipeline
 python pipeline.py
@@ -242,7 +250,7 @@ crontab -l
 bash /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
 
 # Parar el pipeline manualmente
-cd yt-to-telegram && docker compose down
+yt_down
 ```
 
 **Logs:**
