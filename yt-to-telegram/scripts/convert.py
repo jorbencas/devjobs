@@ -80,6 +80,7 @@ def convert_video(video_path, output_dir):
         # Primera pasada con CRF 28 (igual que monitor_folder.sh)
         cmd = [
             "ffmpeg", "-y",
+            "-fflags", "+genpts",
             "-i", str(video_file),
             "-c:v", "libx264", "-crf", "28", "-preset", "fast",
             "-vf", "scale=-2:720",
@@ -116,21 +117,25 @@ def convert_video(video_path, output_dir):
             if video_bps > 0:
                 # Pasada 1
                 subprocess.run([
-                    "ffmpeg", "-y", "-i", str(video_file),
+                    "ffmpeg", "-y",
+                    "-fflags", "+genpts",
+                    "-i", str(video_file),
                     "-vf", "scale=-2:720",
                     "-c:v", "libx264", "-b:v", str(video_bps),
                     "-preset", "fast", "-pass", "1", "-an", "-f", "null", "-"
                 ], capture_output=True, timeout=7200)
                 # Pasada 2
                 cmd_pass2 = [
-                    "ffmpeg", "-y", "-i", str(video_file),
+                    "ffmpeg", "-y",
+                    "-fflags", "+genpts",
+                    "-i", str(video_file),
                     "-vf", "scale=-2:720",
                     "-c:v", "libx264", "-b:v", str(video_bps),
                     "-preset", "fast", "-pass", "2",
                     "-c:a", "aac", "-b:a", "128k",
                 ] + map_args + [
                     "-map_metadata", "0",
-                    "-movflags", "+faststart",
+                    "-movflags", "+faststart+dash",
                     "-f", "mp4", tmp_path
                 ]
                 # Añadir duración explícita si está disponible
