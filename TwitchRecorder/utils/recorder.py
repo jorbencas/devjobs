@@ -387,6 +387,10 @@ class Recorder:
             log.info(f"[{self.channel}] Grabación finalizada ({size})")
             self._concatenar_partes()
             self._move_to_completed()
+        elif self._partes:
+            log.info(f"[{self.channel}] Grabación finalizada ({len(self._partes)} partes)")
+            self._concatenar_partes()
+            self._move_to_completed()
         else:
             log.info(f"[{self.channel}] Grabación finalizada")
 
@@ -401,13 +405,14 @@ class Recorder:
         self.is_recording = False
 
     def _concatenar_partes(self) -> None:
-        """Une todas las partes de un directo que cambió de plataforma a mitad de
-        emisión en un único archivo (nombre base sin sufijo __parteN). Si algo
-        falla, se mantienen las partes por separado."""
+        """Une todas las partes de un directo (cambio de plataforma o
+        reconexiones) en un único archivo. Si algo falla, se mantienen
+        las partes por separado."""
         partes = [p for p in (self._partes + [self._current_file]) if p and p.exists()]
-        if not self._partes or len(partes) < 2 or not self._current_file:
+        if len(partes) < 2:
             return
-        final = self._partes[0].with_name(self._partes[0].stem + ".mp4")
+        base = self._partes[0] if self._partes else self._current_file
+        final = base.with_name(base.stem + ".mp4")
         tmp = final.with_name(final.stem + "_tmp.mp4")
         log.info(f"[{self.channel}] Concatenando {len(partes)} partes del directo...")
         # Intentar concat con -c copy primero (muy rápido si los códecs coinciden)
@@ -545,6 +550,7 @@ class Recorder:
                         self.start()
                 else:
                     log.warning(f"[{self.channel}] Conexión perdida, reconectando en {self.retry_interval}s...")
+                    self._add_parte_actual()
                     time.sleep(self.retry_interval)
 
                     if not self._stop_event.is_set() and self.is_live():
