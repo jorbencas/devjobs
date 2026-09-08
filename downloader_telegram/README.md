@@ -188,7 +188,7 @@ docker compose logs -f telegram_bot
 1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
-4. Registra los enviados en `enviados.json` y elimina el archivo local (y todos sus restos: sidecar `*_episodios.json`, original de `.processed`, logs `log_*.txt` y partes divididas).
+4. Registra los enviados en `enviados.json` y elimina el archivo local (y todos sus restos: archivo auxiliar `*_episodios.json`, original de `.processed`, logs `log_*.txt` y partes divididas).
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 
@@ -396,7 +396,7 @@ El texto (pie) que acompaña a cada vídeo en Telegram se elige en este orden:
    También se usa si la metadata es una **película**: `Película · TÍTULO`.
 2. **Por defecto**: `🎬 Directo de <canal>` (el canal se saca del nombre del
    archivo). Esto incluye cuando la metadata es una **descripción libre** del
-   canal (p. ej. la de YouTube con `"descripcion": true`): se **ignora** la
+   canal (p. ej. la de YouTube con `"titulo"`): se **ignora** la
    descripción y se usa el **nombre** del canal.
 
 > **Las descripciones propias del canal (p. ej. YouTube) NO se usan como caption.**

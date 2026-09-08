@@ -229,24 +229,24 @@ Esa detección también genera la metadata `*_episodios.json` con el **texto rea
 del video** (p. ej. "Kimetsu no Yaiba") que usa el uploader como pie/caption
 en Telegram. Si el OCR no detecta texto, usa "Episodio {rango}" como fallback.
 
-El **corte se decide siempre por fuente** vía sidecar `*_descripcion.json`:
+El **corte se decide siempre por fuente** vía archivo auxiliar `*_descripcion.json`:
 - `descripcion` → omite detección y corte (típico YouTube, directo completo).
 - `corte: false` → no recorta extremos (aunque siga haciendo OCR para el caption).
-- Sin sidecar → recorte normal por episodios.
+- Sin archivo auxiliar → recorte normal por episodios.
 
 > **Estado actual:** en la config de TwitchRecorder, midudev/mouredev y los
 > domingos de sendosama en YouTube llevan `descripcion` (directo completo sin
 > cortes). Las fuentes Twitch/Kick de sendosama cortan por episodios. No hay
-> ningún flag global: lo decide cada sidecar.
+> ningún flag global: lo decide cada archivo auxiliar.
 
 > El **corte por canal/fuente** se controla en la config de TwitchRecorder con el
 > flag `"corte"` por fuente (ver README de TwitchRecorder): `"corte": false`
-> desactiva el corte de esa fuente. Las fuentes con sidecar
+> desactiva el corte de esa fuente. Las fuentes con archivo auxiliar
 > `*_descripcion.json` (ver sección siguiente) **nunca** se recortan.
 
 #### Configuración del directo por fuente (`*_descripcion.json`)
 
-El recorder deja junto al vídeo un sidecar **`<video>_descripcion.json`** según la
+El recorder deja junto al vídeo un archivo auxiliar **`<video>_descripcion.json`** según la
 config de la fuente desde la que se grabó. Los campos que puede traer:
 
 | Campo | Efecto en el monitor |
@@ -256,17 +256,17 @@ config de la fuente desde la que se grabó. Los campos que puede traer:
 | `detectar: false` | **Omite la detección (OCR)** de episodios |
 | `corte: false` | **Omite el corte** de extremos (aunque detecte) |
 
-**Detección y corte son independientes.** Sin sidecar → comportamiento normal:
+**Detección y corte son independientes.** Sin archivo auxiliar → comportamiento normal:
 **OCR + corte**.
 
 Casos reales:
 
-- **sendosama en Twitch/Kick/web** (sin sidecar) → OCR + corte de episodios.
-- **sendosama en YouTube** (sidecar `{"titulo": "..."}`) → caption del
+- **sendosama en Twitch/Kick/web** (sin archivo auxiliar) → OCR + corte de episodios.
+- **sendosama en YouTube** (archivo auxiliar `{"titulo": "..."}`) → caption del
   título, sin detección ni corte.
-- **midudev/mouredev en Twitch** (sidecar `{"detectar": false, "corte": false}`)
+- **midudev/mouredev en Twitch** (archivo auxiliar `{"detectar": false, "corte": false}`)
   → sin OCR ni corte; el uploader usa `🎬 Directo de <canal>`.
-- **Futuro: canal que detecte pero no corte** (sidecar `{"corte": false}`) →
+- **Futuro: canal que detecte pero no corte** (archivo auxiliar `{"corte": false}`) →
   se hace OCR para el caption pero se mantiene el vídeo completo.
 
 > **Cambio de plataforma a mitad del directo** (p. ej. sendosama se pasa de
@@ -274,7 +274,7 @@ Casos reales:
 > pasarlo al monitor, así que llega **un solo vídeo** y el OCR/corte se aplican
 > sobre el directo completo.
 
-El sidecar se elimina tras comprimir. Si no hay sidecar, se usa la detección por
+El archivo auxiliar se elimina tras comprimir. Si no hay archivo auxiliar, se usa la detección por
 OCR (sección anterior).
 
 #### Funcionamiento con el pipeline

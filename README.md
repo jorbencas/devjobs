@@ -67,7 +67,7 @@ Automatización que graba los directos de **sendosama**, los comprime y los sube
 | 1. **Grabar** | `twitchrecorder-sendo` | Detecta directo, graba calidad original, concatena partes si cambia plataforma |
 | 2. **Keyword** | — | Extrae título → `*_KW_<keyword>_completed.mp4` (viaja por todo el pipeline) |
 | 3. **Cola** | — | Copia a `test/` (original queda en grabaciones/) |
-| 4. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p, detecta episodios OCR, gestiona sidecars |
+| 4. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p, detecta episodios OCR, gestiona archivos auxiliares de metadatos |
 | 5. **Subir** | `telegram-uploader-sendo` | Rutea por keyword, sube a temas de Telegram, limpia residuos |
 
 ### Contenedores Docker

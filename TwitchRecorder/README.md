@@ -179,17 +179,17 @@ Cada fuente puede llevar estas marcas opcionales (todas independientes):
 - **`"detectar": true/false`** — control de la **detección de episodios** (OCR
   de la franja superior, que además genera el caption `Episodio 1-4`). Por
   defecto (o `true`) la fuente **detecta**; con `false` el recorder lo comunica
-  al monitor (sidecar `{"detectar": false}`) y este no hace OCR.
+  al monitor (archivo auxiliar `{"detectar": false}`) y este no hace OCR.
 - **`"corte": true/false`** — control del **corte de extremos por fuente**. Con
   `"corte": true` (o sin especificar) la fuente permite el corte por episodios.
   Con `"corte": false` el monitor **no recorta** (aunque detecte). No hay flag
   global: lo decide siempre el `corte` de cada fuente.
 - **`"descripcion": true`** — (opcional) guarda la **descripción completa** del
-  directo en el sidecar además del título. El título siempre se guarda
+  directo en el archivo auxiliar además del título. El título siempre se guarda
   automáticamente y se usa como caption en Telegram.
 
-Detección y corte son **independientes**: se puede detectar sin cortar (sidecar
-`{"corte": false}` sin más) o cortar sin detectar (no tiene sentido, el corte
+Detección y corte son **independientes**: se puede detectar sin cortar (archivo
+auxiliar `{"corte": false}` sin más) o cortar sin detectar (no tiene sentido, el corte
 necesita la detección).
 
 En la práctica, **solo sendosama en fuentes no-YouTube detecta episodios**
