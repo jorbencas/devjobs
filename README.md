@@ -1,307 +1,211 @@
-# 🥷 devjobs — Ultimate Automation Suite
+<div align="center">
 
-<p align="center">
-  <strong>Suite auto-hospedada de <u>automatización con Docker</u>: grabación de
-  directos, conversión de vídeo, subida a Telegram, descarga de cursos y gestión
-  de PDFs — listas para desplegar y olvidar.</strong>
-</p>
+# 🥷 devjobs
 
-<p align="center">
-  <a href="https://github.com/jorbencas/devjobs/stargazers"><img src="https://img.shields.io/github/stars/jorbencas/devjobs?style=social" alt="Stars"></a>
-  <a href="https://github.com/jorbencas/devjobs"><img src="https://img.shields.io/badge/Self--hosted-Docker-blue.svg" alt="Self-hosted: Docker"></a>
-  <a href="https://blog-jorbencas.vercel.app"><img src="https://img.shields.io/badge/Blog-jorbencas-orange.svg" alt="Blog"></a>
-</p>
+**Ultimate Automation Suite**
 
-> Pipeline completo y monitorizado: **Twitch → ffmpeg → Telegram**, sin intervención.
+![Python](https://img.shields.io/badge/python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![License](https://img.shields.io/github/license/jorbencas/devjobs?style=for-the-badge)
+![Repo size](https://img.shields.io/github/repo-size/jorbencas/devjobs?style=for-the-badge&label=Repo%20size)
 
-Repositorio de herramientas avanzadas para la gestión de activos digitales, automatización de Telegram y procesamiento de documentos legales.
+[![Scraper](https://img.shields.io/badge/Pipeline-Twitch%20→%20Telegram-9146FF?style=flat-square&logo=twitch&logoColor=white)](#pipeline-directos-de-twitch--telegram)
+[![YouTube](https://img.shields.io/badge/Pipeline-YouTube%20→%20Telegram-FF0000?style=flat-square&logo=youtube&logoColor=white)](#pipeline-youtube--telegram)
+[![Blog](https://img.shields.io/badge/Blog-jorbencas-orange?style=flat-square&logo=vercel&logoColor=white)](https://blog-jorbencas.vercel.app)
+
+Suite auto-hospedada de **automatización con Docker**: grabación de directos, conversión de vídeo, subida a Telegram, descarga de cursos y gestión de PDFs — listas para desplegar y olvidar.
+
+**[📖 Blog: Devjobs Suite](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite)** · **[🔧 Instalación](https://blog-jorbencas.vercel.app/posts/instalacion-devjobs)** · **[💬 docker_help.txt](docker_help.txt)**
+
+</div>
 
 ---
 
-## 📑 Tabla de contenidos
+## 📋 Overview
 
-- [Herramientas del ecosistema](#herramientas-del-ecosistema)
-- [Pipeline: directos de Twitch → Telegram](#pipeline-directos-de-twitch--telegram)
-- [Instalación rápida (Docker)](#instalación-rápida-docker)
-- [Cheat sheet](#cheat-sheet)
-- [Blog](#blog)
+> **[📖 Leer más en el blog](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite)** — Explicación detallada de la arquitectura y decisiones de diseño.
+
+| Pipeline | Descripción | Frecuencia | Blog |
+|----------|-------------|------------|------|
+| 🎬 **Twitch → Telegram** | Grabar → comprimir 720p → subir a Telegram | Automático 24/7 | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) |
+| 📺 **YouTube → Telegram** | Descargar canales → convertir → subir con topics | Cron 01:00→18:00 | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) |
+| 🤖 **Bot Telegram** | Descargas por URL + contenido IA (tips, tools) | En tiempo real | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) |
+| 📄 **PDF Manager** | Desbloquear, unir, dividir, comprimir PDFs | Bajo demanda | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) |
+
+---
 
 ## 🛠️ Herramientas del Ecosistema
 
-| # | Herramienta | Descripción | Docker | README |
-|---|-------------|-------------|--------|--------|
-| 1 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir, comprimir | ✅ | [README](pdfmanager/README.md) |
-| 2 | `downloader_telegram/` | Descargador masivo, clonador, vigilante y **bot API interactivo** | ✅ | [README](downloader_telegram/README.md) |
-| 3 | `hdfull-downloader/` | Descargador de películas HDFull con Docker + noVNC | ✅ | [README](hdfull-downloader/README.md) |
-| 4 | `TwitchRecorder/` | Grabador automático de directos de Twitch/YouTube/Kick | ✅ | [README](TwitchRecorder/README.md) |
-| 5 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo con ffmpeg + yt-dlp | ✅ | [README](ffmpeg-yt-dlp/README.md) |
-| 6 | `aula-downloader/` | Descargador de vídeos de aula Moodle/Vimeo con Python puro | ✅ | [README](aula-downloader/README.md) |
+| # | Herramienta | Descripción | Blog | README |
+|---|-------------|-------------|------|--------|
+| 1 | `TwitchRecorder/` | Grabador automático de directos (Twitch/YouTube/Kick) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](TwitchRecorder/README.md) |
+| 2 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo (33 modos) | [📖](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | [README](ffmpeg-yt-dlp/README.md) |
+| 3 | `downloader_telegram/` | Descargador masivo + bot API interactivo | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | [README](downloader_telegram/README.md) |
+| 4 | `yt-to-telegram/` | Pipeline YouTube → Telegram (160 canales) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](yt-to-telegram/README.md) |
+| 5 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | [README](pdfmanager/README.md) |
+| 6 | `hdfull-downloader/` | Descargador de películas HDFull con noVNC | — | [README](hdfull-downloader/README.md) |
+| 7 | `aula-downloader/` | Descargador de vídeos Moodle/Vimeo | — | [README](aula-downloader/README.md) |
 
 ---
 
 ## 🎬 PIPELINE: Directos de Twitch → Telegram
 
-Automatización que graba los directos de **sendo sama**, los comprime y los sube a varios grupos de Telegram, **sin intervención** (ideal para ausencias). Encadena 3 proyectos existentes:
+Automatización que graba los directos de **sendosama**, los comprime y los sube a varios grupos de Telegram, **sin intervención**.
 
 ```
 ┌──────────────┐   *_completed.mp4   ┌──────────────────┐   *_compressed.mp4   ┌──────────────────┐
 │ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
-│  (grabar)     │    mover a test/  │  monitor *720p*    │      a 720p         │  uploader (subir) │
+│  (grabar)     │    copiar a test/ │  monitor *720p*    │      a 720p         │  uploader (subir) │
 └──────────────┘                    └──────────────────┘                      └──────────────────┘
    data/pipeline/grabaciones/      data/pipeline/comprimidos/                    N grupos
 ```
 
-### Flujo completo (paso a paso)
+### Flujo completo
 
-1. **Grabar** — `TwitchRecorder` (`twitchrecorder-sendo`) comprueba si el canal está en
-   directo (según `config.json`) y graba con calidad original. Si el canal define
-   varias fuentes, coge la primera que esté online. Si cambia de plataforma a
-   medio directo (p. ej. Twitch→Kick), concatena las partes en un solo archivo.
-   - **Horarios por canal**: `days` + `start_time` por canal (ej: midudev lunes-jueves 18:00)
-   - **Prioridad por día**: `dias_plataforma` (ej: domingo YouTube primero, resto web/twitch/kick)
-   - **Detección de episodios**: OCR automático configurable por fuente (`detectar`, `corte`, `descripcion`)
-2. **Keyword** — lee el **título/descripción** del directo y lo incrusta en el
-   nombre: `sendosama_2026-08-13_20-15-00_KW_<keyword>_completed.mp4`. La keyword
-   viaja intacta por todo el pipeline.
-3. **Cola de espera** (`data/pipeline/grabaciones/test/`): si `copy_to_test: true`, al
-   terminar el directo TwitchRecorder **copia** la grabación a esta carpeta como
-   `*_completed.mp4` (el original queda en grabaciones/). Es el punto de entrada del compresor.
-   *(Sidecar opcional `*_descripcion.json`: describe la fuente; ver "Configuración
-   por fuente" en el README de ffmpeg-yt-dlp.)*
-4. **Comprimir** — `ffmpeg-yt-dlp` (`monitor`) vigila esa carpeta cada 30 s,
-   detecta los `*_completed.mp4` y los convierte a **720p** (con garantía <2 GB).
-   Detecta episodios por OCR (genera `*_episodios.json` con el caption) y deja el
-   resultado como `*_compressed.mp4` en `data/pipeline/comprimidos/`, moviendo el original
-   a `comprimidos/.processed`.
-5. **Subir** — `downloader_telegram` (`uploader`) vigila `data/pipeline/comprimidos/` y
-   por cada `*_compressed.mp4` no enviado extrae el **canal** y la **keyword**,
-   elige el destino (tema de foro por canal/keyword, o grupo), sube el vídeo con
-   su caption, y al terminar **borra todo el residuo** (el `.mp4`, el sidecar
-   `*_episodios.json`, el original de `.processed`, los `log_*.txt` y las partes
-   si se dividió por >2 GB). Registra lo enviado en `enviados.json`.
+| Paso | Servicio | Qué hace |
+|------|----------|----------|
+| 1. **Grabar** | `twitchrecorder-sendo` | Detecta directo, graba calidad original, concatena partes si cambia plataforma |
+| 2. **Keyword** | — | Extrae título → `*_KW_<keyword>_completed.mp4` (viaja por todo el pipeline) |
+| 3. **Cola** | — | Copia a `test/` (original queda en grabaciones/) |
+| 4. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p, detecta episodios OCR, gestiona sidecars |
+| 5. **Subir** | `telegram-uploader-sendo` | Rutea por keyword, sube a temas de Telegram, limpia residuos |
 
-Resultado: un directo grabado a las 21:00 aparece ya comprimido y subido a su
-tema/serie sin que tengas que hacer nada.
+### Contenedores Docker
 
-### Configuración del pipeline
+| Contenedor | Servicio | Qué hace |
+|------------|----------|----------|
+| `twitchrecorder-sendo` | Grabador | Detecta directos, graba calidad original, concatena partes |
+| `ffmpeg_monitor-sendo` | Compresor | Convierte a 720p, detecta episodios por OCR |
+| `telegram-uploader-sendo` | Subidor | Rutea por keyword, sube a temas de Telegram |
+
+### Configuración
 
 ```json
-// config.json - Ejemplo con múltiples canales
 {
     "channels": {
         "sendosama": {
             "platform": [
-                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
+                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
                 { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
-                { "platform": "twitch", "detectar": true, "corte": true },
-                { "platform": "kick", "detectar": true, "corte": true }
+                { "platform": "twitch", "detectar": true, "corte": false },
+                { "platform": "kick", "detectar": true, "corte": false }
             ],
             "start_time": { "Sunday": "19:00", "*": "21:30" },
             "dias_plataforma": {
                 "Sunday": ["youtube", "twitch", "web", "kick"],
                 "*": ["web", "twitch", "kick"]
             }
-        },
-        "midudev": {
-            "platform": [
-                { "platform": "youtube", "descripcion": true },
-                { "platform": "twitch", "detectar": false, "corte": false }
-            ],
-            "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
-            "start_time": "18:00"
         }
     }
 }
 ```
 
-### Contenedores Docker
+---
 
-| Contenedor | Servicio | Qué hace |
-|------------|----------|----------|
-| `twitchrecorder-sendo` | Grabador | Detecta directos, graba con calidad original, concatena partes |
-| `ffmpeg_monitor-sendo` | Compresor | Convierte a 720p, detecta episodios por OCR, gestiona sidecars |
-| `telegram-uploader-sendo` | Subidor | Rutea por keyword, sube a temas de Telegram, limpia residuos |
+## 📺 PIPELINE: YouTube → Telegram
 
-### Carpetas del pipeline
+Pipeline independiente que descarga vídeos de **160 canales de YouTube**, los convierte a 720p y los sube a un grupo de Telegram con topics por canal.
 
-```
-data/
-├── pipeline/                    ← Pipeline (grabación → compresión → subida)
-│   ├── grabaciones/2026/        Grabaciones en bruto por fecha
-│   ├── grabaciones/test/        Cola de espera *_completed.mp4
-│   ├── comprimidos/             *_compressed.mp4 listos
-│   ├── comprimidos/.processed/  Originales ya comprimidos
-│   ├── partes/                  Partes divididas (>2GB)
-│   └── backups/                 Backups de config del CLI
-├── jorbencas_bot/               ← Bot de Telegram
-│   ├── .test_githubActions/     Código AI (tips, tools, noticias)
-│   └── *.mp4                    Descargas del bot (yt-dlp)
-```
+| Canal | Topic ID | Estado |
+|-------|----------|--------|
+| MoureDev | 28 | ✅ Habilitado |
+| Midudev | 30 | ✅ Habilitado |
+| Carlos Azaustre | 32 | ✅ Habilitado |
+| Linkfydev | 45 | ✅ Habilitado |
+| Jorexdev | 644 | ✅ Habilitado |
+| La Inteligencia Artificial | 645 | ✅ Habilitado |
+| *...154 más* | 26-183 | ⏸️ Deshabilitado |
 
-| Carpeta | Contenido | Quién escribe / lee |
-|---|---|---|
-| `data/pipeline/grabaciones/2026/` | Grabaciones en bruto por fecha | `twitchrecorder-sendo` escribe |
-| `data/pipeline/grabaciones/test/` | Cola de espera `*_completed.mp4` | `twitchrecorder-sendo` escribe / `monitor` lee |
-| `data/pipeline/comprimidos/` | `*_compressed.mp4` listos | `monitor` escribe / `uploader` lee |
-| `data/pipeline/comprimidos/.processed/` | Originales ya comprimidos | `monitor` escribe / `uploader` limpia tras subir |
-| `data/pipeline/partes/` | Partes divididas (>2GB) | `uploader` lee / `monitor` divide |
-| `data/pipeline/backups/` | Backups de config del CLI | `tg_toolbox.py` (export/import) |
-| `data/jorbencas_bot/` | Descargas del bot (`/descarga`) | `telegram_bot` escribe |
-| `data/jorbencas_bot/.test_githubActions/` | Código AI (tips, tools, noticias) | `telegram_bot` lee |
-
-> **Detalle:** la carpeta `grabaciones/test/` es solo la **bandeja de espera** entre el
-> recorder y el compresor (ficamos claros: no es para probar nada, es el punto de
-> entrada del monitor). Si TwitchRecorder está parado vacía; al grabar un directo
-> se llena temporalmente hasta que el monitor la procesa.
-
-### Las 3 piezas + Bot
-
-| Pieza | Proyecto | Servicio | Qué hace |
-|---|---|---|---|
-| 1. Grabar | `TwitchRecorder/` | `twitchrecorder-sendo` | Graba el directo, lee su título (keyword) y lo **copia** a `test/` como `*_KW_<keyword>_completed.mp4` |
-| 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `pipeline/comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
-| 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
-| 🤖 Bot | `downloader_telegram/` | `telegram_bot` | Bot API interactivo: control del pipeline + contenido IA + respuestas por @mención |
-
-### Arrancar el pipeline
+### Gestión rápida (aliases)
 
 ```bash
-cd TwitchRecorder && docker compose up -d twitchrecorder
-cd ../ffmpeg-yt-dlp && docker compose up -d monitor
-cd ../downloader_telegram && docker compose up -d uploader
-
-# Bot API interactivo (opcional)
-cd ../downloader_telegram && docker compose up -d telegram_bot ollama
-```
-
-> **Aliases para controlarlo:** `bash servicios/instalar_aliases.sh && source ~/.bashrc`
-> instala dos bloques idempotentes: el del pipeline (`plogs`, `pipe_up/down/ps`,
-> `pipe_recreate/rebuild`, etc.) y uno **por-proyecto**. Regla: `pipe_*` =
-> los 3 daemons del pipeline a la vez; `*_logs`/`*_stop`/`*_restart` = daemon
-> individual (p. ej. `ff_logs` para el `ffmpeg_monitor-sendo`, `ff_stop` para pararlo);
-> `*_manual_*` = la versión para probar a mano. La lista completa está en
-> `docker_help.txt` (sección 3 y 4).
-
-### Preparación inicial (solo la primera vez, ANTES de dejarlo solo)
-
-```bash
-# 1. Sesión del uploader (una sola vez, pide teléfono + código)
-cd downloader_telegram && docker compose run --rm uploader python /app/app/subir_videos.py --setup
-
-# 2. Descubrir los IDs de tus grupos
-docker compose run --rm uploader python /app/app/subir_videos.py --list-chats [--folder <carpeta>] [--creados]
-
-# 3. Rellenar grupos.json con 'default' + [{nombre, id}] (ruteo por keyword)
-```
-
-### Documentación detallada
-
-- **Monitoreo de compresión:** [`ffmpeg-yt-dlp/README.md`](ffmpeg-yt-dlp/README.md) (sección *Monitor de carpeta*)
-- **Subida a Telegram:** [`downloader_telegram/README.md`](downloader_telegram/README.md) (sección *Uploader a Telegram*)
-- **CLI de Telegram (toolbox):** [`downloader_telegram/README.md`](downloader_telegram/README.md) (sección *CLI consolidada*)
-- **Detección de episodios / corte:** [`ffmpeg-yt-dlp/README.md`](ffmpeg-yt-dlp/README.md) (secciones *Corte de inicio/fin* y *Configuración por fuente*)
-- **Grabación `_completed`:** [`TwitchRecorder/README.md`](TwitchRecorder/README.md)
-- **Comandos Docker y systemd:** [`docker_help.txt`](docker_help.txt)
-- **Servicio systemd (auto-arranque al boot):** [`servicios/twitch-stream-pipeline.service`](servicios/twitch-stream-pipeline.service)
-
-### Arranque del pipeline (AUTO al boot)
-
-Los 3 servicios se levantan solos al encender el PC (systemd habilitado).
-También puedes arrancarlos a mano con `pipe_up` (o vía systemd con `pipe_sys_start`).
-Para quitar el auto-arranque:
-`sudo systemctl disable twitch-stream-pipeline.service`
-Ver la sección *PIPELINE VÍA SYSTEMD* en `docker_help.txt`.
-
-### Pipeline YouTube → Telegram (cron automático)
-
-El pipeline de YouTube se ejecuta automáticamente cada día de 01:00 a 18:00:
-
-```bash
-# Gestión rápida (aliases)
 yt_up        # Arrancar pipeline
 yt_down      # Parar pipeline
 yt_logs      # Ver logs en tiempo real
 yt_restart   # Reiniciar pipeline
-yt_rebuild   # Rebuild + arrancar (cambios en código)
+yt_rebuild   # Rebuild + arrancar
 yt_ps        # Ver estado
-
-# Cron configurado (01:00 → 18:00 mismo día)
-0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
-
-# Ver logs del cron
-cat data/yt-pipeline/logs/cron_$(date +%Y%m%d).log
 ```
 
-Ver [`yt-to-telegram/README.md`](yt-to-telegram/README.md) para más detalles.
+### Cron automático
+
+```bash
+# 01:00 → 18:00 (mismo día)
+0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
+```
 
 ---
 
-## 📦 Instalación Rápida (Docker)
-
-Cada herramienta es independiente. Entra en su carpeta y ejecuta:
+## 📦 Instalación Rápida
 
 ```bash
-# PDFs
-cd pdfmanager && docker compose up
+# Clonar
+git clone https://github.com/jorbencas/devjobs.git
+cd devjobs
 
-# Telegram
-cd downloader_telegram && docker compose up
+# Instalar aliases
+bash servicios/instalar_aliases.sh && source ~/.bashrc
 
-# HDFull (requiere .env con credenciales)
-cd hdfull-downloader && ./menu.sh
+# Pipeline Twitch → Telegram
+pipe_up
 
-# Twitch Recorder
-cd TwitchRecorder && docker compose up -d
+# Pipeline YouTube → Telegram
+yt_up
 
-# FFmpeg + yt-dlp
-cd ffmpeg-yt-dlp && docker compose build && docker compose up
-
-# AULA Downloader
-cd aula-downloader && docker compose build && docker compose run --rm aula_downloader
+# Bot Telegram
+tg_bot
 ```
+
+> **[📖 Guía completa de instalación](https://blog-jorbencas.vercel.app/posts/instalacion-devjobs)**
+
+---
 
 ## 📋 Cheat Sheet
 
-```bash
-docker_help   # Muestra todos los comandos Docker y de cada proyecto
-# Pipeline completo de una vez:
-#   pipe_up (encender los 3 daemons)  pipe_down (parar los 3)  pipe_ps (estado)
-#   plogs    (logs de los 3 a la vez, con color)
-#   pipe_recreate (aplica cambios de CONFIG) | pipe_rebuild (cambios de CÓDIGO)
-#   pipe_setup   (login Telegram uploader, una vez) | pipe_once (una pasada)
-#   pipe_chats [--creados] · pipe_topics <grupo> · pipe_test [kw] [ruta]
-#   pipe_sys_start / pipe_sys_stop / pipe_sys_status  (systemd)
-# Pipeline YouTube → Telegram:
-#   yt_up (arrancar)  yt_down (parar)  yt_logs (logs)  yt_restart (reiniciar)
-#   yt_rebuild (rebuild + arrancar)  yt_ps (estado)
-#   yt_download / yt_convert / yt_upload (solo componentes, test)
-# Logs en directo por proyecto/instancia:
-#   ff_logs (monitor)  ff_manual_logs (midu)  tw_logs  tg_logs  pdf_logs
-#   yt_logs (pipeline YouTube)
-#   (con *_-stop / *_-restart para parar/reiniciar ese daemon individual)
-# Estado de los contenedores: pipe_ps (pipeline) | yt_ps (YouTube) | docker ps
-```
+| Alias | Descripción |
+|-------|-------------|
+| `pipe_up` | Arrancar pipeline Twitch (3 daemons) |
+| `pipe_down` | Parar pipeline Twitch |
+| `plogs` | Logs de los 3 daemons |
+| `pipe_ps` | Estado de los 3 contenedores |
+| `pipe_rebuild` | Rebuild + recrear (cambios en código) |
+| `yt_up` | Arrancar pipeline YouTube |
+| `yt_down` | Parar pipeline YouTube |
+| `yt_logs` | Logs del pipeline YouTube |
+| `tg_bot` | Arrancar bot Telegram |
+| `tg_bot_logs` | Logs del bot |
+| `docker_help` | Ver todos los comandos |
 
-## 📝 Blog
+> **[📖 Referencia completa: docker_help.txt](docker_help.txt)**
 
-Artículos técnicos en [blog-jorbencas.vercel.app](https://blog-jorbencas.vercel.app):
+---
 
-| Proyecto | Artículo |
-|----------|----------|
-| `devjobs/` | [Devjobs Automation Suite: Pipelines de Video, Bots IA y Scrapers](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite/) |
-| `ffmpeg-yt-dlp/` | [FFmpeg + yt-dlp Pipeline: 27 Modos](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp/) |
-| `ffmpeg-yt-dlp/` | [Guía de comandos de yt-dlp y ffmpeg](https://blog-jorbencas.vercel.app/posts/guia_ffmpeg_y_ÿt_dlp/) |
-| `ffmpeg-yt-dlp/` | [Docker: ffmpeg y yt-dlp en WSL](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls/) |
-| `downloader_telegram/` | [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox/) |
-| `pdfmanager/` | [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master/) |
+## 📚 Blog Posts
+
+Artículos relacionados en [blog-jorbencas.vercel.app](https://blog-jorbencas.vercel.app):
+
+| Post | Descripción |
+|------|-------------|
+| [Devjobs Automation Suite](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | Arquitectura completa del ecosistema |
+| [Instalación de Devjobs](https://blog-jorbencas.vercel.app/posts/instalacion-devjobs) | Guía paso a paso de configuración |
+| [FFmpeg + yt-dlp Pipeline](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | 33 modos de conversión de vídeo |
+| [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | Bot, uploader y descargador masivo |
+| [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | Gestor de PDFs con Docker |
+| [Docker: ffmpeg y yt-dlp](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls) | Guía de instalación en WSL |
 
 ---
 
 ## 🤝 Contribuir
 
-Aportaciones, correcciones y nuevas herramientas son bienvenidas:
-
 1. **Fork** el repositorio y crea una rama: `git checkout -b feat/mi-mejora`
 2. Haz el cambio en la herramienta correspondiente (mantén su `README.md` al día).
 3. Abre un **Pull Request** describiendo qué hace y por qué.
 4. Para bugs: abre un *issue* con pasos para reproducirlo.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Jorge (@jorbencas)](https://github.com/jorbencas)**
+
+</div>
