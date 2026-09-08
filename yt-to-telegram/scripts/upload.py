@@ -268,7 +268,7 @@ def get_pending_videos():
                 "path": str(video_file),
                 "filename": video_file.name,
                 "title": video_file.stem.replace("_", " ")[:100],
-                "publish_date": video_file.stem.split("_")[0] if "_" in video_file.stem else ""
+                "publish_date": video_file.stem.split("_")[1] if "_" in video_file.stem and len(video_file.stem.split("_")) > 1 else ""
             })
     
     return pending
