@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # preview_watcher.sh
-# Abre en el host (Windows/WSL) los vídeos que midu.sh pide previsualizar
-# cuando se ejecuta dentro del contenedor Docker (donde no se puede lanzar
-# un reproductor gráfico de Windows).
+# Abre en el host los vídeos que midu.sh pide previsualizar.
+# Funciona tanto en WSL (Windows) como en Linux nativo.
 #
 # Solo actúa cuando existe test_video/.midu_preview_req, y ese archivo solo
 # se crea dentro del modo "cortar" de midu.sh. Fuera de ahí, el watcher
 # simplemente duerme.
 #
-# Uso (en WSL, desde la raíz del repo):
+# Uso (desde la raíz del repo):
 #   bash preview_watcher.sh --daemon   # arranca en segundo plano (sobrevive a Ctrl+C)
 #   bash preview_watcher.sh --stop     # detiene el daemon
 #   bash preview_watcher.sh --status   # ¿corriendo?
@@ -19,10 +18,10 @@
 #   - si el contenedor 'yt_ffmpeg_downloader' estaba corriendo y se detiene
 #     (por ejemplo Ctrl+C en docker compose), o
 #   - tras IDLE_TIMEOUT segundos sin actividad (por defecto 600 = 10 min).
-# De modo que solo "vive" mientras tienes la sesión de midu.sh activa.
 #
-# Requisito: VLC en Windows (busca rutas habituales) o el reproductor
-# por defecto de Windows como fallback.
+# Requisitos:
+#   - WSL: VLC en Windows
+#   - Linux nativo: vlc, mpv o xdg-open
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REQ_FILE="$REPO_DIR/test_video/.midu_preview_req"
@@ -33,6 +32,17 @@ CONTAINER_NAME=${MIDU_CONTAINER_NAME:-yt_ffmpeg_downloader}
 CONTAINER_MATCH=${MIDU_CONTAINER_MATCH:-'^(yt_ffmpeg_downloader|ffmpeg-yt-dlp-downloader)'}
 ONCE=false
 DAEMON_MODE=false
+
+# Detectar entorno
+detect_env() {
+    if [[ -f /proc/version ]] && grep -qi "microsoft\|wsl" /proc/version 2>/dev/null; then
+        echo "wsl"
+    else
+        echo "linux"
+    fi
+}
+
+ENV=$(detect_env)
 
 to_windows_path() {
     local p="$1"
@@ -49,7 +59,7 @@ to_windows_path() {
     printf '%s' "${p//\//\\}"
 }
 
-find_vlc() {
+find_vlc_wsl() {
     local cand win_user=""
     if command -v cmd.exe &>/dev/null; then
         win_user=$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')
@@ -68,26 +78,55 @@ find_vlc() {
     return 1
 }
 
+find_player_linux() {
+    # Buscar reproductor en Linux nativo
+    local player
+    for player in vlc mpv xdg-open; do
+        if command -v "$player" &>/dev/null; then
+            printf '%s' "$player"
+            return 0
+        fi
+    done
+    return 1
+}
+
 open_request() {
     local req="$1"
-    local video winpath vlc
+    local video
     video=$(head -1 "$req" 2>/dev/null)
     [[ -n "$video" ]] || { rm -f "$req"; return 0; }
     if [[ "$video" != /* ]]; then
         video="$(cd "$(dirname "$REQ_FILE")" && pwd)/$video"
         video="${video//\/.\//\/}"
     fi
-    winpath=$(to_windows_path "$video")
+    
     echo "[preview_watcher] Abriendo: $video"
-    echo "[preview_watcher]            → $winpath"
-    vlc=$(find_vlc) || true
-    if [[ -n "$vlc" ]]; then
-        "$vlc" "$winpath" >/dev/null 2>&1 &
-    elif command -v cmd.exe &>/dev/null; then
-        cmd.exe /c start "" "$winpath" >/dev/null 2>&1 &
+    
+    if [[ "$ENV" == "wsl" ]]; then
+        # WSL: convertir a路径 de Windows y abrir en VLC de Windows
+        local winpath vlc
+        winpath=$(to_windows_path "$video")
+        echo "[preview_watcher]            → $winpath"
+        vlc=$(find_vlc_wsl) || true
+        if [[ -n "$vlc" ]]; then
+            "$vlc" "$winpath" >/dev/null 2>&1 &
+        elif command -v cmd.exe &>/dev/null; then
+            cmd.exe /c start "" "$winpath" >/dev/null 2>&1 &
+        else
+            echo "[preview_watcher] No se encontró VLC ni reproductor por defecto."
+            echo "[preview_watcher] Abre manualmente: $winpath"
+        fi
     else
-        echo "[preview_watcher] No se encontró VLC ni reproductor por defecto."
-        echo "[preview_watcher] Abre manualmente: $winpath"
+        # Linux nativo: usar reproductor local
+        local player
+        player=$(find_player_linux) || true
+        if [[ -n "$player" ]]; then
+            "$player" "$video" >/dev/null 2>&1 &
+            echo "[preview_watcher] Abierto con: $player"
+        else
+            echo "[preview_watcher] No se encontró reproductor (vlc, mpv, xdg-open)."
+            echo "[preview_watcher] Abre manualmente: $video"
+        fi
     fi
     rm -f "$req"
 }
@@ -145,10 +184,10 @@ fi
 
 if [[ "$DAEMON_MODE" == true ]]; then
     trap 'rm -f "$PIDFILE"; rm -f "$REQ_FILE"' EXIT
-    echo "[preview_watcher] Daemon activo (idle timeout: ${IDLE_TIMEOUT}s). Vigilando: $REQ_FILE"
+    echo "[preview_watcher] Daemon activo (idle timeout: ${IDLE_TIMEOUT}s). Entorno: $ENV. Vigilando: $REQ_FILE"
 else
     trap 'rm -f "$REQ_FILE"' INT TERM
-    echo "[preview_watcher] Vigilando: $REQ_FILE  (Ctrl+C para salir)"
+    echo "[preview_watcher] Vigilando: $REQ_FILE (Entorno: $ENV) (Ctrl+C para salir)"
 fi
 
 last_active=$(date +%s)
