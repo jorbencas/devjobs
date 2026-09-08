@@ -69,6 +69,26 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
+def _get_duration_str(file_path: Path) -> str:
+    """Obtiene la duración de un vídeo en formato HH:MM:SS usando ffprobe."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return "duración desconocida"
+    try:
+        out = subprocess.check_output(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(file_path)],
+            stderr=subprocess.DEVNULL,
+        )
+        seconds = float(out.decode().strip())
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    except Exception:
+        return "duración desconocida"
+
+
 def parse_sources(platform, url: str = "") -> list:
     """Normaliza la config de fuentes de un canal a una lista ordenada por prioridad.
 
@@ -384,7 +404,8 @@ class Recorder:
         self.is_recording = False
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
-            log.info(f"[{self.channel}] Grabación finalizada ({size})")
+            duration = _get_duration_str(self._current_file)
+            log.info(f"[{self.channel}] Grabación finalizada ({size}, {duration})")
             self._concatenar_partes()
             self._move_to_completed()
         elif self._partes:
@@ -445,14 +466,6 @@ class Recorder:
                 except Exception:
                     pass
                 break
-        for p in partes:
-            sc = p.with_name(p.stem + "_descripcion.json")
-            for f in (p, sc):
-                try:
-                    if f.exists():
-                        f.unlink()
-                except Exception:
-                    pass
         self._partes = []
         self._current_file = final
         log.info(f"[{self.channel}] Partes del directo unidas en {final.name}")
@@ -509,13 +522,13 @@ class Recorder:
             orig = self._current_file
             dest = self.test_path / f"{orig.stem}_completed.mp4"
             sidecar = orig.with_name(orig.stem + "_descripcion.json")
-            shutil.move(str(orig), str(dest))
+            shutil.copy2(str(orig), str(dest))
             self._current_file = dest
             if sidecar.exists():
-                shutil.move(str(sidecar), dest.with_name(dest.stem + "_descripcion.json"))
-                log.info(f"[{self.channel}] Sidecar de descripción movido junto al completado")
+                shutil.copy2(str(sidecar), str(dest.with_name(dest.stem + "_descripcion.json")))
+                log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
         except Exception as e:
-            log.error(f"[{self.channel}] Error moviendo a test/: {e}")
+            log.error(f"[{self.channel}] Error copiando a test/: {e}")
 
     def monitor(self) -> None:
         max_seconds = self.max_duration_hours * 3600
