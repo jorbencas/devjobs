@@ -220,6 +220,34 @@ def _extraer_numeros(texto: str):
     return episodios, temporadas
 
 
+def _texto_frame_mas_frecuente(textos: list) -> str:
+    """Obtiene el texto más frecuente de los frames OCR.
+    Filtra textos vacíos y prioriza los que contienen letras (no solo números).
+    Devuelve el texto real del video en vez de generar 'Episodio X'."""
+    if not textos:
+        return ""
+    
+    # Filtrar textos vacíos y limpiar
+    textos_limpios = []
+    for t in textos:
+        t = t.strip()
+        if not t:
+            continue
+        # Quitar líneas que solo son números o caracteres raros
+        lineas = [l.strip() for l in t.split("\n") if l.strip()]
+        lineas_reales = [l for l in lineas if re.search(r"[a-zA-Záéíóúñü]", l)]
+        if lineas_reales:
+            textos_limpios.append(" ".join(lineas_reales))
+    
+    if not textos_limpios:
+        return ""
+    
+    # Contar frecuencia de cada texto
+    contador = Counter(textos_limpios)
+    # Devolver el más frecuente
+    return contador.most_common(1)[0][0]
+
+
 def detectar(video: Path, paso: int, margen: int):
     dur = dur_video(video)
     if dur <= 0:
@@ -229,6 +257,7 @@ def detectar(video: Path, paso: int, margen: int):
     temporadas = {}  # num -> [primero, ultimo]
     pelicula_times = []        # instantes donde aparece la palabra 'película'
     palabras = Counter()       # palabra -> [conteo, primera_aparicion]
+    textos_frames = []         # textos OCR reales de cada frame
     muestras = 0
     tmpdir = Path(tempfile.mkdtemp(prefix="ep_"))
     n = 0
@@ -250,6 +279,9 @@ def detectar(video: Path, paso: int, margen: int):
                 # Ejecutar OCR (2 pasadas: PSM 3 y PSM 7, se queda la mejor)
                 texto = _ocr_texto(proc_img)
                 texto_bajo = texto.lower()
+                
+                # Guardar texto real del frame
+                textos_frames.append(texto.strip())
                 
                 # Extraer episodios y temporadas
                 eps_en_frame, temps_en_frame = _extraer_numeros(texto)
@@ -331,12 +363,19 @@ def detectar(video: Path, paso: int, margen: int):
     ultimo = max(v[1] for v in episodios.values()) if episodios else max(pelicula_times)
     rango = str(nums[0]) if len(nums) == 1 else f"{nums[0]}-{nums[-1]}" if nums else ""
 
+    # Obtener el texto real del frame más representativo (el que más se repite)
+    texto_real = _texto_frame_mas_frecuente(textos_frames)
+
     if es_pelicula:
         titulo = _titulo_pelicula(palabras, muestras)
         descripcion = f"Película · {titulo}" if titulo else "Película"
     else:
         temporada_num = sorted(temporadas)[0] if temporadas else None
-        descripcion = f"Episodio {rango}"
+        # Usar el texto real del video en vez de "Episodio X"
+        if texto_real:
+            descripcion = texto_real
+        else:
+            descripcion = f"Episodio {rango}"
         if temporada_num is not None:
             descripcion = f"Temporada {temporada_num} · {descripcion}"
 
