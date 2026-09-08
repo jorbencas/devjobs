@@ -20,7 +20,7 @@
 | 🌐 Presets por red | Perfiles de salida listos (social media) y presets de calidad |
 | ⚡ HW acceleration | Aceleración por hardware (NVIDIA/QSV/VAAPI) |
 | 📺 Compose & HLS | Selección de pistas de audio y re-empaguetado HLS |
-| 👁️ Preview watcher | Previsualización automática en VLC desde WSL |
+| 👁️ Preview watcher | Previsualización automática en VLC/mpv (WSL + Linux nativo) |
 | 🔁 Monitor de carpeta | Comprime automáticamente grabaciones terminadas (escala a 720p, pieza del pipeline) |
 
 ---
@@ -43,12 +43,12 @@
 
 ---
 
-Conversor, descargador y editor de vídeo con ffmpeg, yt-dlp y preview watcher para WSL.
+Conversor, descargador y editor de vídeo con ffmpeg, yt-dlp y preview watcher (WSL + Linux nativo).
 
 ## Requisitos
 
 - Docker
-- (Opcional) VLC en Windows para previsualización desde WSL
+- (Opcional) VLC, mpv o xdg-open para previsualización (WSL o Linux nativo)
 
 ## Despliegue
 
@@ -526,7 +526,7 @@ Genera:
 ```
 ffmpeg-yt-dlp/
 ├── docker-compose.yml     # servicio Docker (Alpine + ffmpeg + yt-dlp)
-├── preview_watcher.sh     # abre vídeos en WSL/Windows (host)
+├── preview_watcher.sh     # abre vídeos en VLC/mpv (WSL + Linux nativo)
 ├── .env.example           # plantilla de variables de entorno
 ├── scripts/
 │   ├── backup_youtube.sh  # backup automático de canales de YouTube
