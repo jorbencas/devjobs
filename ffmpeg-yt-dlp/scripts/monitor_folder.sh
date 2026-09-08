@@ -94,7 +94,7 @@ compress_video() {
     local sc_corte="true"
     local desc_sidecar="${input%.*}_descripcion.json"
     if [[ -f "$desc_sidecar" ]]; then
-        sc_desc=$(python3 -c "import sys,json;print(json.load(open('$desc_sidecar')).get('descripcion',''))" 2>/dev/null)
+        sc_desc=$(python3 -c "import sys,json;d=json.load(open('$desc_sidecar'));print(d.get('titulo','') or d.get('descripcion',''))" 2>/dev/null)
         sc_detectar=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('detectar',True)).lower())" 2>/dev/null)
         sc_corte=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('corte',True)).lower())" 2>/dev/null)
     fi
