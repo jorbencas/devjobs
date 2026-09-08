@@ -185,11 +185,11 @@ Cada fuente puede llevar estas marcas opcionales (todas independientes):
   `"corte": true` (o sin especificar) la fuente permite el corte por episodios.
   Con `"corte": false` el monitor **no recorta** (aunque detecte). No hay flag
   global: lo decide siempre el `corte` de cada fuente.
-- **`"descripcion": true`** — al grabar desde esa fuente, el recorder guarda la
-  **descripción del directo** (p. ej. la de YouTube) en un sidecar
+- **`"descripcion": true`** — al grabar desde esa fuente, el recorder guarda el
+  **título del directo** (p. ej. el de YouTube) en un sidecar
   `<grabado>_descripcion.json`. Ese sidecar le dice al monitor que **omita la
   detección de episodios y el corte** de extremos (no hay franja de episodios
-  en YouTube) y que use la descripción como caption en Telegram.
+  en YouTube) y que use el título como caption en Telegram.
 
 Detección y corte son **independientes**: se puede detectar sin cortar (sidecar
 `{"corte": false}` sin más) o cortar sin detectar (no tiene sentido, el corte
@@ -253,7 +253,7 @@ luego reaparece en directo.
 | `check_every` | Cada cuántos segundos se comprueba si el canal está en directo |
 | `max_duration` | Duración máxima de grabación en formato `HH:MM:SS` |
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
-| `copy_to_test` | Si `true`, al terminar un directo mueve la grabación a `test_path` renombrada a `*_completed.mp4` |
+| `copy_to_test` | Si `true`, al terminar un directo **copia** la grabación a `test_path` renombrada a `*_completed.mp4` (el original queda en grabaciones/) |
 | `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
 
 **Campos por canal** (dentro de `channels.<canal>`):
@@ -355,7 +355,7 @@ Detecta el directo pero no graba. Ideal para verificar que la config funciona.
 docker compose logs -f
 ```
 
-Los logs muestran timestamp: `17:35:28 [sendosama] Grabación iniciada`
+Los logs muestran timestamp y duración: `17:35:28 [sendosama] Grabación finalizada (6.2 GB, 01:28:15)`
 
 ### Parar
 
@@ -496,7 +496,7 @@ grabaciones/
 ```
 
 **Nombre del archivo:** `canal_YYYY-MM-DD_HH-MM-SS.mp4`
-**Cuando `copy_to_test` está activo:** al terminar el directo, la grabación se **mueve** a `test/` y se renombra a `canal_..._completed.mp4` (marcada como lista para el pipeline).
+**Cuando `copy_to_test` está activo:** al terminar el directo, la grabación se **copia** a `test/` y se renombra a `canal_..._completed.mp4` (el original queda en grabaciones/).
 
 ### Keyword del directo (para ruteo a grupos)
 

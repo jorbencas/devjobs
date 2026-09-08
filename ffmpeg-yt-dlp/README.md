@@ -225,8 +225,9 @@ franja superior cada `OCR_STEP` segundos) y **recorta los extremos**: deja solo
 la ventana entre el primer y el último episodio (con un margen de `CORTE_MARGEN`
 segundos, default 300), descartando el pre-roll/espera y el final.
 
-Esa detección también genera la metadata `*_episodios.json` (p. ej.
-`"Episodio 1-4"`) que usa el uploader como pie/caption en Telegram.
+Esa detección también genera la metadata `*_episodios.json` con el **texto real
+del video** (p. ej. "Kimetsu no Yaiba") que usa el uploader como pie/caption
+en Telegram. Si el OCR no detecta texto, usa "Episodio {rango}" como fallback.
 
 El **corte se decide siempre por fuente** vía sidecar `*_descripcion.json`:
 - `descripcion` → omite detección y corte (típico YouTube, directo completo).
@@ -250,7 +251,8 @@ config de la fuente desde la que se grabó. Los campos que puede traer:
 
 | Campo | Efecto en el monitor |
 |---|---|
-| `descripcion` | Usa ese texto como caption y **omite detección y corte** (típico YouTube) |
+| `titulo` | Usa ese texto como caption y **omite detección y corte** (típico YouTube) |
+| `descripcion` | Usa ese texto como caption (fallback si no hay `titulo`) |
 | `detectar: false` | **Omite la detección (OCR)** de episodios |
 | `corte: false` | **Omite el corte** de extremos (aunque detecte) |
 
@@ -260,12 +262,12 @@ config de la fuente desde la que se grabó. Los campos que puede traer:
 Casos reales:
 
 - **sendosama en Twitch/Kick/web** (sin sidecar) → OCR + corte de episodios.
-- **sendosama en YouTube** (sidecar `{"descripcion": "..."}`) → caption de la
-  descripción, sin detección ni corte.
+- **sendosama en YouTube** (sidecar `{"titulo": "..."}`) → caption del
+  título, sin detección ni corte.
 - **midudev/mouredev en Twitch** (sidecar `{"detectar": false, "corte": false}`)
   → sin OCR ni corte; el uploader usa `🎬 Directo de <canal>`.
 - **Futuro: canal que detecte pero no corte** (sidecar `{"corte": false}`) →
-  se hace OCR para el caption `Episodio 1-4` pero se mantiene el vídeo completo.
+  se hace OCR para el caption pero se mantiene el vídeo completo.
 
 > **Cambio de plataforma a mitad del directo** (p. ej. sendosama se pasa de
 > Twitch a Kick): el recorder concatena las partes en un único archivo antes de

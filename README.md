@@ -64,8 +64,8 @@ Automatización que graba los directos de **sendo sama**, los comprime y los sub
    nombre: `sendosama_2026-08-13_20-15-00_KW_<keyword>_completed.mp4`. La keyword
    viaja intacta por todo el pipeline.
 3. **Cola de espera** (`data/pipeline/grabaciones/test/`): si `copy_to_test: true`, al
-   terminar el directo TwitchRecorder **mueve** la grabación a esta carpeta como
-   `*_completed.mp4`. Es el punto de entrada del compresor.
+   terminar el directo TwitchRecorder **copia** la grabación a esta carpeta como
+   `*_completed.mp4` (el original queda en grabaciones/). Es el punto de entrada del compresor.
    *(Sidecar opcional `*_descripcion.json`: describe la fuente; ver "Configuración
    por fuente" en el README de ffmpeg-yt-dlp.)*
 4. **Comprimir** — `ffmpeg-yt-dlp` (`monitor`) vigila esa carpeta cada 30 s,
@@ -158,7 +158,7 @@ data/
 
 | Pieza | Proyecto | Servicio | Qué hace |
 |---|---|---|---|
-| 1. Grabar | `TwitchRecorder/` | `twitchrecorder-sendo` | Graba el directo, lee su título (keyword) y lo mueve a `test/` como `*_KW_<keyword>_completed.mp4` |
+| 1. Grabar | `TwitchRecorder/` | `twitchrecorder-sendo` | Graba el directo, lee su título (keyword) y lo **copia** a `test/` como `*_KW_<keyword>_completed.mp4` |
 | 2. Comprimir | `ffmpeg-yt-dlp/` | `monitor` | Convierte a **720p** → `pipeline/comprimidos/*_KW_<keyword>_compressed.mp4` (conserva el nombre) |
 | 3. Subir | `downloader_telegram/` | `uploader` | Rutea por keyword: sube al grupo cuyo nombre coincida, si no al `default` (`grupos.json`) |
 | 🤖 Bot | `downloader_telegram/` | `telegram_bot` | Bot API interactivo: control del pipeline + contenido IA + respuestas por @mención |
