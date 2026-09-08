@@ -118,15 +118,14 @@ Edita `config.json`:
 **prioridad**: se graba de la primera que esté en directo. Cada elemento es un str
 (plataforma) o un dict `{"platform": "web", "url": "..."}` para una web. Un dict
 puede llevar campos extra: **`channel`** (handle distinto al del canal, p. ej.
-el YouTube de Sendo es `@sendosenpai`) y **`descripcion`** (`true` → usar la
-descripción del directo como caption y omitir detección de episodios).
+el YouTube de Sendo es `@sendosenpai`).
 
 ```json
 "channels": {
     "sendosama": {
         "platform": [
             { "platform": "web", "url": "https://watch.sendosama.net/" },
-            { "platform": "youtube", "descripcion": true },
+            { "platform": "youtube", "channel": "sendosenpai" },
             "twitch",
             "kick"
         ]
@@ -153,7 +152,7 @@ semana**. Se define a nivel de canal con `dias_plataforma`, un dict con la clave
 "sendosama": {
     "platform": [
         { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-        { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+        { "platform": "youtube", "channel": "sendosenpai" },
         { "platform": "twitch", "detectar": true, "corte": true },
         { "platform": "kick", "detectar": true, "corte": true }
     ],
@@ -185,11 +184,9 @@ Cada fuente puede llevar estas marcas opcionales (todas independientes):
   `"corte": true` (o sin especificar) la fuente permite el corte por episodios.
   Con `"corte": false` el monitor **no recorta** (aunque detecte). No hay flag
   global: lo decide siempre el `corte` de cada fuente.
-- **`"descripcion": true`** — al grabar desde esa fuente, el recorder guarda el
-  **título del directo** (p. ej. el de YouTube) en un sidecar
-  `<grabado>_descripcion.json`. Ese sidecar le dice al monitor que **omita la
-  detección de episodios y el corte** de extremos (no hay franja de episodios
-  en YouTube) y que use el título como caption en Telegram.
+- **`"descripcion": true`** — (opcional) guarda la **descripción completa** del
+  directo en el sidecar además del título. El título siempre se guarda
+  automáticamente y se usa como caption en Telegram.
 
 Detección y corte son **independientes**: se puede detectar sin cortar (sidecar
 `{"corte": false}` sin más) o cortar sin detectar (no tiene sentido, el corte
@@ -203,7 +200,7 @@ ni corta:
 "sendosama": {
     "platform": [
         { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-        { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+        { "platform": "youtube", "channel": "sendosenpai" },
         { "platform": "twitch", "detectar": true, "corte": true },
         { "platform": "kick", "detectar": true, "corte": true }
     ]
@@ -217,7 +214,7 @@ corte**:
 ```json
 "midudev": {
     "platform": [
-        { "platform": "youtube", "descripcion": true },
+        { "platform": "youtube" },
         { "platform": "twitch", "detectar": false, "corte": false }
     ]
 }
@@ -276,7 +273,7 @@ la semana (en inglés) con la clave especial `"*"` como comodín:
     "sendosama": {
         "platform": [
             { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-            { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+            { "platform": "youtube", "channel": "sendosenpai" },
             { "platform": "twitch", "detectar": true, "corte": true },
             { "platform": "kick", "detectar": true, "corte": true }
         ],
@@ -288,7 +285,7 @@ la semana (en inglés) con la clave especial `"*"` como comodín:
     },
     "midudev": {
         "platform": [
-            { "platform": "youtube", "descripcion": true },
+            { "platform": "youtube" },
             { "platform": "twitch", "detectar": false, "corte": false }
         ],
         "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
@@ -296,7 +293,7 @@ la semana (en inglés) con la clave especial `"*"` como comodín:
     },
     "mouredev": {
         "platform": [
-            { "platform": "youtube", "descripcion": true },
+            { "platform": "youtube" },
             { "platform": "twitch", "detectar": false, "corte": false }
         ],
         "days": ["Thursday"],

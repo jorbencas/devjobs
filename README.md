@@ -86,7 +86,7 @@ Automatización que graba los directos de **sendosama**, los comprime y los sube
         "sendosama": {
             "platform": [
                 { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
-                { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+                { "platform": "youtube", "channel": "sendosenpai" },
                 { "platform": "twitch", "detectar": true, "corte": false },
                 { "platform": "kick", "detectar": true, "corte": false }
             ],
