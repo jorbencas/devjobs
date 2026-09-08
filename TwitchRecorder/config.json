@@ -3,7 +3,7 @@
         "sendosama": {
             "platform": [
                 { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
-                { "platform": "youtube", "channel": "sendosenpai", "descripcion": true },
+                { "platform": "youtube", "channel": "sendosenpai" },
                 { "platform": "twitch", "detectar": true, "corte": false },
                 { "platform": "kick", "detectar": true, "corte": false }
             ],
@@ -15,7 +15,7 @@
         },
         "midudev": {
             "platform": [
-                { "platform": "youtube", "descripcion": true },
+                { "platform": "youtube" },
                 { "platform": "twitch", "detectar": false, "corte": false }
             ],
             "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
@@ -23,7 +23,7 @@
         },
         "mouredev": {
             "platform": [
-                { "platform": "youtube", "descripcion": true },
+                { "platform": "youtube" },
                 { "platform": "twitch", "detectar": false, "corte": false }
             ],
             "days": ["Thursday"],

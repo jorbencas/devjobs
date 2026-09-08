@@ -305,11 +305,9 @@ class Recorder:
             self._current_file = output_path
             self._stop_event.clear()
 
-            # Sidecar de configuración del directo para el monitor: solo cuando
-            # la fuente NO usa los valores por defecto (descripción propia,
-            # sin detección de episodios y/o sin corte de extremos).
-            if src.get("descripcion") or src.get("detectar") is False or src.get("corte") is False:
-                self._guardar_sidecar(output_path, src)
+            # Sidecar de configuración del directo para el monitor:
+            # siempre se guarda para incluir el título como caption.
+            self._guardar_sidecar(output_path, src)
 
             return True
         except Exception as e:
@@ -318,9 +316,8 @@ class Recorder:
 
     def _guardar_sidecar(self, output_path: Path, src: dict) -> None:
         """Guarda '<output>_descripcion.json' con la configuración del directo:
-        - "descripcion": descripción del directo (recortada al máximo de caption
-          de Telegram, 1024 chars). El monitor la usa como caption y omite la
-          detección de episodios/corte.
+        - "titulo": título del directo/vídeo (siempre se guarda si está disponible).
+        - "descripcion": descripción del directo (solo si "descripcion": true).
         - "detectar": false cuando la fuente está configurada sin detección de
           episodios (el monitor no hace OCR).
         - "corte": false cuando la fuente está configurada sin corte de extremos
@@ -328,10 +325,10 @@ class Recorder:
         Detección y corte son independientes: se puede detectar sin cortar.
         """
         data = {}
+        titulo = self.get_live_title()
+        if titulo:
+            data["titulo"] = titulo[:1024]
         if src.get("descripcion"):
-            titulo = self.get_live_title()
-            if titulo:
-                data["titulo"] = titulo[:1024]
             desc = self.get_live_description()
             if not desc:
                 log.warning(f"[{self.channel}] Sin descripción que guardar")
