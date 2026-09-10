@@ -82,6 +82,8 @@ Automatización que graba los directos de **sendosama**, los comprime y los sube
 
 ### Configuración
 
+`TwitchRecorder/config.json` controla todo el comportamiento del grabador. Cada canal define sus propias plataformas, horarios y opciones de detección.
+
 ```json
 {
     "channels": {
@@ -98,7 +100,54 @@ Automatización que graba los directos de **sendosama**, los comprime y los sube
                 "*": ["web", "twitch", "kick"]
             }
         }
-    }
+    },
+    "record_path": "/recordings",
+    "check_every": 30,
+    "max_duration": "24:00:00",
+    "retry_interval": 1,
+    "copy_to_test": true,
+    "test_path": "/recordings/test"
+}
+```
+
+**Campos globales:**
+
+| Campo | Qué hace | Por defecto | Si no está |
+|-------|----------|-------------|------------|
+| `record_path` | Ruta donde se guardan las grabaciones crudas | `/recordings` | No graba nada |
+| `check_every` | Segundos entre cada comprobación de directo | `30` | Usa 30s |
+| `max_duration` | Duración máxima de grabación (`HH:MM:SS`) | `24:00:00` | Sin límite |
+| `retry_interval` | Segundos de espera antes de reconectar si pierde la conexión | `1` | Usa 1s |
+| `copy_to_test` | Al terminar, copia la grabación a `test_path` renombrándola a `*_completed.mp4` | `false` | No copia, el pipeline no detecta el archivo |
+| `test_path` | Carpeta de los `*_completed.mp4` que vigila ffmpeg_monitor | `/recordings/test` | No se alimenta el pipeline |
+
+**Campos por canal** (dentro de `channels.<canal>`):
+
+| Campo | Qué hace | Si no está |
+|-------|----------|------------|
+| `platform` | Lista de fuentes en orden de prioridad. El grabador intenta la primera, si falla pasa a la siguiente | Requerido |
+| `days` | Días de la semana en los que comprobar (`["Monday", "Thursday"]`) | Todos los días |
+| `start_time` | Hora mínima para empezar a comprobar. `str` (`"18:00"`) o `dict` por día con comodín `"*"` | `19:55` |
+| `dias_plataforma` | Reordena/sustituye las fuentes por día (ej: domingos primero YouTube) | Respeta el orden de `platform` |
+
+**Campos por plataforma** (dentro de `platform`):
+
+| Campo | Qué hace | Si no está |
+|-------|----------|------------|
+| `platform` | Tipo: `web`, `youtube`, `twitch` o `kick` | Requerido |
+| `url` | URL directa (solo `web`) | — |
+| `channel` | Nombre del canal (YouTube/Kick) | — |
+| `detectar` | Si `true`, el monitor hace OCR para detectar episodios en la grabación | `true` |
+| `corte` | Si `true`, el monitor recorta intro/outro por episodios. Si `false`, no recorta aunque detecte | `true` |
+
+`detectar` y `corte` son **independientes**: puedes detectar sin cortar (`"detectar": true, "corte": false`) pero no tiene sentido cortar sin detectar. La config actual los desactiva en todos los canales para evitar recortes indeseados.
+
+**`dias_plataforma` en detalle:** Permite que un canal priorice una plataforma en días concretos. Por ejemplo, sendosama emite en YouTube los domingos pero no entre semana, así que el domingo se intenta YouTube primero y el resto se salta directamente a web/twitch/kick:
+
+```json
+"dias_plataforma": {
+    "Sunday": ["youtube", "twitch", "web", "kick"],
+    "*": ["web", "twitch", "kick"]
 }
 ```
 
