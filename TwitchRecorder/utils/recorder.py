@@ -212,6 +212,13 @@ class Recorder:
             return True
         return False
 
+    def is_platform_live(self, platform: str) -> bool:
+        """Comprueba si una plataforma específica está en directo."""
+        for src in self.sources:
+            if src["platform"] == platform:
+                return self._is_source_live(src)
+        return False
+
     def get_stream_url(self) -> str:
         src = self._active or self.sources[0]
         platform = src["platform"]
@@ -561,7 +568,7 @@ class Recorder:
                     wait_start = time.time()
                     max_wait = 60
                     while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
-                        if self.is_live():
+                        if self.is_platform_live(new_platform):
                             log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
                             self.start()
                             break
