@@ -231,7 +231,8 @@ class Recorder:
         elif platform == "kick":
             return f"https://kick.com/{canal}"
         elif platform == "web":
-            return s_url or self.channel
+            from utils.web import get_stream_url as web_get_stream_url
+            return web_get_stream_url(s_url or self.channel)
         return ""
 
     def get_live_title(self) -> str:
@@ -239,6 +240,28 @@ class Recorder:
         Algunos canales de Twitch dejan el título genérico ("<canal> (live)") en
         el campo title, pero ponen el título real en la descripción. Si detectamos
         un título genérico, usamos la descripción como fuente del título."""
+        src = self._active or self.sources[0]
+        platform = src["platform"]
+        s_url = src.get("url", "")
+
+        # Para la web, obtener el título de la API de Kick (la web es un wrapper de Kick)
+        if platform == "web":
+            from utils.web import get_title as web_get_title
+            title = web_get_title(s_url or self.channel)
+            if title:
+                return title
+            # Fallback: intentar con la API de Kick
+            try:
+                import requests
+                resp = requests.get(f"https://kick.com/api/v2/channels/{self.channel}", timeout=5)
+                resp.raise_for_status()
+                data = resp.json()
+                session = data.get("livestream", {})
+                if session and session.get("is_live"):
+                    return session.get("session_title", "")
+            except Exception:
+                pass
+
         info = self._fetch_live_info()
         if not info:
             return ""
