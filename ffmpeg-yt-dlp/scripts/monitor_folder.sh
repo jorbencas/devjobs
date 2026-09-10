@@ -50,12 +50,35 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+RED='\033[0;31m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 # ── Funciones ────────────────────────────────────────────────────────
 log() {
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-    echo -e "$msg" | tee -a "$LOG_FILE"
+    local timestamp
+    timestamp=$(date '+%H:%M:%S')
+    echo -e "${timestamp} $1" | tee -a "$LOG_FILE"
+}
+
+log_info() {
+    log "${CYAN}ℹ${NC} $1"
+}
+
+log_ok() {
+    log "${GREEN}✓${NC} $1"
+}
+
+log_warn() {
+    log "${YELLOW}⚠${NC} $1"
+}
+
+log_error() {
+    log "${RED}✗${NC} $1"
+}
+
+log_step() {
+    log "${MAGENTA}→${NC} $1"
 }
 
 compress_video() {
@@ -69,7 +92,7 @@ compress_video() {
     # (que vigila *_compressed.mp4) nunca coja un archivo a medio escribir.
     local tmp_output="${output}.tmp"
 
-    log "${CYAN}Comprimiendo:${NC} $filename"
+    log_info "Comprimiendo: $filename"
 
     # IPC: notificar al bot que estamos comprimiendo
     if type ipc_update_status &>/dev/null; then
@@ -102,10 +125,10 @@ compress_video() {
     local skip_detectar="false"
     if [[ -n "$sc_desc" ]]; then
         cp "$desc_sidecar" "$det_json" 2>/dev/null
-        log "  Descripción propia del canal: se omite detección y corte de episodios"
+        log_info "  Descripción propia del canal: se omite detección y corte de episodios"
         skip_detectar="true"
     elif [[ "$sc_detectar" != "true" ]]; then
-        log "  Fuente sin detección de episodios (config): se omite OCR y corte"
+        log_info "  Fuente sin detección de episodios (config): se omite OCR y corte"
         rm -f "$det_json"
         skip_detectar="true"
     fi
@@ -124,14 +147,14 @@ compress_video() {
             corte_posible=$(echo "$det" | python3 -c "import sys,json;d=json.load(sys.stdin).get('corte',{});print(str(d.get('posible',False)).lower())" 2>/dev/null)
             if [[ -n "$rango" ]]; then
                 if [[ "$corte_posible" == "true" ]]; then
-                    log "  Contenido detectado: $rango (corte ${cut_inicio}s → ${cut_fin}s)"
+                    log_ok "  Contenido detectado: $rango (corte ${cut_inicio}s → ${cut_fin}s)"
                 else
-                    log "  Contenido detectado: $rango (sin corte: margen inválido)"
+                    log_warn "  Contenido detectado: $rango (sin corte: margen inválido)"
                     cut_inicio=""
                     cut_fin=""
                 fi
             else
-                log "  Contenido no detectado (sin corte)"
+                log_info "  Contenido no detectado (sin corte)"
             fi
         fi
     fi
@@ -141,7 +164,7 @@ compress_video() {
     if [[ "$sc_corte" != "true" ]]; then
         cut_inicio=""
         cut_fin=""
-        [[ -z "$sc_desc" ]] && log "  Fuente sin corte (config): se mantiene el vídeo completo"
+        [[ -z "$sc_desc" ]] && log_info "  Fuente sin corte (config): se mantiene el vídeo completo"
     fi
 
     # Obtener duración para calcular progreso
@@ -197,7 +220,7 @@ compress_video() {
         size_bytes=$(stat -c%s "$tmp_output" 2>/dev/null || stat -f%z "$tmp_output" 2>/dev/null || echo 0)
         local max_bytes=$(( TAMANO_MAX_MB * 1024 * 1024 ))
         if [[ "$size_bytes" -gt "$max_bytes" && -n "$duration" && "$duration" -gt 0 ]]; then
-            log "⚠  $filename pesa $((size_bytes/1024/1024))MB (>${TAMANO_MAX_MB}MB). Re-codificando en 2 pasadas ≤ ${TAMANO_MAX_MB}MB..."
+            log_warn "$filename pesa $((size_bytes/1024/1024))MB (>${TAMANO_MAX_MB}MB). Re-codificando en 2 pasadas ≤ ${TAMANO_MAX_MB}MB..."
             local abps=128000
             case "$AUDIO_BITRATE" in
                 *k) abps=$(( ${AUDIO_BITRATE%k} * 1000 )) ;;
@@ -217,9 +240,9 @@ compress_video() {
                     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
                     -map_metadata 0 \
                     -movflags +faststart -f mp4 "$tmp_output" 2>/dev/null; then
-                    log "  ✓ 2 pasadas completadas → ${TAMANO_MAX_MB}MB"
+                    log_ok "  2 pasadas completadas → ${TAMANO_MAX_MB}MB"
                 else
-                    log "${RED}✗${NC} Falló la 2ª pasada; se mantiene el CRF one-pass."
+                    log_error "  Falló la 2ª pasada; se mantiene el CRF one-pass."
                 fi
                 rm -f ffmpeg2pass-*.log ffmpeg2pass-*.log.mbtree
             fi
@@ -234,7 +257,7 @@ compress_video() {
         local output_mb=$((output_size / 1024 / 1024))
         local savings=$(( (input_size - output_size) * 100 / input_size ))
 
-        log "${GREEN}✓${NC} $filename → ${output_mb}MB (-${savings}%)"
+        log_ok "$filename → ${output_mb}MB (-${savings}%)"
 
         # IPC: notificar al bot que terminamos
         if type ipc_remove_status &>/dev/null; then
@@ -245,14 +268,14 @@ compress_video() {
         # Mover original a carpeta procesados
         mkdir -p "$PROCESSED_DIR"
         mv "$input" "$PROCESSED_DIR/$filename"
-        log "  Original movido a: $PROCESSED_DIR/$filename"
+        log_info "  Original movido a: $PROCESSED_DIR/$filename"
         # El sidecar de descripción ya se copió al episodios.json; se limpia
         # para no re-procesarlo en el futuro.
         rm -f "$desc_sidecar"
 
         return 0
     else
-        log "${RED}✗${NC} Error al comprimir: $filename"
+        log_error "Error al comprimir: $filename"
         rm -f "$tmp_output"
         rm -f "$det_json"
         return 1
@@ -265,7 +288,7 @@ check_integridad() {
     # ffprobe falla (vacío) si el contenedor está truncado/corrupto (sin moov).
     dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$input" 2>/dev/null | cut -d. -f1)
     if [[ -z "$dur" || ! "$dur" =~ ^[0-9]+$ ]] || (( dur < MIN_DURACION )); then
-        log "${RED}✗${NC} $input: no legible o duración < ${MIN_DURACION}s (¿vídeo truncado?). Se mueve a .corruptos."
+        log_error "$input: no legible o duración < ${MIN_DURACION}s (¿vídeo truncado?). Se mueve a .corruptos."
         return 1
     fi
     return 0
@@ -325,15 +348,16 @@ done
 
 mkdir -p "$WATCH_DIR" "$OUTPUT_DIR" "$PROCESSED_DIR"
 
-log "${CYAN}=== Monitor de vídeo iniciado ===${NC}"
-log "Vigilando: $WATCH_DIR"
-log "Salida: $OUTPUT_DIR"
-log "CRF: $CRF | Preset: $PRESET | Códec: $CODEC"
-[[ -n "$RESOLUTION" ]] && log "Resolución: $RESOLUTION (escala)"
-[[ "$COMPLETED_ONLY" == "true" ]] && log "Solo archivos *_completed / *_compressed"
-log "Polling cada ${POLL_INTERVAL}s"
-log "Presiona Ctrl+C para detener"
-echo ""
+log "${CYAN}╔══════════════════════════════════════╗${NC}"
+log "${CYAN}║   Monitor de vídeo iniciado         ║${NC}"
+log "${CYAN}╚══════════════════════════════════════╝${NC}"
+log "  Vigilando: $WATCH_DIR"
+log "  Salida:    $OUTPUT_DIR"
+log "  Config:    CRF=$CRF | Preset=$PRESET | Códec=$CODEC"
+[[ -n "$RESOLUTION" ]] && log "  Resolución: $RESOLUTION (escala)"
+[[ "$COMPLETED_ONLY" == "true" ]] && log "  Filtro: solo archivos *_completed / *_compressed"
+log "  Polling:   cada ${POLL_INTERVAL}s"
+log "${CYAN}────────────────────────────────────────${NC}"
 
 # IPC: notificar al bot que el monitor está activo
 if type ipc_update_status &>/dev/null; then
@@ -342,19 +366,19 @@ if type ipc_update_status &>/dev/null; then
 fi
 
 # Procesar vídeos existentes primero
-log "Procesando vídeos existentes..."
+log_step "Procesando vídeos existentes..."
 process_pending
 existing=$?
-log "Procesados $existing vídeos existentes"
+log_ok "Procesados $existing vídeos existentes"
 
 # Bucle principal de monitoreo
-log "Iniciando monitoreo..."
+log_step "Iniciando monitoreo..."
 while true; do
     # Buscar vídeos nuevos
     new_files=$(find "$WATCH_DIR" -maxdepth 1 -type f $(video_find_pattern) 2>/dev/null | wc -l)
 
     if [[ "$new_files" -gt 0 ]]; then
-        log "Detectados $new_files vídeos nuevos"
+        log_info "Detectados $new_files vídeos nuevos"
         process_pending
     fi
 
@@ -370,7 +394,7 @@ if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
     duration=$(( cut_fin - cut_inicio ))
     # Validar que duration sea positivo
     if [[ "$duration" -le 0 ]]; then
-        log "  Advertencia: duración calculada inválida ($duration), usando duración original"
+        log_warn "Duración calculada inválida ($duration), usando duración original"
         duration=""
     fi
 fi

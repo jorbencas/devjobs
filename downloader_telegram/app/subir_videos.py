@@ -92,9 +92,17 @@ def cargar_credenciales():
 
 
 def log(tipo, mensaje):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    icono = {"INFO": "[i]", "OK": "[v]", "WARN": "[!]", "ERR": "[x]",
-             "SUBIR": "[^]", "PART": "[>]"}.get(tipo, "[i]")
+    ts = datetime.now().strftime("%H:%M:%S")
+    iconos = {
+        "INFO": "\033[36mℹ\033[0m",
+        "OK": "\033[32m✓\033[0m",
+        "WARN": "\033[33m⚠\033[0m",
+        "ERR": "\033[31m✗\033[0m",
+        "SUBIR": "\033[35m↑\033[0m",
+        "PART": "\033[33m→\033[0m",
+        "LIMP": "\033[32m♻\033[0m",
+    }
+    icono = iconos.get(tipo, "ℹ")
     print(f"{ts} {icono} {mensaje}", flush=True)
 
 
