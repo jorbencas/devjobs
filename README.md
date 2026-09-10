@@ -45,6 +45,8 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 | 5 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | [README](pdfmanager/README.md) |
 | 6 | `hdfull-downloader/` | Descargador de películas HDFull con noVNC | — | [README](hdfull-downloader/README.md) |
 | 7 | `aula-downloader/` | Descargador de vídeos Moodle/Vimeo | — | [README](aula-downloader/README.md) |
+| 8 | `scripts/kick_download.py` | Descargador de vídeos Kick.com (API + ffmpeg) | — | [docker_help.txt](docker_help.txt#3i) |
+| 9 | `scripts/discord_monitor.py` | Bot Discord: graba streams automáticamente con OBS | — | [docker_help.txt](docker_help.txt#3j) |
 
 ---
 
@@ -132,6 +134,113 @@ yt_ps        # Ver estado
 ```bash
 # 01:00 → 18:00 (mismo día)
 0 1 * * * /home/jorge/dev/devjobs/yt-to-telegram/scripts/run_pipeline_cron.sh
+```
+
+---
+
+## 🎙️ DISCORD: Grabación Automática de Streams y Llamadas
+
+Bot de Discord que monitorea canales de voz, detecta streams/llamadas y graba automáticamente con OBS. La grabación se mueve al pipeline para compresión y subida a Telegram.
+
+### Modos de grabación
+
+| Modo | Descripción | Cuándo graba |
+|------|-------------|--------------|
+| `stream` | Solo streams (compartir pantalla) | Alguien hace "Go Live" en el canal |
+| `call` | Solo llamadas (unión al canal) | Usuarios se unen al canal de voz |
+| `both` | Ambos | Stream O llamada |
+
+### Configuración
+
+```json
+// scripts/discord_config.json
+{
+  "discord_token": "TU_TOKEN_DE_DISCORD",
+  "monitor_channels": ["ID_DEL_CANAL_O_NOMBRE"],
+  "obs_host": "localhost",
+  "obs_port": 4455,
+  "output_dir": "/home/jorge/dev/devjobs/data/discord-recordings",
+  "record_mode": "stream",
+  "min_users_for_call": 1
+}
+```
+
+| Campo | Descripción | Por defecto |
+|-------|-------------|-------------|
+| `discord_token` | Token del bot de Discord | Requerido |
+| `monitor_channels` | IDs o nombres de canales a monitorear | Requerido |
+| `obs_host` | Host de OBS (obs-websocket) | `localhost` |
+| `obs_port` | Puerto de OBS (obs-websocket) | `4455` |
+| `output_dir` | Carpeta donde OBS guarda grabaciones | `data/discord-recordings` |
+| `record_scene` | Escena de OBS para grabar (null = actual) | `null` |
+| `record_mode` | `stream`, `call` o `both` | `stream` |
+| `min_users_for_call` | Mínimo de usuarios para grabar llamada | `1` |
+
+### Pasos para configurar
+
+**1. Crear bot de Discord:**
+```
+1. Ir a https://discord.com/developers/applications
+2. "New Application" → nombre (ej: "Grabador")
+3. pestaña "Bot" → "Add Bot"
+4. Copiar TOKEN → pegar en discord_config.json
+5. "Privileged Gateway Intents" → activar "Server Members Intent"
+```
+
+**2. Invitar bot al servidor:**
+```
+1. pestaña "OAuth2" → "URL Generator"
+2. Scopes: "bot"
+3. Bot Permissions: "Connect", "Speak", "Use Voice Activity"
+4. Copiar URL → abrir en navegador → seleccionar servidor
+```
+
+**3. Configurar OBS:**
+```
+1. Abrir OBS Studio
+2. Herramientas → Configuración del servicio WebSocket
+3. Activar "Habilitar servidor WebSocket"
+4. Puerto: 4455 (o el que configures)
+5. (Opcional) Añadir contraseña por seguridad
+```
+
+**4. Configurar discord_config.json:**
+```bash
+# Editar config
+nano scripts/discord_config.json
+
+# Pegar token y IDs de canales
+```
+
+**5. Ejecutar:**
+```bash
+discord_monitor   # Iniciar bot
+```
+
+### Comandos del bot en Discord
+
+| Comando | Descripción |
+|---------|-------------|
+| `!discord_status` | Estado actual (grabando/esperando) |
+| `!discord_stop` | Parar grabación manualmente |
+| `!discord_help` | Ayuda |
+
+### Aliases
+
+```bash
+discord_monitor          # Iniciar bot de Discord
+discord_obs start [escena]  # Iniciar grabación OBS manual
+discord_obs stop         # Parar grabación OBS
+discord_obs status       # Estado de OBS
+discord_obs scenes       # Listar escenas OBS
+```
+
+### Flujo completo
+
+```
+Discord stream/call detectado → OBS graba → stream termina →
+OBS guarda archivo → se mueve a data/pipeline/grabaciones/discord/ →
+ffmpeg_monitor comprime → se sube a Telegram
 ```
 
 ---

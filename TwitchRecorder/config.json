@@ -18,7 +18,7 @@
                 { "platform": "youtube" },
                 { "platform": "twitch", "detectar": false, "corte": false }
             ],
-            "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+            "days": ["Monday"],
             "start_time": "18:00"
         },
         "mouredev": {

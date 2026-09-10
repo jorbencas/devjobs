@@ -11,6 +11,8 @@
         3B. downloader_telegram    3E. TwitchRecorder
         3C. hdfull-downloader      3F. ffmpeg-yt-dlp
         3G. Bot API (telegram_bot + ollama)
+        3H. yt-to-telegram
+        3I. kick_download (Kick.com)
   4. PIPELINE: directo sendo sama → Telegram (plogs, pipe_*)  [une 3 proyectos]
   5. PIPELINE vía SYSTEMD (auto-arranque al BOOT)
   6. MONTAR en otra máquina (Windows + WSL2)
@@ -321,7 +323,76 @@ Telegram (h264/aac, CRF 28, 2 pasadas si >50MB) y los sube al grupo
     cd yt-to-telegram
     docker compose run --rm yt-upload python scripts/delete_uploaded.py GRUPO_ID
 
-==============================================================================
+------------------------------------------------------------------------------
+3I. KICK_DOWNLOAD (scripts/kick_download.py)
+------------------------------------------------------------------------------
+Qué hace: descarga vídeos de Kick.com. La API de Kick (`/api/v1/video/`) está
+rota para UUIDs nuevos, pero el endpoint `/api/v1/channels/{id}/videos` devuelve
+el `recording_url` (m3u8) directamente. Usa ffmpeg para descargar el stream.
+
+  kick_dl <url> [output.mp4]    Descargar vídeo de Kick.com
+  kick_dl https://kick.com/sendosama/videos/01a087f2-...
+
+  Sin output: guarda en descargas/<canal>_<id>.mp4
+  Con output: guarda en la ruta especificada
+
+  Requisitos:
+    - Python 3 con `requests` (pip install requests)
+    - ffmpeg (en PATH o en contenedor docker ffmpeg_monitor-sendo)
+
+  Ejemplo:
+    kick_dl https://kick.com/sendosama/videos/01a087f2-36a8-7bc7-91a9-47ccb1e3f21d
+    kick_dl https://kick.com/sendosama/videos/01a087f2-... /descargas/video.mp4
+
+  Nota: el script funciona sin Docker (usa ffmpeg del PATH) o con Docker
+  (usa ffmpeg del contenedor ffmpeg_monitor-sendo).
+
+------------------------------------------------------------------------------
+3J. DISCORD MONITOR (scripts/discord_monitor.py)
+------------------------------------------------------------------------------
+Qué hace: bot de Discord que monitorea canales de voz, detecta cuando alguien
+comparte pantalla (stream) y graba automáticamente con OBS. Cuando el stream
+termina, la grabación se mueve al pipeline para compresión y subida a Telegram.
+
+  discord_monitor          Iniciar el bot de Discord (foreground)
+  discord_obs start [escena]  Iniciar grabación de OBS manualmente
+  discord_obs stop         Parar grabación de OBS
+  discord_obs status       Estado de OBS
+  discord_obs scenes       Listar escenas de OBS
+
+  Configuración: scripts/discord_config.json
+    - discord_token: Token del bot de Discord (obtener en discord.com/developers)
+    - monitor_channels: IDs o nombres de canales de voz a monitorear
+    - obs_host/puerto: Conexión a OBS (default: localhost:4455)
+    - output_dir: Carpeta donde OBS guarda las grabaciones
+    - record_mode: "stream" (solo streams), "call" (solo llamadas), "both" (ambos)
+    - min_users_for_call: Mínimo de usuarios para grabar llamada (default: 1)
+
+  Requisitos:
+    - pip install discord.py obs-websocket-py
+    - OBS Studio 28+ con obs-websocket habilitado (puerto 4455)
+    - Bot de Discord con permisos: Connect, Speak, Use Voice Activity
+
+  Configuración del bot de Discord:
+    1. Crear bot en https://discord.com/developers/applications
+    2. Copiar token a discord_config.json
+    3. Activar "Server Members Intent" en Bot → Privileged Gateway Intents
+    4. Invitar al servidor con permisos de voz
+    5. Abrir OBS → Herramientas → WebSocket → activar en puerto 4455
+
+  Comandos del bot en Discord:
+    !discord_status   - Estado actual
+    !discord_stop     - Parar grabación
+    !discord_help     - Ayuda
+
+  Flujo:
+    1. Bot detecta stream/llamada en canal de voz
+    2. Inicia grabación en OBS
+    3. Stream/llamada termina → OBS guarda archivo
+    4. Archivo se mueve a data/pipeline/grabaciones/discord/
+    5. ffmpeg_monitor lo comprime y sube a Telegram
+
+ ==============================================================================
   4. PIPELINE: DIRECTO SENDO SAMA → TELEGRAM
 ==============================================================================
 
@@ -480,6 +551,9 @@ tg_bot_sys_status     # Ver estado del bot
 ==============================================================================
 
 docker_help           Mostrar este cheatsheet
+kick_dl <url>         Descargar vídeo de Kick.com
+discord_monitor       Bot de Discord para grabar streams
+discord_obs           Control de OBS (start/stop/status/scenes)
 docker ps             Contenedores activos
 docker ps --format "table {{.Names}}\t{{.Status}}"   Nombres + estado en una tabla
 du -sh ../devjobs/*/     Peso por proyecto (videos y backups pesan mucho)

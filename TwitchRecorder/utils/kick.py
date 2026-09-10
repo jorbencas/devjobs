@@ -1,23 +1,20 @@
-import yt_dlp
+import requests
 
 from utils.logger import log
 
 
 def is_live(channel: str) -> bool:
+    """Detecta si un canal está en directo en Kick usando la API de canales."""
     try:
-        url = f"https://kick.com/{channel}"
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "extract_flat": False,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info and info.get("is_live"):
-                return True
-            return False
-    except Exception:
+        resp = requests.get(f"https://kick.com/api/v2/channels/{channel}", timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        livestream = data.get("livestream")
+        if livestream and livestream.get("is_live"):
+            return True
+        return False
+    except Exception as e:
+        log.warning(f"[kick] is_live falló para {channel}: {e}")
         return False
 
 

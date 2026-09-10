@@ -140,6 +140,16 @@ alias yt_ps='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml ps yt-
 alias yt_download='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-download'
 alias yt_convert='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-convert'
 alias yt_upload='docker compose -f $DEVJOBS/yt-to-telegram/docker-compose.yml run --rm yt-upload'
+
+# ---------- kick_download (descarga vídeos de Kick.com) ----------
+alias kick_dl='python3 $DEVJOBS/scripts/kick_download.py'
+
+# ---------- discord_monitor (grabación automática de streams Discord) ----------
+alias discord_monitor='python3 $DEVJOBS/scripts/discord_monitor.py'
+alias discord_obs='python3 $DEVJOBS/scripts/obs_control.py'
+
+# ---------- Ayuda ----------
+alias docker_help='bash $SCRIPT_DIR/docker_help.sh'
 ALIASES2
 fi
 
