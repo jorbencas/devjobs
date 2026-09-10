@@ -192,10 +192,17 @@ Bot de Discord que monitorea canales de voz, detecta streams/llamadas y graba au
 1. pestaña "OAuth2" → "URL Generator"
 2. Scopes: "bot"
 3. Bot Permissions: "Connect", "Speak", "Use Voice Activity"
-4. Copiar URL → abrir en navegador → seleccionar servidor
+4. Copiar URL → abrir en navegador → seleccionar servidor → Authorize
 ```
 
-**3. Configurar OBS:**
+**3. Obtener IDs de canales:**
+```
+1. En Discord → Ajustes del servidor → Avanzado → activar "Modo Desarrollador"
+2. Click derecho en el canal de voz → "Copiar ID del canal"
+3. Pegar en discord_config.json → "monitor_channels": ["1234567890"]
+```
+
+**4. Configurar OBS:**
 ```
 1. Abrir OBS Studio
 2. Herramientas → Configuración del servicio WebSocket
@@ -204,7 +211,7 @@ Bot de Discord que monitorea canales de voz, detecta streams/llamadas y graba au
 5. (Opcional) Añadir contraseña por seguridad
 ```
 
-**4. Configurar discord_config.json:**
+**5. Configurar discord_config.json:**
 ```bash
 # Editar config
 nano scripts/discord_config.json
@@ -212,7 +219,7 @@ nano scripts/discord_config.json
 # Pegar token y IDs de canales
 ```
 
-**5. Ejecutar:**
+**6. Ejecutar:**
 ```bash
 discord_monitor   # Iniciar bot
 ```

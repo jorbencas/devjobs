@@ -377,8 +377,11 @@ termina, la grabación se mueve al pipeline para compresión y subida a Telegram
     1. Crear bot en https://discord.com/developers/applications
     2. Copiar token a discord_config.json
     3. Activar "Server Members Intent" en Bot → Privileged Gateway Intents
-    4. Invitar al servidor con permisos de voz
-    5. Abrir OBS → Herramientas → WebSocket → activar en puerto 4455
+    4. Invitar al servidor con permisos de voz (Connect, Speak, Use Voice Activity)
+    5. Obtener IDs de canales: Ajustes del servidor → Avanzado → Modo Desarrollador
+       → Click derecho en canal → Copiar ID del canal
+    6. Pegar IDs en discord_config.json → "monitor_channels": ["1234567890"]
+    7. Abrir OBS → Herramientas → WebSocket → activar en puerto 4455
 
   Comandos del bot en Discord:
     !discord_status   - Estado actual
