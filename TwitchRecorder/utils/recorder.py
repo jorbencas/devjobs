@@ -631,33 +631,32 @@ class Recorder:
                         if not self._stop_event.is_set():
                             log.warning(f"[{self.channel}] No se pudo reconectar en {max_wait}s, terminando grabación")
             else:
-                # Mientras graba, comprobar si la web se abrió (prioridad absoluta)
-                # Si estamos en Kick/Twitch y la web aparece, cambiar a web
-                if self.is_recording and self._active and self._active["platform"] != "web":
+                # Mientras graba, comprobar si cambió la plataforma activa
+                # (p. ej. web apareció, o Twitch cambió a Kick)
+                if self.is_recording and self._active:
+                    prev_platform = self._active["platform"]
                     if self.is_live():  # is_live() prioriza web
                         new_platform = self._active["platform"]
-                        if new_platform == "web":
-                            prev_platform = self._active["platform"] if self._active else "unknown"
+                        if new_platform != prev_platform:
                             log.warning(
-                                f"[{self.channel}] Web apareció durante grabación en {prev_platform}: "
-                                f"cambiando a web (prioridad absoluta)"
+                                f"[{self.channel}] Plataforma cambió {prev_platform} → {new_platform}: "
+                                f"cerrando parte actual y cambiando"
                             )
                             self._add_parte_actual()
-                            # Esperar a que la web esté lista (máx 30s)
+                            # Esperar a que la nueva plataforma esté lista (máx 60s)
                             wait_start = time.time()
-                            max_wait = 30
+                            max_wait = 60
                             while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
-                                if self.is_platform_live("web"):
-                                    log.info(f"[{self.channel}] Web listo, empezando grabación")
+                                if self.is_platform_live(new_platform):
+                                    log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
                                     self.start()
                                     break
                                 remaining = int(max_wait - (time.time() - wait_start))
-                                log.info(f"[{self.channel}] Esperando a que web esté listo ({remaining}s restantes)...")
+                                log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
                                 time.sleep(5)
                             else:
                                 if not self._stop_event.is_set():
-                                    log.warning(f"[{self.channel}] Web no estuvo listo en {max_wait}s, continuando en {prev_platform}")
-                                    # Reanudar en la plataforma anterior
+                                    log.warning(f"[{self.channel}] {new_platform} no estuvo listo en {max_wait}s, continuando en {prev_platform}")
                                     self.start()
 
             time.sleep(5)
