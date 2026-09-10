@@ -109,8 +109,26 @@ Edita `config.json`:
 |---|---|---|---|
 | Twitch | `twitch` | Streamlink | `sendosama` |
 | YouTube | `youtube` | yt-dlp | `MrBeast` |
-| Kick | `kick` | yt-dlp | `adin` |
-| Web (URL propia) | `web` | yt-dlp | `watch.sendosama.net` |
+| Kick | `kick` | Kick API + yt-dlp | `adin` |
+| Web (URL propia) | `web` | API interna + yt-dlp | `watch.sendosama.net` |
+
+### Prioridad absoluta de la web
+
+**La web SIEMPRE se comprueba primero**, aunque Kick/Twitch/YouTube estén listos antes en la config. Si la web está live, se usa SIEMPRE (es la fuente primaria). Si la web está caída, se usa la siguiente plataforma en orden de prioridad.
+
+```
+Fase 1: ¿Está la web live?
+  → SÍ: graba desde web (siempre)
+  → NO: pasa a fase 2
+
+Fase 2: ¿Está Kick/Twitch/YouTube live?
+  → SÍ: graba desde esa plataforma
+  → NO: espera
+```
+
+> **¿Por qué?** La web del streamer es la fuente primaria (ej. `watch.sendosama.net`
+> es un wrapper de Kick con su propio player). Si el stream está en la web, se
+> graba de ahí aunque también esté en Kick/Twitch.
 
 ### Varias fuentes por canal (prioridad + fallback)
 
@@ -240,6 +258,40 @@ una prueba de captura (equivale a `yt-dlp -F`) y deja un informe en
 `CAPTURABLE / NO CAPTURABLE`. Así se verifica el primer directo por la web sin
 tener que estar pendiente. Se vuelve a probar si la web se detecta caída y
 luego reaparece en directo.
+
+### Cómo funciona la web (API interna)
+
+Las webs de streamers suelen ser **React SPAs** (Single Page Applications) donde
+el HTML está vacío y el stream se carga dinámicamente via JavaScript. yt-dlp no
+puede extraer streams de SPAs porque no hay m3u8 embebido en el HTML.
+
+**Solución:** la web de sendosama (`watch.sendosama.net`) tiene una API interna
+que devuelve el dominio del servidor HLS:
+
+```
+GET https://watch.sendosama.net/api/playback-domain
+→ {"domain": "hls-eu-649853.sendosama.net"}
+```
+
+Con ese dominio se construye la URL del m3u8 directo:
+
+```
+https://hls-eu-649853.sendosama.net/hls/public/ts:abr.m3u8
+```
+
+**Flujo:**
+1. `is_live()` llama a `/api/playback-domain` para obtener el dominio HLS
+2. Comprueba si el m3u8 está activo (formatos disponibles)
+3. `get_stream_url()` devuelve la URL del m3u8 directo (no la página web)
+4. yt-dlp graba desde el m3u8 directo
+
+**Título del directo:** la web no tiene el título en el HTML (es una SPA).
+`get_live_title()` usa la API de Kick como fallback para obtener el título real:
+
+```
+GET https://kick.com/api/v2/channels/sendosama
+→ livestream.session_title: "DETECTIVE CONAN 👓 FINAL ARCO VERMOUTH..."
+```
 
 ### Campos de configuración
 
@@ -572,8 +624,8 @@ TwitchRecorder/
 │   ├── config.py         # Carga y valida config.json
 │   ├── twitch.py         # Comprueba si un canal está en directo (Twitch)
 │   ├── youtube.py        # Comprueba si un canal está en directo (YouTube)
-│   ├── kick.py           # Comprueba si un canal está en directo (Kick)
-│   ├── web.py            # Comprueba una URL propia (yt-dlp genérico, ej. watch.sendosama.net)
+│   ├── kick.py           # Comprueba si un canal está en directo (Kick API)
+│   ├── web.py            # Web propia: API /api/playback-domain → HLS m3u8
 │   ├── recorder.py       # Graba el stream con Streamlink o yt-dlp
 │   ├── scheduler.py      # Controla horarios y comprobaciones
 │   ├── files.py          # Organiza archivos por fecha
