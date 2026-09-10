@@ -193,22 +193,32 @@ class Recorder:
             self.sources = ordered
 
     def is_live(self) -> bool:
-        # Prioridad: la primera fuente que esté en directo gana (ej. la web del
-        # streamer antes que kick/twitch). Según el día se puede priorizar otra
-        # plataforma (ej. siendo → youtube el domingo).
+        # Prioridad ABSOLUTA: la web siempre se comprueba primero, aunque
+        # otro plataforma (Kick, Twitch...) esté lista antes en la config.
+        # Si la web está live, se usa SIEMPRE (es la fuente primaria).
         self._reordenar_por_dia()
+
+        # Fase 1: comprobar la web primero si existe
         for src in self.sources:
+            if src["platform"] == "web":
+                if self._is_source_live(src):
+                    self._active = src
+                    self.platform_name = "web"
+                    self._autoprobar_web(src)
+                    return True
+                # Web caída: permitir re-probar en el siguiente ciclo
+                self._probed_sources.discard(src.get("url", "") or self.channel)
+                break
+
+        # Fase 2: si la web no está, probar el resto en orden de prioridad
+        for src in self.sources:
+            if src["platform"] == "web":
+                continue  # Ya comprobada en fase 1
             if not self._is_source_live(src):
-                # Si la web está caída, permitir re-probar cuando vuelva a estar activa
-                if src["platform"] == "web":
-                    self._probed_sources.discard(src.get("url", "") or self.channel)
                 continue
             self._active = src
             self.platform_name = src["platform"]
-            if src["platform"] == "web":
-                self._autoprobar_web(src)
-            else:
-                self._probed_sources.discard(src.get("url", "") or self.channel)
+            self._probed_sources.discard(src.get("url", "") or self.channel)
             return True
         return False
 
