@@ -553,19 +553,43 @@ class Recorder:
                     # nueva plataforma. Al terminar el directo se concatenan.
                     log.warning(
                         f"[{self.channel}] Cambio de plataforma {prev_platform} → {new_platform}: "
-                        f"cerrando parte actual y empezando nueva desde {new_platform}"
+                        f"cerrando parte actual y esperando a que {new_platform} esté listo"
                     )
                     self._add_parte_actual()
-                    if not self._stop_event.is_set() and self.is_live():
-                        self.start()
+                    
+                    # Esperar a que la nueva plataforma esté lista (máx 60s)
+                    wait_start = time.time()
+                    max_wait = 60
+                    while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
+                        if self.is_live():
+                            log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
+                            self.start()
+                            break
+                        remaining = int(max_wait - (time.time() - wait_start))
+                        log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
+                        time.sleep(10)
+                    else:
+                        if not self._stop_event.is_set():
+                            log.warning(f"[{self.channel}] {new_platform} no estuvo listo en {max_wait}s, terminando grabación")
                 else:
                     log.warning(f"[{self.channel}] Conexión perdida, reconectando en {self.retry_interval}s...")
                     self._add_parte_actual()
                     time.sleep(self.retry_interval)
 
-                    if not self._stop_event.is_set() and self.is_live():
-                        log.info(f"[{self.channel}] Reconectado, reanudando grabación")
-                        self.start()
+                    # Esperar a que el canal esté de vuelta en directo (máx 120s)
+                    wait_start = time.time()
+                    max_wait = 120
+                    while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
+                        if self.is_live():
+                            log.info(f"[{self.channel}] Reconectado, reanudando grabación")
+                            self.start()
+                            break
+                        remaining = int(max_wait - (time.time() - wait_start))
+                        log.info(f"[{self.channel}] Esperando reconexión ({remaining}s restantes)...")
+                        time.sleep(10)
+                    else:
+                        if not self._stop_event.is_set():
+                            log.warning(f"[{self.channel}] No se pudo reconectar en {max_wait}s, terminando grabación")
 
             time.sleep(5)
 
