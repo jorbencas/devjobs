@@ -130,6 +130,35 @@ Fase 2: ¿Está Kick/Twitch/YouTube live?
 > es un wrapper de Kick con su propio player). Si el stream está en la web, se
 > graba de ahí aunque también esté en Kick/Twitch.
 
+### Cambio de plataforma en vivo
+
+El monitor detecta cambios de plataforma **mientras graba** (cada 5 segundos),
+no solo cuando el proceso termina. Si la plataforma activa cambia:
+
+1. **Cierra la parte actual** (ej. `__parte1`)
+2. **Espera a que la nueva plataforma esté lista** (máx 60s)
+3. **Abre una nueva parte** desde la nueva plataforma (ej. `__parte2`)
+4. **Al terminar, concatena** todas las partes en un solo vídeo
+
+**Escenarios soportados:**
+
+| Cambio | Ejemplo | Resultado |
+|--------|---------|-----------|
+| Kick → web | Web se abre después de Kick | Cambia a web (prioridad) |
+| Twitch → Kick | Le cortan en Twitch | Cambia a Kick |
+| Kick → Twitch | Le cortan en Kick | Cambia a Twitch |
+| web → Kick | Web se cae | Cambia a Kick |
+| Cualquier → web | Web aparece | Cambia a web (prioridad) |
+
+**Ejemplo:** Twitch abre → graba 30min → le cortan y pasa a Kick:
+```
+0:00  Twitch abre → graba desde Twitch
+30:00 Le cortan en Twitch → detecta cambio → cierra parte de Twitch
+30:05 Espera a que Kick esté listo (máx 60s)
+30:06 Kick listo → abre nueva parte desde Kick
+Fin   Concatena partes → un solo vídeo en Telegram
+```
+
 ### Varias fuentes por canal (prioridad + fallback)
 
 `platform` admite un **str** (una sola fuente) o una **lista** de fuentes en orden de
