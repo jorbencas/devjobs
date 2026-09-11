@@ -30,6 +30,22 @@ DOWNLOADS_DIR = DATA_DIR / "downloads"
 CONVERTED_DIR = DATA_DIR / "converted"
 UPLOADED_DIR = DATA_DIR / "uploaded"
 LOGS_DIR = DATA_DIR / "logs"
+FAILED_IDS_FILE = DATA_DIR / "failed_ids.json"
+
+
+def load_failed_ids():
+    """Carga IDs de vídeos que fallaron (no reintentar)."""
+    if FAILED_IDS_FILE.exists():
+        with open(FAILED_IDS_FILE) as f:
+            return set(json.load(f))
+    return set()
+
+
+def save_failed_ids(ids):
+    """Guarda IDs de vídeos fallidos."""
+    FAILED_IDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(FAILED_IDS_FILE, "w") as f:
+        json.dump(list(ids), f)
 
 
 def process_single_video(video_info, channel_name):
@@ -142,21 +158,65 @@ def process_single_video(video_info, channel_name):
     return True
 
 
+def upload_pending_converted():
+    """Sube vídeos convertidos pendientes a Telegram."""
+    from upload import get_pending_videos, upload_video, move_to_uploaded, load_topics, get_topic_id
+    
+    pending = get_pending_videos()
+    if not pending:
+        logger.info("ℹ️  No hay vídeos convertidos pendientes de subir")
+        return 0
+    
+    logger.info(f"📤 {len(pending)} vídeos pendientes de subir a Telegram")
+    
+    topics = load_topics()
+    uploaded_count = 0
+    
+    for video in pending:
+        topic_id = get_topic_id(video["channel"], topics)
+        if not topic_id:
+            logger.warning(f"  ⚠️  No hay tema para {video['channel']}, saltando")
+            continue
+        
+        logger.info(f"  📹 Subiendo: {video['filename'][:50]}...")
+        if upload_video(video["path"], video["channel"], video["title"], video.get("publish_date", "")):
+            move_to_uploaded(video)
+            uploaded_count += 1
+            logger.info(f"  ✅ Subido: {video['filename'][:50]}")
+        else:
+            logger.error(f"  ❌ Error subiendo: {video['filename'][:50]}")
+    
+    return uploaded_count
+
+
 def run_pipeline():
-    """Ejecuta el pipeline procesando vídeos uno por uno."""
-    logger.info("🚀 Iniciando pipeline YouTube → Telegram (modo individual)")
+    """Ejecuta el pipeline: primero sube pendientes, luego descarga nuevos."""
+    logger.info("🚀 Iniciando pipeline YouTube → Telegram")
 
     # Crear directorios
     for d in [DOWNLOADS_DIR, CONVERTED_DIR, UPLOADED_DIR, LOGS_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # Cargar canales
+    stats = {"downloaded": 0, "converted": 0, "uploaded": 0, "errors": 0}
+
+    # FASE 1: Subir vídeos convertidos pendientes
+    logger.info("\n" + "="*50)
+    logger.info("📤 FASE 1: Subiendo vídeos pendientes")
+    logger.info("="*50)
+    uploaded = upload_pending_converted()
+    stats["uploaded"] = uploaded
+
+    # FASE 2: Descargar y procesar nuevos vídeos
+    logger.info("\n" + "="*50)
+    logger.info("📥 FASE 2: Descargando vídeos nuevos")
+    logger.info("="*50)
+
     channels = load_channels()
     enabled_channels = [c for c in channels if c.get("enabled", True)]
     logger.info(f"📺 {len(enabled_channels)} canales habilitados")
 
     downloaded_ids = load_downloaded_ids()
-    stats = {"downloaded": 0, "converted": 0, "uploaded": 0, "errors": 0}
+    failed_ids = load_failed_ids()
 
     for channel in enabled_channels:
         name = channel["name"]
@@ -164,7 +224,7 @@ def run_pipeline():
         logger.info(f"📥 Procesando canal: {name}")
         logger.info(f"{'='*50}")
 
-        videos = get_channel_videos(channel, downloaded_ids, max_videos=channel.get("max_videos", 2))
+        videos = get_channel_videos(channel, downloaded_ids, max_videos=999)
         if not videos:
             logger.info(f"  ℹ️  No hay vídeos nuevos")
             continue
@@ -175,12 +235,19 @@ def run_pipeline():
                 logger.info(f"  ⏭️  Saltando directo programado: {video['title'][:50]}")
                 continue
 
+            # Saltar vídeos que ya fallaron
+            if video["id"] in failed_ids:
+                logger.info(f"  ⏭️  Saltando vídeo previamente fallido: {video['title'][:50]}")
+                continue
+
             success = process_single_video(video, name)
             if success:
                 downloaded_ids.add(video["id"])
                 save_downloaded_ids(downloaded_ids)
                 stats["uploaded"] += 1
             else:
+                failed_ids.add(video["id"])
+                save_failed_ids(failed_ids)
                 stats["errors"] += 1
 
     # Guardar log final

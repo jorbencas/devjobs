@@ -58,6 +58,13 @@ YT-TELEGRAM (Pipeline YouTube):
   yt_convert       Ejecutar solo conversión
   yt_upload        Ejecutar solo subida
 
+AULA DOWNLOADER:
+  aula_up           Arrancar menú interactivo (selección de vídeos)
+  aula_run          Ejecutar descarga directa (siempre pregunta selección)
+  aula_down         Parar contenedor
+  aula_logs         Ver logs
+  aula_rebuild      Reconstruir contenedor
+
 KICK.COM:
   kick_dl <url>    Descargar vídeo de Kick.com
                    Ejemplo: kick_dl https://kick.com/sendosama/videos/01a087f2-...

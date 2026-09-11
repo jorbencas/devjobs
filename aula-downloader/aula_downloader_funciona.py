@@ -204,20 +204,69 @@ def main():
     out_dir = "descargas"
     os.makedirs(out_dir, exist_ok=True)
 
-    # Pre-scan: count total videos and cache HTML
+    # Pre-scan: cache HTML and extract videos per folder
     styled_info("Pre-escaneando carpetas...")
-    total_expected = 0
-    folder_html = {}
+    folder_data = []  # list of (folder_url, course_name, all_videos)
     for folder_url in urls:
         resp = session.get(folder_url)
-        folder_html[folder_url] = resp.text
         soup = BeautifulSoup(resp.text, 'html.parser')
-        count = len(soup.find_all('iframe', src=re.compile(r'vimeo\.com')))
-        total_expected += count
-        styled_info(f"  {folder_url.split('id=')[1]}: {count} vídeos")
+        iframes = soup.find_all('iframe', src=re.compile(r'vimeo\.com'))
 
-    styled_info(f"Total esperado: {total_expected} vídeos en {len(urls)} carpetas")
+        title_tag = soup.find('title')
+        course_name = title_tag.text.split('|')[0].strip() if title_tag else f"curso_{urls.index(folder_url)+1}"
+        course_name = re.sub(r'[^\w\s-]', '', course_name).strip()
+        course_name = re.sub(r'\s+', '_', course_name)[:50]
+
+        all_videos = []
+        for iframe in iframes:
+            src = iframe.get('src', '')
+            match = re.search(r'video/(\d+)', src)
+            video_id = match.group(1) if match else None
+            h_match = re.search(r'h=([a-f0-9]+)', src)
+            h_param = h_match.group(1) if h_match else None
+            if video_id:
+                all_videos.append((video_id, h_param))
+
+        styled_info(f"  {course_name}: {len(all_videos)} vídeos")
+        folder_data.append((folder_url, course_name, all_videos))
+
+    # --- Selection phase (siempre pregunta) ---
+    from InquirerPy import inquirer
+    selected_per_folder = []
+
+    for folder_url, course_name, all_videos in folder_data:
+        if not all_videos:
+            styled_warning(f"  {course_name}: sin vídeos, saltando")
+            selected_per_folder.append([])
+            continue
+
+        choices = [
+            {"name": f"  {idx+1}. {vid}", "value": idx}
+            for idx, (vid, _) in enumerate(all_videos)
+        ]
+
+        selected_indices = inquirer.checkbox(
+            message=f"[{course_name}] Selecciona vídeos ({len(all_videos)} total):",
+            choices=choices,
+            instructions="(espacio selecciona · enter acepta · 'a' = todos)",
+            validate=lambda result: len(result) > 0 or "Selecciona al menos uno",
+        ).execute()
+
+        if not selected_indices:
+            styled_warning(f"  {course_name}: ninguno seleccionado")
+            selected_per_folder.append([])
+        else:
+            videos = [all_videos[i] for i in sorted(selected_indices)]
+            styled_info(f"  {course_name}: {len(videos)}/{len(all_videos)} seleccionados")
+            selected_per_folder.append(videos)
+
+    total_expected = sum(len(v) for v in selected_per_folder)
+    styled_info(f"Total a descargar: {total_expected} vídeos")
     console.print()
+
+    if total_expected == 0:
+        styled_warning("Ningún vídeo seleccionado")
+        return
 
     # Start timer
     global_start = time.time()
@@ -226,38 +275,15 @@ def main():
 
     # Process each URL
     total_videos = 0
-    for url_idx, folder_url in enumerate(urls):
+    for url_idx, (folder_url, course_name, videos) in enumerate(zip(urls, [d[1] for d in folder_data], selected_per_folder)):
         console.print()
-        styled_info(f"Procesando carpeta [{url_idx+1}/{len(urls)}]: {folder_url}")
+        styled_info(f"Procesando carpeta [{url_idx+1}/{len(urls)}]: {course_name}")
 
-        # Use cached HTML from pre-scan
-        soup = BeautifulSoup(folder_html[folder_url], 'html.parser')
-        iframes = soup.find_all('iframe', src=re.compile(r'vimeo\.com'))
-
-        # Extract course name from page title
-        title_tag = soup.find('title')
-        course_name = title_tag.text.split('|')[0].strip() if title_tag else f"curso_{url_idx+1}"
-        # Clean course name for filesystem
-        course_name = re.sub(r'[^\w\s-]', '', course_name).strip()
-        course_name = re.sub(r'\s+', '_', course_name)[:50]
-
-        styled_info(f"  Curso: {course_name}")
-        styled_info(f"  Encontrados {len(iframes)} vídeos Vimeo")
-
-        if not iframes:
-            styled_error("  No hay vídeos en esta carpeta")
+        if not videos:
+            styled_warning("  Sin vídeos seleccionados, saltando")
             continue
 
-        # List videos
-        videos = []
-        for i, iframe in enumerate(iframes):
-            src = iframe.get('src', '')
-            match = re.search(r'video/(\d+)', src)
-            video_id = match.group(1) if match else None
-            h_match = re.search(r'h=([a-f0-9]+)', src)
-            h_param = h_match.group(1) if h_match else None
-            if video_id:
-                videos.append((video_id, h_param))
+        styled_info(f"  {len(videos)} vídeos a descargar")
 
         # Create course directory
         course_dir = os.path.join(out_dir, course_name)

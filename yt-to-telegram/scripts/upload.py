@@ -244,6 +244,13 @@ def move_to_uploaded(video):
     if source.exists():
         source.rename(destination)
         logger.info(f"  📁 Movido a: {destination}")
+        
+        # Mover thumbnail si existe
+        thumb_source = source.with_suffix('.jpg')
+        if thumb_source.exists():
+            thumb_dest = destination.with_suffix('.jpg')
+            thumb_source.rename(thumb_dest)
+            logger.info(f"  📁 Thumbnail movido: {thumb_dest.name}")
 
 def get_pending_videos():
     """Obtiene vídeos convertidos que aún no se han subido."""

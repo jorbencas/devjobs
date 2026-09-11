@@ -73,3 +73,5 @@ groups.json
 ### Datos del pipeline (vídeos) ###
 data/
 hdfull-downloader/.env
+scripts/
+escenas-de-matrimonio/
