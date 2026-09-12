@@ -59,8 +59,9 @@ YT-TELEGRAM (Pipeline YouTube):
   yt_upload        Ejecutar solo subida
 
 AULA DOWNLOADER:
-  aula_up           Arrancar menú interactivo (selección de vídeos)
-  aula_run          Ejecutar descarga directa (siempre pregunta selección)
+  aula_up           Arrancar menú interactivo (menú principal de vídeos)
+  aula_run          Descarga directa (siempre muestra lista con títulos y
+                    deja elegir TODOS, algunos o ninguno)
   aula_down         Parar contenedor
   aula_logs         Ver logs
   aula_rebuild      Reconstruir contenedor

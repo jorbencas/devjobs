@@ -119,6 +119,37 @@ def parse_master_m3u8(content, base_url):
     return result
 
 
+def obtener_titulo_video(session, video_id, h_param):
+    """Obtiene el título real de un vídeo de Vimeo (parsea playerConfig).
+    Devuelve '' si no se puede (se mostrará el ID como fallback).
+    Usado en el pre-escaneo para que la lista de selección muestre nombres."""
+    try:
+        player_url = f"https://player.vimeo.com/video/{video_id}"
+        params = {'title': '0', 'byline': '0', 'portrait': '0', 'pip': '0', 'dnt': '1'}
+        if h_param:
+            params['h'] = h_param
+        resp = session.get(player_url, params=params, headers={
+            **HEADERS_AULA,
+            'Referer': 'https://aula.pmoposiciones.com/',
+        })
+        start_marker = "window.playerConfig = "
+        pos = resp.text.find(start_marker)
+        if pos == -1:
+            return ""
+        pos += len(start_marker)
+        for pattern in ["}}</script>", "}};</script>"]:
+            fin = resp.text.find(pattern, pos)
+            if fin != -1:
+                try:
+                    config = json.loads(resp.text[pos:fin + 2])
+                except Exception:
+                    continue
+                return config.get('video', {}).get('title', '') or ''
+    except Exception:
+        pass
+    return ""
+
+
 def download_file(url, output_file, session):
     """Download a file"""
     try:
@@ -225,9 +256,20 @@ def main():
             h_match = re.search(r'h=([a-f0-9]+)', src)
             h_param = h_match.group(1) if h_match else None
             if video_id:
-                all_videos.append((video_id, h_param))
+                all_videos.append((video_id, h_param, ""))
 
         styled_info(f"  {course_name}: {len(all_videos)} vídeos")
+
+        # Fetch real titles so the selection list shows names, not just IDs
+        if all_videos:
+            styled_info(f"  Obteniendo títulos...")
+            actualizados = []
+            for i, (vid, h, _) in enumerate(all_videos, start=1):
+                titulo = obtener_titulo_video(session, vid, h)
+                actualizados.append((vid, h, titulo))
+                styled_info(f"    {i}. {titulo or vid}")
+            all_videos = actualizados
+
         folder_data.append((folder_url, course_name, all_videos))
 
     # --- Selection phase (siempre pregunta) ---
@@ -240,9 +282,31 @@ def main():
             selected_per_folder.append([])
             continue
 
+        decision = inquirer.select(
+            message=f"[{course_name}] ¿Qué quieres descargar? ({len(all_videos)} vídeos)",
+            choices=[
+                {"name": "  Descargar TODOS", "value": "todos"},
+                {"name": "  Elegir manualmente...", "value": "elegir"},
+                {"name": "  Ninguno", "value": "ninguno"},
+            ],
+            default="elegir",
+            instructions="(enter acepta)",
+        ).execute()
+
+        if decision == "ninguno":
+            styled_warning(f"  {course_name}: ninguno seleccionado")
+            selected_per_folder.append([])
+            continue
+
+        if decision == "todos":
+            videos = list(all_videos)
+            styled_info(f"  {course_name}: {len(videos)}/{len(all_videos)} seleccionados (todos)")
+            selected_per_folder.append(videos)
+            continue
+
         choices = [
-            {"name": f"  {idx+1}. {vid}", "value": idx}
-            for idx, (vid, _) in enumerate(all_videos)
+            {"name": f"  {idx+1}. {titulo or vid}", "value": idx}
+            for idx, (vid, _, titulo) in enumerate(all_videos)
         ]
 
         selected_indices = inquirer.checkbox(
@@ -290,7 +354,7 @@ def main():
         os.makedirs(course_dir, exist_ok=True)
 
         # Process each video
-        for i, (video_id, h_param) in enumerate(videos):
+        for i, (video_id, h_param, _titulo) in enumerate(videos):
             global_count = total_videos + i + 1
             video_start = time.time()
             styled_info(f"\n  [{global_count}/{total_expected}] Vídeo {video_id} (carpeta {url_idx+1}/{len(urls)}, {i+1}/{len(videos)})")

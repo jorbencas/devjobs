@@ -60,8 +60,11 @@ Docker (Python slim + ffmpeg + requests + beautifulsoup4)
         └── aula_downloader_funciona.py
                 ├── login en aula.pmoposiciones.com (requests)
                 ├── pre-escanea carpetas y cachea HTML
+                │   └── obtiene el título real de cada vídeo (playerConfig)
+                ├── por cada carpeta pregunta: ¿TODOS / Elegir / Ninguno?
+                │   └── muestra lista numerada con los títulos reales
                 ├── extrae iframes de Vimeo
-                ├── para cada vídeo:
+                ├── para cada vídeo seleccionado:
                 │   ├── obtiene el player HTML de Vimeo
                 │   ├── extrae window.playerConfig del HTML
                 │   ├── parsea las URLs HLS/DASH/MP4
@@ -77,6 +80,8 @@ Docker (Python slim + ffmpeg + requests + beautifulsoup4)
 
 - **Sin navegador** — Solo requests + Python, sin Chromium
 - **Audio + Vídeo** — Descarga pistas por separado y mezcla con ffmpeg
+- **Selección de vídeos** — Antes de descargar, cada carpeta pregunta: TODOS, elegir manualmente o ninguno
+- **Lista con títulos reales** — Muestra cada vídeo con su nombre (no solo el ID de Vimeo)
 - **Logs mejorados** — Progreso en tiempo real, ETA, resumen final
 - **Multi-carpeta** — Descarga múltiples carpetas en un solo comando
 - **Organización automática** — Vídeos organizados por nombre de curso
@@ -122,6 +127,12 @@ docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py
 docker compose run --rm aula_downloader
 ```
 
+> 💡 **Siempre pide selección** — Cualquier ejecución (URLs directas o menú)
+> muestra primero la lista de vídeos de cada carpeta con sus **títulos reales** y
+> pregunta por carpeta qué descargar: **TODOS**, **Elegir manualmente...** o
+> **Ninguno**. Así nunca se descargan todos los vídeos sin querer, ni hace falta
+> arrancar el proyecto de una forma concreta para ver la lista.
+
 ---
 
 ## Cómo funciona
@@ -140,7 +151,7 @@ resp = session.post("https://aula.pmoposiciones.com/login/index.php", data={
 })
 ```
 
-### 2. Pre-escaneo y cache de HTML
+### 2. Pre-escaneo, títulos y cache de HTML
 
 ```python
 # Pre-escanea todas las carpetas y cachea el HTML
@@ -156,7 +167,37 @@ for folder_url in urls:
 soup = BeautifulSoup(folder_html[folder_url], 'html.parser')
 ```
 
-### 3. Obtener playerConfig del HTML
+Durante este pre-escaneo también se obtiene el **título real** de cada vídeo
+(`obtener_titulo_video()`), parseando el `playerConfig` de `player.vimeo.com`,
+para que la lista de selección muestre nombres en lugar de solo IDs.
+
+### 3. Selección de vídeos (siempre pregunta)
+
+Después del pre-escaneo — y antes de descargar nada — el script pregunta por cada carpeta:
+
+```
+[PSI-ESP_CLASES] ¿Qué quieres descargar? (4 vídeos)
+  ▸ Descargar TODOS
+    Elegir manualmente...
+    Ninguno
+```
+
+Si eliges manualmente, se abre un checkbox con la lista numerada de vídeos
+**con sus títulos reales**:
+
+```
+[PSI-ESP_CLASES] Selecciona vídeos (4 total)   — espacio selecciona · enter acepta · 'a' = todos
+   ( ) 1. 01_LEY_ORGANICA_12.004
+   ( ) 2. 02_PROCESO_PENAL
+   ( ) 3. 03_JURISDICCION...
+   ( ) 4. 04_TUTORIA_PSICO_220726
+```
+
+Esta selección aparece **siempre**, sea cual sea la forma de arrancar el script
+(URLs directas, menú interactivo o los aliases `al_run`/`al_menu`), y permite
+descargarlo todo, solo algunos vídeos, o saltarse la carpeta con **Ninguno**.
+
+### 4. Obtener playerConfig del HTML
 
 ```python
 resp = session.get(f"https://player.vimeo.com/video/{video_id}", params={
@@ -169,7 +210,7 @@ pos = resp.text.find("}}</script>", start_pos)
 config = json.loads(resp.text[start_pos:pos+2])
 ```
 
-### 4. Descargar segmentos HLS (video + audio)
+### 5. Descargar segmentos HLS (video + audio)
 
 ```python
 # Obtener playlist maestra
@@ -197,10 +238,29 @@ subprocess.run(['ffmpeg', '-y',
 ## Logs de salida
 
 ```
+ℹ Login OK
 ℹ Pre-escaneando carpetas...
-ℹ   4189: 4 vídeos
-ℹ   4184: 1 vídeos
-ℹ Total esperado: 5 vídeos en 2 carpetas
+ℹ   PSI-ESP_CLASES: 4 vídeos
+ℹ   Obteniendo títulos...
+    1. 01_LEY_ORGANICA_12.004
+    2. 02_PROCESO_PENAL
+    3. 03_JURISDICCION...
+    4. 04_TUTORIA_PSICO_220726
+ℹ   PSI-ESP_TUTORIAS_GRUPALES: 1 vídeos
+ℹ   Obteniendo títulos...
+    1. 01_TUTORIA_PSICO_220726
+
+[PSI-ESP_CLASES] ¿Qué quieres descargar? (4 vídeos)
+  ▸ Descargar TODOS
+    Elegir manualmente...
+    Ninguno
+
+[PSI-ESP_TUTORIAS_GRUPALES] ¿Qué quieres descargar? (1 vídeos)
+  ▸ Descargar TODOS
+    Elegir manualmente...
+    Ninguno
+
+ℹ Total a descargar: 5 vídeos
 
 [1/5] Vídeo 1214033153 (carpeta 1/2, 1/4)
   Vídeo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:05:23
@@ -257,7 +317,8 @@ El script fue optimizado eliminando:
 - **Requests duplicados**: Pre-escaneo que cachea HTML y reutiliza en el loop principal
 - **Headers repetidos**: Constantes `HEADERS_AULA` y `HEADERS_VIMEO` en lugar de duplicar en cada petición
 
-Resultado: de 720 a 516 líneas (-28%) con las mismas funcionalidades.
+Resultado: de 720 a 612 líneas (-15%) con las mismas funcionalidades,
+incluyendo la selección de vídeos con títulos.
 
 ---
 
