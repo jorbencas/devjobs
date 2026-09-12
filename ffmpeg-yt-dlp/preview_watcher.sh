@@ -35,6 +35,8 @@ DAEMON_MODE=false
 
 # Detectar entorno
 detect_env() {
+    # Devuelve 'wsl' si estamos bajo WSL (para saber dónde abrir el reproductor),
+    # si no 'linux'.
     if [[ -f /proc/version ]] && grep -qi "microsoft\|wsl" /proc/version 2>/dev/null; then
         echo "wsl"
     else
@@ -45,6 +47,8 @@ detect_env() {
 ENV=$(detect_env)
 
 to_windows_path() {
+    # Convierte una ruta Linux (posiblemente /app/... dentro del contenedor) a
+    # ruta Windows ('C:\...') para abrirla con VLC en el host.
     local p="$1"
     if [[ "$p" == /app/* ]]; then
         p="$REPO_DIR/${p#/app/}"
@@ -60,6 +64,7 @@ to_windows_path() {
 }
 
 find_vlc_wsl() {
+    # Busca el ejecutable de VLC de Windows en rutas típicas; imprime la 1ª que exista.
     local cand win_user=""
     if command -v cmd.exe &>/dev/null; then
         win_user=$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')
@@ -79,6 +84,7 @@ find_vlc_wsl() {
 }
 
 find_player_linux() {
+    # Busca un reproductor en Linux nativo (vlc, mpv, xdg-open en ese orden).
     # Buscar reproductor en Linux nativo
     local player
     for player in vlc mpv xdg-open; do
@@ -91,6 +97,9 @@ find_player_linux() {
 }
 
 open_request() {
+    # Procesa una petición de preview: lee el vídeo de .midu_preview_req, lo
+    # abre con el reproductor adecuado según el entorno (VLC/Windows vs
+    # vlc/mpv/xdg-open en Linux) y borra la petición.
     local req="$1"
     local video
     video=$(head -1 "$req" 2>/dev/null)
@@ -132,10 +141,13 @@ open_request() {
 }
 
 is_running() {
+    # ¿Hay un daemon previo vivo? (comprueba el PIDFILE con kill -0).
     [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
 }
 
 container_running() {
+    # ¿Está corriendo el contenedor del pipeline (yt_ffmpeg_downloader)?
+    # Devuelve 2 si no hay docker, 1 si no corre, 0 si corre.
     command -v docker &>/dev/null || return 2
     docker ps --format '{{.Names}}' 2>/dev/null | grep -Eq "$CONTAINER_MATCH"
 }

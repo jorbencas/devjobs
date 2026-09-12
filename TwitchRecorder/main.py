@@ -11,6 +11,8 @@ from utils.scheduler import run_scheduler
 
 
 def main():
+    """Punto de entrada: carga config, garantiza las carpetas y arranca el
+    scheduler (bucle principal de detección/grabación). Soporta --dry-run."""
     parser = argparse.ArgumentParser(description="TwitchRecorder - Grabador automático de Twitch")
     parser.add_argument("--dry-run", action="store_true", help="Simula sin grabar")
     args = parser.parse_args()

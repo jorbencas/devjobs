@@ -7,6 +7,9 @@ STATUS_FILE="$PIPELINE_DATA/pipeline_status.json"
 LOGS_FILE="$PIPELINE_DATA/pipeline_logs.json"
 
 ipc_update_status() {
+    # Actualiza el estado en pipeline_status.json de un servicio del pipeline
+    # (p. ej. monitor) con su timestamp. Merge con el estado previo, mantiene
+    # el resto de servicios. Formato: ipc_update_status <servicio> clave=valor...
     local service="$1"
     shift
     local ts
@@ -48,6 +51,8 @@ json.dump(d,open('$STATUS_FILE','w'),indent=2,ensure_ascii=False)
 }
 
 ipc_remove_status() {
+    # Elimina la entrada de un servicio del pipeline_status.json
+    # (p. ej. cuando el monitor termina su trabajo).
     local service="$1"
     if [[ -f "$STATUS_FILE" ]] && command -v python3 >/dev/null 2>&1; then
         python3 -c "
@@ -60,6 +65,8 @@ json.dump(d,open('$STATUS_FILE','w'),indent=2,ensure_ascii=False)
 }
 
 ipc_append_log() {
+    # Añade una entrada (con timestamp y origen) al log acumulado del pipeline
+    # (pipeline_logs.json). Mantiene las últimas 200 entradas.
     local source="$1"
     local message="$2"
     local ts

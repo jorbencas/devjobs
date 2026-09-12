@@ -22,6 +22,7 @@ class CustomFormatter(logging.Formatter):
     RESET = "\033[0m"
     
     def format(self, record):
+        """Formatea cada log con color por nivel + timestamp HH:MM:SS."""
         color = self.COLORS.get(record.levelno, "")
         level = record.levelname.ljust(8)
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -30,6 +31,8 @@ class CustomFormatter(logging.Formatter):
 
 
 def setup_logger(name: str = "twitchrecorder") -> logging.Logger:
+    """Crea el logger raíz con un único handler con colores:
+    Rich si está disponible, si no un CustomFormatter ANSI."""
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 

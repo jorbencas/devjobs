@@ -4,6 +4,7 @@ from utils.logger import log
 
 
 def is_live(channel: str) -> bool:
+    """¿Está el canal en directo en YouTube? (yt-dlp contra la URL /live)."""
     try:
         url = f"https://www.youtube.com/@{channel}/live"
         ydl_opts = {
@@ -20,8 +21,10 @@ def is_live(channel: str) -> bool:
 
 
 def get_quality(channel: str) -> str:
+    """Calidad de grabación en YouTube (siempre 'best')."""
     return "best"
 
 
 def get_stream_url(channel: str) -> str:
+    """URL del directo de YouTube del canal."""
     return f"https://www.youtube.com/@{channel}/live"

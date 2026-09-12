@@ -91,6 +91,7 @@ PATRONES_TEMP = [
 
 
 def dur_video(video: Path) -> float:
+    """Duración en segundos del vídeo (ffprobe); 0.0 si no se puede leer."""
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -122,6 +123,8 @@ def _ocr_texto(img_path: Path) -> str:
         return textos[0]
     # Puntuar: nº de coincidencias de patrones ep/temp/película
     def _puntos(txt: str) -> int:
+        """Puntos según nº de coincidencias de patrones de episodio/temporada/
+        película, para elegir la pasada OCR con más contenido relevante."""
         bajo = txt.lower()
         pts = len(re.findall(r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*\S{0,4}\d", bajo))
         pts += len(re.findall(r"\d\s*[xX]\s*\d", bajo))
@@ -249,6 +252,13 @@ def _texto_frame_mas_frecuente(textos: list) -> str:
 
 
 def detectar(video: Path, paso: int, margen: int):
+    """Detector principal: escanea el vídeo en pasos de `paso` s, hace OCR de la
+    franja superior de cada frame y:
+      - acumula episodios/temporadas detectados con su primera/última aparición,
+      - marca instantes donde aparece 'película',
+      - cuenta palabras estables para el título de película.
+    Devuelve el dict JSON con episodios, rango, descripción y [corte].
+    Filtra outliers OCR (números espurios dominados por otro episodio)."""
     dur = dur_video(video)
     if dur <= 0:
         return {"episodios": [], "rango": "", "primero": None, "ultimo": None}
@@ -400,6 +410,7 @@ def detectar(video: Path, paso: int, margen: int):
 
 
 def main():
+    """CLI: detectar_episodios.py <video> [paso] [margen] → JSON a stdout."""
     video = Path(sys.argv[1])
     paso = int(sys.argv[2]) if len(sys.argv) > 2 else 180
     margen = int(sys.argv[3]) if len(sys.argv) > 3 else 300

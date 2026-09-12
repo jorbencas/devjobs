@@ -1,3 +1,6 @@
+import re
+import time
+import urllib.parse
 import requests
 import yt_dlp
 
@@ -5,6 +8,18 @@ from datetime import datetime
 from pathlib import Path
 
 from utils.logger import log
+
+
+_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# Umbrales para detectar la web "congelada" (playlist servida pero sin avance):
+#   _PDT_FUERA  → el último segmento lleva más de 90s de antigüedad → fuera.
+#   _COLA_FUERA → sin PROGRAM-DATE-TIME: la cola de segmentos no avanza en 60s → fuera.
+_PDT_FUERA = 90
+_COLA_FUERA = 60
+
+# Estado por URL de variante media: {"url": {"sig": str, "desde": float}}
+_MEDIA_STATE = {}
 
 
 def _get_hls_domain(url: str) -> str:
@@ -42,25 +57,141 @@ def _server_up(url: str) -> bool:
         return False
 
 
+def _fetch_m3u8(url: str):
+    """Devuelve el cuerpo del m3u8; "" si no existe (404/410) o None si es dudoso
+    (5xx/429/timeout), para no tomar decisiones con respuestas transitorias."""
+    try:
+        resp = requests.get(url, timeout=6, headers={"User-Agent": _USER_AGENT})
+        if resp.status_code in (404, 410):
+            return ""
+        if resp.status_code != 200:
+            return None
+        return resp.text
+    except Exception:
+        return None
+
+
+def _lineas_m3u8(body: str):
+    """Líneas del m3u8 normalizando CRLF, sin vacías."""
+    return [ln.strip() for ln in body.replace("\r\n", "\n").split("\n") if ln.strip()]
+
+
+def _primer_variante(master_body: str, master_url: str) -> str:
+    """Devuelve la URL del primer variante del master (o "" si no la encuentra)."""
+    seguir = False
+    for linea in _lineas_m3u8(master_body):
+        if seguir and not linea.startswith("#"):
+            return urllib.parse.urljoin(master_url, linea)
+        seguir = linea.startswith("#EXT-X-STREAM-INF")
+    return ""
+
+
+def _ultimo_pdt(body: str):
+    """Época (segundos UTC) del último #EXT-X-PROGRAM-DATE-TIME, o None."""
+    valor = None
+    for linea in _lineas_m3u8(body):
+        if linea.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
+            valor = linea.split(":", 1)[1].strip()
+    if not valor:
+        return None
+    try:
+        return datetime.fromisoformat(valor.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def _sig_media(body: str):
+    """Firma de la posición de la cola de segmentos de una playlist media."""
+    seq = ""
+    m = re.search(r"#EXT-X-MEDIA-SEQUENCE:\s*(\d+)", body)
+    if m:
+        seq = m.group(1)
+    lineas = [ln for ln in _lineas_m3u8(body) if not ln.startswith("#")]
+    if not lineas:
+        return None
+    return f"{seq}|{len(lineas)}|{lineas[-1]}"
+
+
+def _media_estado(media_url: str) -> str:
+    """Estado de una playlist media: 'f' fuera, 'v' en directo, 'i' indeterminado."""
+    body = _fetch_m3u8(media_url)
+    if body is None:
+        return "i"
+    if body == "":
+        return "f"
+    if "#EXT-X-ENDLIST" in body:
+        return "f"
+    if "#EXTINF" not in body:
+        # Sin segmentos no hay evidencia de directo → que decida yt-dlp.
+        return "i"
+    pdt = _ultimo_pdt(body)
+    if pdt is not None:
+        return "f" if (time.time() - pdt) > _PDT_FUERA else "v"
+    sig = _sig_media(body)
+    if sig is None:
+        return "i"
+    ahora = time.time()
+    estado = _MEDIA_STATE.setdefault(media_url, {"sig": sig, "desde": ahora})
+    if estado["sig"] != sig:
+        # La cola avanza → sigue en directo.
+        estado["sig"] = sig
+        estado["desde"] = ahora
+        return "v"
+    return "f" if (ahora - estado["desde"]) > _COLA_FUERA else "v"
+
+
+def _hls_estado(hls_url: str) -> str:
+    """Estado global del HLS de la web: 'f' fuera, 'v' en directo, 'i' indeterminado.
+
+    Detecta tanto finales limpios (#EXT-X-ENDLIST / 404) como playlists
+    CONGELADAS (m3u8 servido pero sin avance: último segmento antiguo o cola
+    estática), que yt-dlp seguiría dando por "en directo" para siempre."""
+    body = _fetch_m3u8(hls_url)
+    if body is None:
+        return "i"
+    if body == "":
+        return "f"
+    if "#EXT-X-ENDLIST" in body:
+        return "f"
+    if "#EXT-X-STREAM-INF" in body:
+        url = _primer_variante(body, hls_url)
+        if not url:
+            return "i"
+        return _media_estado(url)
+    return _media_estado(hls_url)
+
+
 def is_live(url: str) -> bool:
     """¿Está emitiendo la web del streamer?
 
-    Usa la API /api/playback-domain para obtener el dominio HLS y comprueba
-    si el stream m3u8 está activo.
+    Comprueba el m3u8 HLS directamente (más barato y fiable que yt-dlp para
+    detectar colas congeladas o terminadas); solo si el estado es indeterminado
+    cae al extractor de yt-dlp como seguridad.
     """
     if not url or not _server_up(url):
         return False
+    domain = ""
     try:
         domain = _get_hls_domain(url)
         if not domain:
             return False
         hls_url = f"https://{domain}/hls/public/ts:abr.m3u8"
+        estado = _hls_estado(hls_url)
+        if estado == "f":
+            return False
+        if estado == "v":
+            return True
+    except Exception:
+        return False
+
+    try:
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "socket_timeout": 6,
         }
+        hls_url = f"https://{domain}/hls/public/ts:abr.m3u8"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(hls_url, download=False)
             if not info:
@@ -74,6 +205,7 @@ def is_live(url: str) -> bool:
 
 
 def get_quality(url: str) -> str:
+    """Calidad de grabación de la web (yt-dlp la elige: siempre 'best')."""
     return "best"
 
 

@@ -11,12 +11,17 @@ _PROJECT_DIR = Path(__file__).parent.parent
 
 
 def _default_record_path() -> str:
+    """Ruta de grabación por defecto: D:\\Grabaciones en Windows,
+    ./recordings (junto al proyecto) en Linux."""
     if platform.system() == "Windows":
         return "D:\\Grabaciones"
     return str(_PROJECT_DIR / "recordings")
 
 
 def parse_duration(duration_str: str) -> float:
+    """Convierte una duración de la config a HORAS (float).
+    Acepta 'HH:MM:SS', 'MM:SS' o un número en horas ('2' → 2h).
+    Si el formato no se reconoce, devuelve 24.0 (aviso) y no rompe."""
     parts = duration_str.split(":")
     if len(parts) == 3:
         h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
@@ -48,6 +53,9 @@ DEFAULT_CONFIG = {
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
+    """Carga config.json. Si no existe, crea la config por defecto.
+    Rellena con los valores por defecto cualquier clave que falte,
+    para que la config nunca se quede sin un campo obligatorio."""
     if not path.exists():
         save_config(DEFAULT_CONFIG, path)
         return DEFAULT_CONFIG.copy()
@@ -90,5 +98,6 @@ def get_channels_with_platform(config: dict) -> list:
 
 
 def save_config(config: dict, path: Path = CONFIG_PATH) -> None:
+    """Escribe la config a disco en JSON indentado (utf-8)."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4, ensure_ascii=False)

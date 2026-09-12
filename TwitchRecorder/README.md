@@ -112,23 +112,28 @@ Edita `config.json`:
 | Kick | `kick` | Kick API + yt-dlp | `adin` |
 | Web (URL propia) | `web` | API interna + yt-dlp | `watch.sendosama.net` |
 
-### Prioridad absoluta de la web
+### Prioridad de fuentes (la primera en directo manda)
 
-**La web SIEMPRE se comprueba primero**, aunque Kick/Twitch/YouTube estén listos antes en la config. Si la web está live, se usa SIEMPRE (es la fuente primaria). Si la web está caída, se usa la siguiente plataforma en orden de prioridad.
+Las fuentes se comprueban **en el orden de la config** (y de `dias_plataforma`): se
+graba de la **primera que esté en directo**. Para sendosama el orden habitual pone
+la web primero, así que la web actúa como fuente primaria (es un wrapper de Kick
+con su propio player); si está caída, se usa la siguiente plataforma. Pero con
+`dias_plataforma` se puede poner otra fuente delante (p. ej. el domingo YouTube
+antes que la web).
 
 ```
-Fase 1: ¿Está la web live?
-  → SÍ: graba desde web (siempre)
-  → NO: pasa a fase 2
-
-Fase 2: ¿Está Kick/Twitch/YouTube live?
-  → SÍ: graba desde esa plataforma
-  → NO: espera
+Comprobar fuentes en orden:
+  → ¿La 1ª está live?   SÍ: graba desde ahí
+  → NO → ¿la 2ª?        SÍ: graba desde ahí
+  → NO → ...            NO: espera
 ```
 
-> **¿Por qué?** La web del streamer es la fuente primaria (ej. `watch.sendosama.net`
-> es un wrapper de Kick con su propio player). Si el stream está en la web, se
-> graba de ahí aunque también esté en Kick/Twitch.
+> **¿Por qué la web suele ir la primera?** La web del streamer (ej.
+> `watch.sendosama.net`) es un wrapper de Kick con su propio player. Si el stream
+> está en la web, se graba de ahí aunque también esté en Kick/Twitch; la lista de
+> fuentes decide exactamente en qué orden. La web además se considera "terminada"
+> si su playlist lleva `#EXT-X-ENDLIST` (m3u8 colgado de un directo anterior), para
+> no quedarse grabando un stream ya muerto.
 
 ### Cambio de plataforma en vivo
 

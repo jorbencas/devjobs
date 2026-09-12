@@ -19,8 +19,10 @@ def is_live(channel: str) -> bool:
 
 
 def get_quality(channel: str) -> str:
+    """Calidad de grabación en Kick (yt-dlp la elige: siempre 'best')."""
     return "best"
 
 
 def get_stream_url(channel: str) -> str:
+    """URL del canal en Kick."""
     return f"https://kick.com/{channel}"

@@ -55,6 +55,7 @@ FORWARD_KEYWORD = os.environ.get("UPLOADER_FORWARD_KEYWORD", "diarios_boticaria"
 
 
 def cargar_o_generar_llave():
+    """Carga la clave Fernet de secret.key o la genera y guarda la primera vez."""
     if KEY_FILE.exists():
         return KEY_FILE.read_bytes()
     key = Fernet.generate_key()
@@ -92,6 +93,8 @@ def cargar_credenciales():
 
 
 def log(tipo, mensaje):
+    """Imprime un log con timestamp e icono de color según el tipo
+    (INFO/OK/WARN/ERR/SUBIR/PART/LIMP)."""
     ts = datetime.now().strftime("%H:%M:%S")
     iconos = {
         "INFO": "\033[36mℹ\033[0m",
@@ -315,6 +318,7 @@ def foro_objetivo(foros, canal):
 
 
 def cargar_enviados():
+    """Lee enviados.json (lista de rutas ya subidas). [] si no existe o está mal."""
     if not ENVIADOS_FILE.exists():
         return []
     try:
@@ -326,6 +330,7 @@ def cargar_enviados():
 
 
 def guardar_enviados(lista):
+    """Escribe la lista de subidos a enviados.json (sin romper si da error)."""
     try:
         with open(ENVIADOS_FILE, "w", encoding="utf-8") as f:
             json.dump(lista, f, ensure_ascii=False, indent=2)
@@ -334,10 +339,13 @@ def guardar_enviados(lista):
 
 
 def enviado(archivo):
+    """¿Este archivo ya se subió antes? (busca en enviados.json)."""
     return str(archivo) in cargar_enviados()
 
 
 def marcar_enviado(archivo):
+    """Marca un archivo como subido (enviados.json, podado a N últimos),
+    borra el comprimido ya subido y limpia todos sus restos del pipeline."""
     lista = cargar_enviados()
     if str(archivo) not in lista:
         lista.append(str(archivo))
@@ -759,6 +767,8 @@ async def _conectar(client, pedir_login=False):
 
 
 async def run_setup(api_id, api_hash):
+    """Modo --setup: crea uploader.session con login interactivo (teléfono+código)
+    la primera vez. Si la sesión ya está autenticada, no vuelve a pedir nada."""
     log("INFO", "Modo setup: creará uploader.session (inicio de sesión único).")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     if await _conectar(client):
@@ -773,6 +783,9 @@ async def run_setup(api_id, api_hash):
 
 
 async def run_list_chats(api_id, api_hash, folder=None, creados=False):
+    """Modo --list-chats: lista tus chats/grupos con ID, tipo y si son foros,
+    para copiar los IDs a grupos.json. Filtros: --folder (nombre/carpeta) y
+    --creados (solo chats que creaste tú)."""
     log("INFO", "Modo list-chats: mostrando tus chats/grupos.")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     await _conectar(client)
@@ -1069,6 +1082,14 @@ async def run_delete_videos(api_id, api_hash, grupo, topic_ids=None, dry_run=Fal
 
 
 async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
+    """Modo autoupload (por defecto): vigila las carpetas de comprimidos y sube
+    cada '*_compressed.*' a sus destinos:
+      1. Extrae keyword/canal del nombre del archivo.
+      2. Rutea grupos por keyword (o default) y tema del foro por canal/keyword.
+      3. Busca la metadata de episodios (JSON del monitor, o OCR si no existe).
+      4. Decide el caption ('1-4', 'Temporada 2 · 1-4', nombre del canal o libre).
+      5. Llama a subir_archivo (parte en 2GB si hace falta, forward opcional).
+      6. Notifica al bot por IPC (status uploader) y espera el intervalo."""
     default, grupos, foros = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
     try:
@@ -1088,6 +1109,7 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
     log("INFO", f"Vigilando {len(carpetas)} carpeta(s). Grupos: {len(grupos)}, default: {default}{info_foros}")
 
     def a_carpeta(p):
+        """Crea la carpeta si no existe y la devuelve como Path."""
         pp = Path(p)
         pp.mkdir(parents=True, exist_ok=True)
         return pp
@@ -1164,6 +1186,8 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
 
 
 def main():
+    """CLI: subir_videos.py [--setup|--list-chats|--list-topics|--create-topics|
+    --delete-videos|--once] [carpetas...]. Sin modo explícito → autoupload."""
     parser = argparse.ArgumentParser(description="Subir videos comprimidos a grupos de Telegram")
     grupo = parser.add_mutually_exclusive_group()
     grupo.add_argument("--setup", action="store_true", help="Iniciar sesión una vez (crea uploader.session)")

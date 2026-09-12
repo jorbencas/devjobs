@@ -38,6 +38,8 @@ VIDEO_EXTENSIONS="mp4|mkv|avi|mov|webm|flv|ts|m4v|mpg|mpeg"
 
 # Construye el patrón find: solo *_completed.mp4 si COMPLETED_ONLY, si no cualquier vídeo
 video_find_pattern() {
+    # Devuelve los argumentos -regextype/-iregex para find según COMPLETED_ONLY:
+    # solo '*_completed.*' en modo pipeline, cualquier vídeo si no.
     if [[ "$COMPLETED_ONLY" == "true" ]]; then
         echo -regextype posix-extended -iregex '.*_completed\.('"$VIDEO_EXTENSIONS"')$'
     else
@@ -56,32 +58,46 @@ NC='\033[0m'
 
 # ── Funciones ────────────────────────────────────────────────────────
 log() {
+    # Escribe un mensaje con timestamp a pantalla y al LOG_FILE del día.
     local timestamp
     timestamp=$(date '+%H:%M:%S')
     echo -e "${timestamp} $1" | tee -a "$LOG_FILE"
 }
 
 log_info() {
+    # Log informativo (cian).
     log "${CYAN}ℹ${NC} $1"
 }
 
 log_ok() {
+    # Log de éxito (verde).
     log "${GREEN}✓${NC} $1"
 }
 
 log_warn() {
+    # Log de aviso (amarillo).
     log "${YELLOW}⚠${NC} $1"
 }
 
 log_error() {
+    # Log de error (rojo).
     log "${RED}✗${NC} $1"
 }
 
 log_step() {
+    # Log de paso/progreso (magenta).
     log "${MAGENTA}→${NC} $1"
 }
 
 compress_video() {
+    # Comprime un vídeo y lo deja listo para Telegram:
+    # 1. Lee el sidecar '*_descripcion.json' del recorder para decidir si se
+    #    detectan episodios (OCR) y si se cortan extremos («detectar»/«corte»).
+    # 2. Si hay descripción propia del canal, la usa como caption (sin OCR).
+    # 3. Opcionalmente recorta (corte de extremos con margen), reescala y muxea.
+    # 4. Si supera TAMANO_MAX_MB, re-codifica en 2 pasadas para asegurar el tope.
+    # 5. Escribe a *.tmp y renombra al final (nunca incompleto para el uploader).
+    # 6. Mueve el original a .processed y notifica al bot vía IPC.
     local input="$1"
     local filename
     filename=$(basename "$input")
@@ -283,6 +299,9 @@ compress_video() {
 }
 
 check_integridad() {
+    # Validación previa: ¿el vídeo es legible y dura ≥ MIN_DURACION segundos?
+    # Devuelve 1 (y el compresor lo mueve a .corruptos) si ffprobe no puede
+    # leerlo (mp4 sin moov por corte de red) o si es demasiado corto.
     local input="$1"
     local dur
     # ffprobe falla (vacío) si el contenedor está truncado/corrupto (sin moov).
@@ -295,6 +314,9 @@ check_integridad() {
 }
 
 process_pending() {
+    # Procesa todos los vídeos 'a punto' de WATCH_DIR en una pasada:
+    # primero check_integridad (si falla → .corruptos), luego compress_video.
+    # Devuelve el nº de vídeos comprimidos.
     local count=0
     while IFS= read -r -d '' file; do
         if ! check_integridad "$file"; then
@@ -309,6 +331,7 @@ process_pending() {
 }
 
 show_help() {
+    # Muestra la ayuda de uso del monitor (opciones por CLI y ejemplo).
     echo "Uso: $0 [opciones] [carpeta_a_vigilar]"
     echo ""
     echo "Opciones:"

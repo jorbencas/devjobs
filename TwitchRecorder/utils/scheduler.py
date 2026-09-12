@@ -12,22 +12,27 @@ running = True
 
 
 def signal_handler(sig, frame):
+    """Handler de SIGTERM/SIGINT: pone `running=False` para que el bucle
+    principal detenga todos los grabadores y salga limpio."""
     global running
     log.info("=== Señal SIGTERM recibida, apagando scheduler ===")
     running = False
 
 
 def _parse_minutes(t: str) -> int:
+    """Convierte 'HH:MM' a minutos totales."""
     h, m = map(int, t.split(":"))
     return h * 60 + m
 
 
 def is_after_time(t: str) -> bool:
+    """¿Ya pasó la hora 'HH:MM' de hoy? (comparando minutos desde medianoche)."""
     now = datetime.now()
     return now.hour * 60 + now.minute >= _parse_minutes(t)
 
 
 def _seconds_until_time(t: str) -> int:
+    """Segundos que faltan hasta la hora 'HH:MM' de hoy (0 si ya pasó)."""
     now = datetime.now()
     now_minutes = now.hour * 60 + now.minute
     diff = _parse_minutes(t) - now_minutes
@@ -40,6 +45,7 @@ ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 
 
 def _dias_para(extra: dict, config: dict) -> list:
+    """Días de emisión de un canal: los suyos ('days') o los del global."""
     dias = extra.get("days") or config.get("days")
     if isinstance(dias, str):
         dias = [dias]
@@ -47,6 +53,7 @@ def _dias_para(extra: dict, config: dict) -> list:
 
 
 def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:
+    """Hora de inicio del canal ese día: suya, o la dict por día, o la global."""
     st = extra.get("start_time") or config.get("start_time", "19:55")
     if isinstance(st, dict):
         return st.get(day) or st.get("*") or config.get("start_time", "19:55")
@@ -68,6 +75,7 @@ def _programados_hoy(config: dict, channels: list) -> dict:
 
 
 def _get_today() -> str:
+    """Fecha de hoy en formato AAAA-MM-DD."""
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -89,6 +97,12 @@ def _canales_colisionan(config: dict, channels: list) -> list:
 
 
 def run_scheduler(dry_run: bool = False):
+    """Bucle principal del grabador:
+    1. Carga config y crea un Recorder por canal.
+    2. Espera a la primera hora de inicio del día.
+    3. Cada `check_every` segundos, por canal programado: si está en directo,
+       lo inicia y lanza su `monitor` en un hilo daemon.
+    4. Detecta canales nuevos/día nuevo (reinicia 'finished') y paradas limpias."""
     config = load_config()
     channels_with_platform = get_channels_with_platform(config)
     check_interval = config.get("check_every", 30)

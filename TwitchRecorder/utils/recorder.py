@@ -3,6 +3,7 @@ import platform
 from datetime import datetime
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -31,6 +32,7 @@ def _normalize_keyword(text: str, max_len: int = 40) -> str:
 
 
 def _find_streamlink() -> str:
+    """Localiza el ejecutable de streamlink (o su módulo -m como fallback)."""
     if IS_WINDOWS:
         return sys.executable, ["-m", "streamlink"]
     exe = shutil.which("streamlink")
@@ -40,6 +42,7 @@ def _find_streamlink() -> str:
 
 
 def _find_ytdlp() -> str:
+    """Localiza el ejecutable de yt-dlp (o su módulo -m como fallback)."""
     if IS_WINDOWS:
         return sys.executable, ["-m", "yt_dlp"]
     exe = shutil.which("yt-dlp")
@@ -64,6 +67,7 @@ def _is_generic_live_title(title: str, channel: str, uploader: str = "") -> bool
 
 
 def _format_size(size_bytes: int) -> str:
+    """Bytes → string legible (MB/GB)."""
     if size_bytes >= 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
     return f"{size_bytes / (1024 * 1024):.1f} MB"
@@ -115,7 +119,13 @@ def parse_sources(platform, url: str = "") -> list:
 
 
 class Recorder:
+    """Grabador de un canal. Gestiona el ciclo completo: detección de directo
+    entre fuentes ordenadas, arranque de streamlink/yt-dlp, corte en partes
+    por cambio de plataforma, reparación de mp4 truncados y concatenación."""
+
     def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None):
+        """Prepara el grabador: normaliza fuentes, guarda config de rutas,
+        duración máxima, prioridad por día (dias_plataforma) y flags."""
         self.channel = channel
         self.sources = parse_sources(platform_name, url)
         self.platform_name = self.sources[0]["platform"]
@@ -136,6 +146,8 @@ class Recorder:
         self._stop_event = threading.Event()
 
     def _is_source_live(self, src: dict) -> bool:
+        """Comprueba si una fuente (twitch/youtube/kick/web) está en directo,
+        delegando en el módulo correspondiente."""
         platform = src["platform"]
         s_url = src.get("url", "")
         canal = src.get("channel") or self.channel
@@ -193,32 +205,26 @@ class Recorder:
             self.sources = ordered
 
     def is_live(self) -> bool:
-        # Prioridad ABSOLUTA: la web siempre se comprueba primero, aunque
-        # otro plataforma (Kick, Twitch...) esté lista antes en la config.
-        # Si la web está live, se usa SIEMPRE (es la fuente primaria).
+        """¿Hay alguna fuente en directo? Se comprueban en el ORDEN definido
+        (config + dias_plataforma) y la PRIMERA en directo gana.
+        Devuelve True y deja en self._active / self.platform_name la fuente ganadora."""
+        # Las fuentes se comprueban en el ORDEN definido (config + dias_plataforma):
+        # la primera plataforma en directo manda. Por ejemplo, en domingo la config
+        # de sendosama pone YouTube ANTES que la web, así que se graba YouTube; el
+        # resto de días la web va la primera y tiene prioridad absoluta igualmente.
         self._reordenar_por_dia()
 
-        # Fase 1: comprobar la web primero si existe
         for src in self.sources:
-            if src["platform"] == "web":
-                if self._is_source_live(src):
-                    self._active = src
-                    self.platform_name = "web"
-                    self._autoprobar_web(src)
-                    return True
-                # Web caída: permitir re-probar en el siguiente ciclo
-                self._probed_sources.discard(src.get("url", "") or self.channel)
-                break
-
-        # Fase 2: si la web no está, probar el resto en orden de prioridad
-        for src in self.sources:
-            if src["platform"] == "web":
-                continue  # Ya comprobada en fase 1
+            key = src.get("url", "") or self.channel
             if not self._is_source_live(src):
+                # Plataforma caída (p. ej. web): permitir re-probar su autotest en
+                # el siguiente ciclo.
+                self._probed_sources.discard(key)
                 continue
             self._active = src
             self.platform_name = src["platform"]
-            self._probed_sources.discard(src.get("url", "") or self.channel)
+            if src["platform"] == "web":
+                self._autoprobar_web(src)
             return True
         return False
 
@@ -230,6 +236,7 @@ class Recorder:
         return False
 
     def get_stream_url(self) -> str:
+        """URL directa del stream de la fuente activa (o la 1ª) lista para yt-dlp."""
         src = self._active or self.sources[0]
         platform = src["platform"]
         s_url = src.get("url", "")
@@ -303,9 +310,15 @@ class Recorder:
         return (self._fetch_live_info().get("description") or "").strip()
 
     def get_live_keyword(self) -> str:
+        """Keyword (para el nombre del archivo) derivada del título del directo."""
         return _normalize_keyword(self.get_live_title())
 
     def start(self, keyword: str = "") -> bool:
+        """Arranca la grabación de la fuente activa. Devuelve True si empezó.
+        - Si ya se graba y hay archivo, SIGUE escribiendo al mismo archivo
+          (reconexión/salto de medianoche) en vez de crear otro.
+        - Si ya hay partes, crea una parte nueva '<mismo nombre>__parteN.mp4'.
+        Guarda el sidecar de descripción para el compresor."""
         if not self.is_live():
             log.info(f"[{self.channel}] No está en directo")
             return False
@@ -391,6 +404,7 @@ class Recorder:
             log.warning(f"[{self.channel}] No se pudo guardar el sidecar: {e}")
 
     def _start_streamlink(self, output_path: Path, popen_kwargs: dict) -> None:
+        """Lanza streamlink para grabar Twitch en la mejor calidad disponible."""
         from utils.twitch import get_best_quality
         quality = get_best_quality(self.channel)
         if not quality:
@@ -410,6 +424,7 @@ class Recorder:
         self.process = subprocess.Popen([sl_exe] + cmd, **popen_kwargs)
 
     def _start_ytdlp(self, output_path: Path, popen_kwargs: dict) -> None:
+        """Lanza yt-dlp para grabar YouTube/Kick/web en 'best' (con thumbnail jpg)."""
         url = self.get_stream_url()
         ytdlp_exe, ytdlp_prefix = _find_ytdlp()
 
@@ -429,15 +444,14 @@ class Recorder:
         self.process = subprocess.Popen([ytdlp_exe] + cmd, **popen_kwargs)
 
     def stop(self) -> None:
+        """Finaliza la grabación: detiene el proceso de forma limpia (moov),
+        repara el archivo si quedó truncado, concatena las partes en un único
+        vídeo y lo copia a test/ (si copy_to_test está activo)."""
         self._stop_event.set()
         self.finished = True
-        if self.process and self.process.poll() is None:
-            log.info(f"[{self.channel}] Deteniendo grabación...")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
+        self._terminar_proceso()
+        if self._current_file:
+            self._reparar_video(self._current_file)
         self.is_recording = False
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
@@ -452,14 +466,94 @@ class Recorder:
         else:
             log.info(f"[{self.channel}] Grabación finalizada")
 
+    def _terminar_proceso(self, timeout: int = 30) -> None:
+        """Detiene el proceso de grabación de forma controlada.
+
+        yt-dlp/streamlink finalizan el mp4 (escriben el moov) al recibir SIGINT,
+        así que se envía SIGINT primero, luego SIGTERM y solo como último recurso
+        SIGKILL. Si se mata el proceso a mitad, el archivo queda sin moov y el
+        compresor lo enviaría a .corruptos.
+        """
+        proc = self.process
+        self.process = None
+        if proc is None or proc.poll() is not None:
+            return
+        log.info(f"[{self.channel}] Deteniendo proceso de grabación (pid {proc.pid})...")
+        for sig_name in ("SIGINT", "SIGTERM"):
+            try:
+                if IS_WINDOWS:
+                    proc.terminate()
+                else:
+                    proc.send_signal(getattr(signal, sig_name))
+                try:
+                    proc.wait(timeout=timeout)
+                    log.info(f"[{self.channel}] Proceso de grabación finalizado ({sig_name})")
+                    return
+                except subprocess.TimeoutExpired:
+                    continue
+            except Exception as e:
+                log.warning(f"[{self.channel}] Error al detener el proceso con {sig_name}: {e}")
+                continue
+        try:
+            proc.kill()
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+
+    def _reparar_video(self, file_path: Path) -> None:
+        """Repara un mp4 truncado (sin moov) recopándolo con ffmpeg.
+
+        El moov se escribe al final del archivo; si la grabación se corta (p. ej.
+        la web deja de emitir a mitad de segmento) el mp4 queda ilegible y el
+        compresor lo movería a .corruptos. Con ffmpeg -c copy se regenera el
+        moov sin recodificar."""
+        if not file_path.exists():
+            return
+        ffprobe = shutil.which("ffprobe")
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffprobe or not ffmpeg:
+            return
+        try:
+            subprocess.check_output(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", str(file_path)],
+                stderr=subprocess.DEVNULL,
+            )
+            return  # Archivo legible, no hay nada que reparar.
+        except subprocess.CalledProcessError:
+            pass
+        log.warning(f"[{self.channel}] {file_path.name} truncado (sin moov), intentando reparar con ffmpeg...")
+        repaired = file_path.with_name(file_path.stem + "_reparado.mp4")
+        try:
+            subprocess.run(
+                [ffmpeg, "-y", "-err_detect", "ignore_err", "-i", str(file_path),
+                 "-c", "copy", "-movflags", "+faststart", str(repaired)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if repaired.exists() and repaired.stat().st_size > 0:
+                shutil.move(str(repaired), str(file_path))
+                log.info(f"[{self.channel}] {file_path.name} reparado correctamente")
+            else:
+                repaired.unlink(missing_ok=True)
+        except Exception as e:
+            log.warning(f"[{self.channel}] No se pudo reparar {file_path.name}: {e}")
+            repaired.unlink(missing_ok=True)
+
     def _add_parte_actual(self) -> None:
         """Cierra la parte actual de un directo (cambio de plataforma a mitad de
-        emisión) y la guarda en self._partes para concatenarla al final."""
+        emisión) y la guarda en self._partes para concatenarla al final.
+
+        Detiene el proceso de grabación y repara el archivo ANTES de cerrar la
+        parte, para que nunca quede sin moov (corrupta)."""
+        self._terminar_proceso()
         if self._current_file and self._current_file.exists():
-            self._partes.append(self._current_file)
-            log.info(f"[{self.channel}] Parte {len(self._partes)} cerrada: {self._current_file.name}")
+            self._reparar_video(self._current_file)
+            if self._current_file.exists():
+                self._partes.append(self._current_file)
+                log.info(f"[{self.channel}] Parte {len(self._partes)} cerrada: {self._current_file.name}")
         self._current_file = None
-        self.process = None
         self.is_recording = False
 
     def _concatenar_partes(self) -> None:
@@ -503,6 +597,8 @@ class Recorder:
                 except Exception:
                     pass
                 break
+        # Asegurar que el concat final sea legible (moov presente)
+        self._reparar_video(final)
         self._partes = []
         self._current_file = final
         log.info(f"[{self.channel}] Partes del directo unidas en {final.name}")
@@ -551,23 +647,88 @@ class Recorder:
             log.warning(f"[{self.channel}] Error al concatenar: {e}")
             return False
 
+    def _copiar_a_test(self, orig: Path) -> Path:
+        """Copia un archivo de grabación a test_path como '<stem>_completed.mp4'
+        junto con su sidecar de descripción. Devuelve el destino."""
+        self.test_path.mkdir(parents=True, exist_ok=True)
+        dest = self.test_path / f"{orig.stem}_completed.mp4"
+        shutil.copy2(str(orig), str(dest))
+        sidecar = orig.with_name(orig.stem + "_descripcion.json")
+        if sidecar.exists():
+            shutil.copy2(str(sidecar), str(dest.with_name(dest.stem + "_descripcion.json")))
+            log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
+        return dest
+
     def _move_to_completed(self) -> None:
-        if not self.copy_to_test or not self.test_path or not self._current_file:
+        """Copia las grabaciones terminadas a test/ como '<stem>_completed.mp4'.
+        Si hay varias partes (concat falló), las copia TODAS por separado para
+        no perder parte del directo en la subida."""
+        if not self.copy_to_test or not self.test_path:
+            return
+        partes = [p for p in (self._partes + [self._current_file]) if p and p.exists()]
+        if not partes:
             return
         try:
-            self.test_path.mkdir(parents=True, exist_ok=True)
-            orig = self._current_file
-            dest = self.test_path / f"{orig.stem}_completed.mp4"
-            sidecar = orig.with_name(orig.stem + "_descripcion.json")
-            shutil.copy2(str(orig), str(dest))
-            self._current_file = dest
-            if sidecar.exists():
-                shutil.copy2(str(sidecar), str(dest.with_name(dest.stem + "_descripcion.json")))
-                log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
+            if len(partes) > 1:
+                # La concatenación falló: copiar TODAS las partes por separado
+                # para no perder parte del directo en la subida.
+                for p in partes:
+                    self._copiar_a_test(p)
+                self._current_file = self.test_path / f"{partes[-1].stem}_completed.mp4"
+            else:
+                self._current_file = self._copiar_a_test(partes[0])
         except Exception as e:
             log.error(f"[{self.channel}] Error copiando a test/: {e}")
 
+    def _esperar_directo(self, prev_platform: str, max_wait: int = 120):
+        """Tras caerse el proceso de grabación y no haber nada en directo ahora
+        mismo, espera un margen antes de dar el directo por terminado: el corte
+        puede ser un cambio de plataforma en marcha (la web se cae y Kick/Twitch
+        aún no ha arrancado). Devuelve la plataforma activa si el directo vuelve,
+        o None si pasó el margen sin que nada reapareciera."""
+        wait_start = time.time()
+        while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
+            if self.is_live():
+                new_platform = self._active["platform"] if self._active else prev_platform
+                log.info(f"[{self.channel}] El directo vuelve en {new_platform}")
+                return new_platform
+            remaining = int(max_wait - (time.time() - wait_start))
+            log.info(f"[{self.channel}] Esperando a que el directo vuelva o cambie de plataforma ({remaining}s restantes)...")
+            time.sleep(10)
+        return None
+
+    def _cambiar_plataforma(self, prev_platform: str, new_platform: str) -> bool:
+        """Cierra la parte actual y pasa a grabar desde la nueva plataforma.
+
+        Espera hasta 60s a que la nueva plataforma esté lista (su stream tarda en
+        arrancar) y devuelve True si se reanudó la grabación en ella."""
+        log.warning(
+            f"[{self.channel}] Cambio de plataforma {prev_platform} → {new_platform}: "
+            f"cerrando parte actual y esperando a que {new_platform} esté listo"
+        )
+        self._add_parte_actual()
+
+        wait_start = time.time()
+        max_wait = 60
+        while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
+            if self.is_platform_live(new_platform):
+                log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
+                return self.start()
+            remaining = int(max_wait - (time.time() - wait_start))
+            log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
+            time.sleep(10)
+        if not self._stop_event.is_set():
+            log.warning(f"[{self.channel}] {new_platform} no estuvo listo en {max_wait}s")
+        return False
+
     def monitor(self) -> None:
+        """Bucle de vigilancia de una grabación en curso (hilo daemon):
+        - Corta al alcanzar max_duration.
+        - Si el proceso de grabación muere, espera margen (_esperar_directo)
+          por si vuelve o cambia de plataforma; si no, cierra.
+        - Mientras graba, comprueba si la fuente prioritaria cambió
+          (p. ej. aparece la web) y pasa a la nueva plataforma.
+        Al terminar por cualquier vía, llama a stop() (→ concat + copia)."""
         max_seconds = self.max_duration_hours * 3600
         start_time = time.time()
 
@@ -579,85 +740,47 @@ class Recorder:
                 return
 
             if self.process and self.process.poll() is not None:
+                # El proceso de grabación terminó: la plataforma se cayó o se
+                # acabó el directo. No dar la grabación por terminada todavía:
+                # puede ser un cambio de plataforma en marcha (p. ej. la web se
+                # cae y Kick/Twitch aún no ha arrancado).
                 prev_platform = self._active["platform"] if self._active else self.sources[0]["platform"]
-                if not self.is_live():
+                new_platform = self._esperar_directo(prev_platform)
+                if new_platform is None:
                     log.info(f"[{self.channel}] Directo finalizado")
                     self.stop()
                     return
-
-                new_platform = self._active["platform"] if self._active else prev_platform
                 if new_platform != prev_platform:
-                    # Cambio de plataforma a mitad del directo (p. ej. le cortan
-                    # en Twitch y se va a Kick): se cierra la parte actual y se
-                    # abre una nueva (mismo nombre base + "__parteN") desde la
-                    # nueva plataforma. Al terminar el directo se concatenan.
-                    log.warning(
-                        f"[{self.channel}] Cambio de plataforma {prev_platform} → {new_platform}: "
-                        f"cerrando parte actual y esperando a que {new_platform} esté listo"
-                    )
-                    self._add_parte_actual()
-                    
-                    # Esperar a que la nueva plataforma esté lista (máx 60s)
-                    wait_start = time.time()
-                    max_wait = 60
-                    while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
-                        if self.is_platform_live(new_platform):
-                            log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
-                            self.start()
-                            break
-                        remaining = int(max_wait - (time.time() - wait_start))
-                        log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
-                        time.sleep(10)
-                    else:
-                        if not self._stop_event.is_set():
-                            log.warning(f"[{self.channel}] {new_platform} no estuvo listo en {max_wait}s, terminando grabación")
+                    # Cambio de plataforma a mitad del directo (p. ej. se corta
+                    # la web y se pasa a Kick): se cierra la parte actual y se
+                    # abre una nueva (mismo nombre base + "__parteN"). Al
+                    # terminar el directo se concatenan en un único vídeo.
+                    if not self._cambiar_plataforma(prev_platform, new_platform):
+                        log.warning(f"[{self.channel}] No se pudo empezar en {new_platform}, terminando grabación")
+                        self.stop()
+                        return
                 else:
-                    log.warning(f"[{self.channel}] Conexión perdida, reconectando en {self.retry_interval}s...")
+                    # Misma plataforma de vuelta: se perdió la conexión.
+                    log.warning(f"[{self.channel}] Conexión perdida, reconectando...")
                     self._add_parte_actual()
-                    time.sleep(self.retry_interval)
-
-                    # Esperar a que el canal esté de vuelta en directo (máx 120s)
-                    wait_start = time.time()
-                    max_wait = 120
-                    while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
-                        if self.is_live():
-                            log.info(f"[{self.channel}] Reconectado, reanudando grabación")
-                            self.start()
-                            break
-                        remaining = int(max_wait - (time.time() - wait_start))
-                        log.info(f"[{self.channel}] Esperando reconexión ({remaining}s restantes)...")
-                        time.sleep(10)
-                    else:
-                        if not self._stop_event.is_set():
-                            log.warning(f"[{self.channel}] No se pudo reconectar en {max_wait}s, terminando grabación")
+                    if not self.start():
+                        log.warning(f"[{self.channel}] No se pudo reconectar, terminando grabación")
+                        self.stop()
+                        return
             else:
                 # Mientras graba, comprobar si cambió la plataforma activa
-                # (p. ej. web apareció, o Twitch cambió a Kick)
+                # (p. ej. web apareció, o Twitch/Kick cambió).
                 if self.is_recording and self._active:
                     prev_platform = self._active["platform"]
-                    if self.is_live():  # is_live() prioriza web
+                    if self.is_live():  # is_live() elige según el orden de fuentes
                         new_platform = self._active["platform"]
                         if new_platform != prev_platform:
-                            log.warning(
-                                f"[{self.channel}] Plataforma cambió {prev_platform} → {new_platform}: "
-                                f"cerrando parte actual y cambiando"
-                            )
-                            self._add_parte_actual()
-                            # Esperar a que la nueva plataforma esté lista (máx 60s)
-                            wait_start = time.time()
-                            max_wait = 60
-                            while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
-                                if self.is_platform_live(new_platform):
-                                    log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
-                                    self.start()
-                                    break
-                                remaining = int(max_wait - (time.time() - wait_start))
-                                log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
-                                time.sleep(5)
-                            else:
-                                if not self._stop_event.is_set():
-                                    log.warning(f"[{self.channel}] {new_platform} no estuvo listo en {max_wait}s, continuando en {prev_platform}")
-                                    self.start()
+                            if not self._cambiar_plataforma(prev_platform, new_platform):
+                                log.warning(f"[{self.channel}] {new_platform} no estuvo listo, continuando en {prev_platform}")
+                                if not self.start():
+                                    log.warning(f"[{self.channel}] Tampoco se pudo reanudar en {prev_platform}, terminando grabación")
+                                    self.stop()
+                                    return
 
             time.sleep(5)
 
