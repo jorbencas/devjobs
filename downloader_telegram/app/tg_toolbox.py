@@ -56,6 +56,7 @@ from telethon.tl.types import (  # noqa: E402
     DocumentAttributeSticker, DocumentAttributeAnimated, DocumentAttributeAudio,
     DocumentAttributeVideo,
     InputMessagesFilterPhotos,
+    InputMessagesFilterVideo,
     DialogFilter, InputFolderPeer, InputNotifyPeer, InputPeerNotifySettings,
 )
 from telethon.tl.functions.messages import (  # noqa: E402
@@ -1335,7 +1336,8 @@ async def _clonar_canal_a_canal(client):
     limite = _pedir_numero("¿Cuántos mensajes clonar? (vacío = todos):", minimo=1, por_defecto=100)
     if limite is None:
         return
-    descargar = inquirer.confirm("¿Descargar multimedia también?", default=False).execute()
+    descargar = inquirer.confirm("¿Descargar multimedia también? (solo backup local, NO se sube al destino)",
+                                  default=False).execute()
     trad = inquirer.confirm("¿Traducir contenido al clonar?", default=False).execute()
     quitar_rem = inquirer.confirm("¿Quitar remitente? (reenviar como copia, sin 'Forwarded from')",
                                   default=False).execute()
@@ -1371,12 +1373,17 @@ async def _clonar_canal_a_canal(client):
                     cap = _caption_emitir(m, txt)
                     # Si descargar=True, la media va al disco: no adjuntar, solo texto.
                     if descargar:
-                        return await client.send_message(destino, cap if cap else "")
+                        # Saltar mensajes sin texto (solo media se guarda local)
+                        if not cap:
+                            return None
+                        return await client.send_message(destino, cap)
                     # Modo copia: sin "Forwarded from" (quitar remitente).
                     if quitar_rem or quitar_cap:
                         if m.media:
                             return await client.send_file(destino, m.media, caption=cap)
-                        return await client.send_message(destino, cap if cap else "")
+                        if not cap:
+                            return None
+                        return await client.send_message(destino, cap)
                     # Modo reenvío normal (con remitente y caption original).
                     return await client.send_message(destino, m)
 
@@ -1391,8 +1398,8 @@ async def _clonar_canal_a_canal(client):
         log("ERR", f"Error: {e}")
     _log_auditoria("CLONAR", f"{sel_origen['nombre']} → {sel_destino['nombre']} ({limite} msgs)")
     if descargar and cola:
-        styled_info(f"{len(cola)} archivos en cola.")
-        if inquirer.confirm("¿Procesar descarga ahora?", default=False).execute():
+        styled_info(f"{len(cola)} archivos en cola (backup local, no se suben al destino).")
+        if inquirer.confirm("¿Guardar backups locales ahora?", default=False).execute():
             folder = _ruta_segura(CARPETA_BASE / "Clonados")
             for msg in cola:
                 await _reintentar(lambda m=msg: download_media_robust(client, m, folder),
@@ -1981,41 +1988,53 @@ async def _borrar_canal(client):
 
 
 # ============================================================================
-# MÓDULO 5: Subida (pipeline)
+# MÓDULO 5: Subida
 # ============================================================================
 async def modulo_subida(client):
-    console.print(styled_panel("[bold white]MÓDULO SUBIDA / SYNC (autónomo)[/bold white]", title="🚚", style=BG))
+    console.print(styled_panel("[bold white]MÓDULO SUBIDA[/bold white]", title="🚚", style=BG))
     while True:
         op = inquirer.select(
             "Opciones:",
             choices=[
-                {"name": "🔄  Sync carpeta → Telegram (lo nuevo)", "value": "sync"},
-                {"name": "📄  Ver grupos.json (foros/grupos)", "value": "ver"},
-                {"name": "🚀  Subir pasada (ruteo por grupos.json)", "value": "subir"},
-                {"name": "🎬  Subir un archivo concreto", "value": "archivo"},
+                {"name": "📁  Subir carpeta entera", "value": "carpeta"},
+                {"name": "📄  Subir 1 archivo concreto", "value": "archivo"},
+                {"name": "🎬  Subir video (convertir a streamable)", "value": "video"},
+                {"name": "🖼️  Subir fotos/imágenes", "value": "fotos"},
+                {"name": "🎵  Subir audio/música", "value": "audio"},
+                {"name": "📝  Subir documento (PDF, ZIP, etc)", "value": "documento"},
+                {"name": "📢  Crear canal y subir todo", "value": "crear_canal"},
+                {"name": "📋  Subir lista de archivos", "value": "lista"},
+                {"name": "🔄  Sync carpeta → Telegram (dedup)", "value": "sync"},
                 {"name": "⏰  Subida diferida (programar)", "value": "diferida"},
                 {"name": "🏷️  Plantillas de caption", "value": "plantillas"},
-                {"name": "💾  Exportar / Importar config", "value": "config"},
                 {"name": "🔙  Volver", "value": "b"},
             ],
             pointer="▸",
         ).execute()
         if op in ("b", None):
             break
-        if op == "sync":
-            await _sync_carpeta(client)
-        elif op == "ver":
-            _ver_grupos()
-        elif op == "subir":
-            await _subir_pasada(client)
+        if op == "carpeta":
+            await _subir_carpeta_entera(client)
         elif op == "archivo":
             await _subir_archivo_manual(client)
+        elif op == "video":
+            await _subir_video(client)
+        elif op == "fotos":
+            await _subir_fotos(client)
+        elif op == "audio":
+            await _subir_audio(client)
+        elif op == "documento":
+            await _subir_documento(client)
+        elif op == "crear_canal":
+            await _crear_canal_y_subir(client)
+        elif op == "lista":
+            await _subir_lista_archivos(client)
+        elif op == "sync":
+            await _sync_carpeta(client)
         elif op == "diferida":
             await _subida_diferida(client)
         elif op == "plantillas":
             _gestionar_plantillas()
-        elif op == "config":
-            _export_import_config()
 
 
 # ============================================================================
@@ -2134,17 +2153,33 @@ async def _subida_diferida(client):
 # ============================================================================
 PLANTILLAS_FILE = REPO_DIR / "config" / "plantillas_cli.json"
 
+# Plantillas predefinidas
+PLANTILLAS_DEFAULT = {
+    "{canal}": "🎬 Directo de {canal}",
+    "{titulo}": "{titulo} | {canal}",
+    "{fecha}": "📅 {fecha} — {titulo}",
+    "{temporada}": "📺 Temporada {temporada} · Episodio {episodio}",
+    "{simple}": "{titulo}",
+    "{descriptivo}": "🎬 {titulo}\n📺 {canal}\n📅 {fecha}",
+    "{minimalista}": "▶️ {titulo}",
+    "{streamer}": "🔴 {canal} — {titulo}",
+    "{gaming}": "🎮 {canal} jugando a {titulo}",
+    "{musica}": "🎵 {titulo}\n🎤 {canal}",
+    "{noticias}": "📰 {titulo}\n📅 {fecha}",
+    "{tutorial}": "📚 Tutorial: {titulo}\n💡 {canal}",
+    "{vlog}": "📹 Vlog de {canal}\n📅 {fecha}",
+}
+
 
 def _cargar_plantillas():
-    default = {"{canal}": "🎬 Directo de {canal}", "{titulo}": "{titulo} | {canal}"}
     if not PLANTILLAS_FILE.exists():
-        return default
+        return PLANTILLAS_DEFAULT.copy()
     try:
         with open(PLANTILLAS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) and data else default
+        return data if isinstance(data, dict) and data else PLANTILLAS_DEFAULT.copy()
     except (OSError, json.JSONDecodeError):
-        return default
+        return PLANTILLAS_DEFAULT.copy()
 
 
 def _guardar_plantillas(data):
@@ -2158,9 +2193,13 @@ def _gestionar_plantillas():
         op = inquirer.select(
             "Plantillas de caption:",
             choices=[
-                {"name": "📋  Ver", "value": "ver"},
-                {"name": "➕  Añadir", "value": "add"},
+                {"name": "📋  Ver todas", "value": "ver"},
+                {"name": "➕  Añadir nueva", "value": "add"},
+                {"name": "✏️  Editar existente", "value": "edit"},
                 {"name": "🗑️  Eliminar", "value": "del"},
+                {"name": "🔄  Restaurar predefinidas", "value": "reset"},
+                {"name": "📥  Importar desde archivo", "value": "import"},
+                {"name": "📤  Exportar a archivo", "value": "export"},
                 {"name": "🔙  Volver", "value": "b"},
             ],
             pointer="▸",
@@ -2170,23 +2209,55 @@ def _gestionar_plantillas():
         if op == "ver":
             _tabla_resumen(["Clave", "Caption"], [(k, v) for k, v in data.items()],
                            titulo="Plantillas de caption")
+            styled_info("Variables disponibles: {canal}, {titulo}, {fecha}, {temporada}, {episodio}")
         elif op == "add":
-            clave = inquirer.text("Clave (ej: {canal}):").execute().strip()
-            valor = inquirer.text("Caption (ej: 🎬 Directo de {canal}):").execute().strip()
+            clave = inquirer.text("Clave (ej: {mitema}):").execute().strip()
+            valor = inquirer.text("Caption (ej: 🎬 {canal} - {titulo}):").execute().strip()
             if clave and valor:
                 data[clave] = valor
                 _guardar_plantillas(data)
                 styled_success(f"Plantilla '{clave}' guardada.")
+        elif op == "edit":
+            if not data:
+                styled_warn("Sin plantillas.")
+                continue
+            clave = inquirer.select("Editar:", choices=[{"name": f"{k}: {v[:40]}...", "value": k} for k, v in data.items()]
+                                    + [{"name": "🔙  Volver", "value": None}], pointer="▸").execute()
+            if clave and clave in data:
+                nuevo = inquirer.text(f"Nuevo caption para '{clave}':", default=data[clave]).execute().strip()
+                if nuevo:
+                    data[clave] = nuevo
+                    _guardar_plantillas(data)
+                    styled_success(f"'{clave}' actualizado.")
         elif op == "del":
             if not data:
                 styled_warn("Sin plantillas.")
                 continue
-            clave = inquirer.select("Eliminar:", choices=[{"name": k, "value": k} for k in data]
+            clave = inquirer.select("Eliminar:", choices=[{"name": f"{k}: {v[:40]}...", "value": k} for k, v in data.items()]
                                     + [{"name": "🔙  Volver", "value": None}], pointer="▸").execute()
             if clave and clave in data:
                 data.pop(clave)
                 _guardar_plantillas(data)
                 styled_success(f"'{clave}' eliminado.")
+        elif op == "reset":
+            if inquirer.confirm("¿Restaurar plantillas predefinidas? Se perderán las actuales.", default=False).execute():
+                _guardar_plantillas(PLANTILLAS_DEFAULT)
+                styled_success("Plantillas restauradas.")
+        elif op == "import":
+            ruta = inquirer.text("Ruta del archivo JSON:").execute().strip()
+            if Path(ruta).exists():
+                try:
+                    nuevo = json.loads(Path(ruta).read_text())
+                    if isinstance(nuevo, dict):
+                        data.update(nuevo)
+                        _guardar_plantillas(data)
+                        styled_success(f"Importadas {len(nuevo)} plantillas.")
+                except Exception as e:
+                    styled_error(f"Error: {e}")
+        elif op == "export":
+            ruta = inquirer.text("Ruta de destino:", default=str(PLANTILLAS_FILE)).execute().strip()
+            Path(ruta).write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            styled_success(f"Exportadas a {ruta}")
 
 
 def _caption_archivo(archivo):
@@ -2308,19 +2379,495 @@ async def _subir_pasada(client):
 
 
 async def _subir_archivo_manual(client):
+    """Sube 1 archivo concreto a un canal/tema."""
     ruta = inquirer.text("Ruta del archivo a subir:").execute().strip()
     archivo = Path(ruta)
     if not archivo.exists():
         styled_error(f"No existe {archivo}")
         return
-    default, grupos, foros = cargar_grupos()
-    destinos = await _calcular_destinos(archivo, default, grupos, foros)
-    keyword = keyword_from_filename(archivo.name)
-    styled_info(f"{archivo.name}: → {destinos}")
-    if not inquirer.confirm("¿Ejecutar la subida?", default=True).execute():
-        styled_info("Cancelado.")
+    styled_info(f"Archivo: {archivo.name} ({archivo.stat().st_size / 1024**2:.1f}MB)")
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
         return
-    await subir_archivo_cli(client, archivo, destinos, _caption_archivo(archivo), keyword)
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    caption = inquirer.text("Caption (vacío = nombre del archivo):").execute().strip()
+    if not caption:
+        caption = archivo.stem
+    
+    if not inquirer.confirm(f"¿Subir '{archivo.name}' a '{sel['nombre']}'?", default=True).execute():
+        return
+    
+    result = await subir_archivo_cli(client, archivo, [(destino, topico)], caption)
+    if result["estado"] == "ok":
+        styled_success(f"✅ Subido: {archivo.name}")
+    else:
+        styled_error(f"❌ Error: {result.get('error', 'desconocido')}")
+
+
+async def _subir_carpeta_entera(client):
+    """Sube todos los archivos de una carpeta a un canal."""
+    ruta = inquirer.text("Ruta de la carpeta:").execute().strip()
+    carpeta = Path(ruta)
+    if not carpeta.exists() or not carpeta.is_dir():
+        styled_error(f"Carpeta no válida: {ruta}")
+        return
+    
+    archivos = sorted([a for a in carpeta.iterdir() if a.is_file()])
+    if not archivos:
+        styled_warn("Carpeta vacía.")
+        return
+    
+    # Filtros por tipo
+    filtro = inquirer.select("Filtrar por tipo:", choices=[
+        {"name": "📋  Todos", "value": "todos"},
+        {"name": "🎬  Solo videos (mp4, mkv, avi)", "value": "video"},
+        {"name": "🖼️  Solo imágenes (jpg, png, webp)", "value": "imagen"},
+        {"name": "🎵  Solo audio (mp3, m4a, ogg)", "value": "audio"},
+        {"name": "📝  Solo documentos (pdf, zip, txt)", "value": "doc"},
+    ], pointer="▸").execute()
+    
+    if filtro == "video":
+        archivos = [a for a in archivos if a.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov', '.webm')]
+    elif filtro == "imagen":
+        archivos = [a for a in archivos if a.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.gif')]
+    elif filtro == "audio":
+        archivos = [a for a in archivos if a.suffix.lower() in ('.mp3', '.m4a', '.ogg', '.wav', '.flac')]
+    elif filtro == "doc":
+        archivos = [a for a in archivos if a.suffix.lower() in ('.pdf', '.zip', '.rar', '.txt', '.doc')]
+    
+    if not archivos:
+        styled_warn("No hay archivos de ese tipo.")
+        return
+    
+    styled_info(f"{len(archivos)} archivos encontrados:")
+    for a in archivos[:10]:
+        styled_info(f"  • {a.name} ({a.stat().st_size / 1024**2:.1f}MB)")
+    if len(archivos) > 10:
+        styled_info(f"  ... y {len(archivos) - 10} más")
+    
+    # Crear canal nuevo o usar existente
+    crear_canal = inquirer.confirm("¿Crear canal nuevo con el nombre de la carpeta?", default=False).execute()
+    
+    destino = None
+    topico = None
+    if crear_canal:
+        nombre_canal = inquirer.text(f"Nombre del canal (default: {carpeta.name}):").execute().strip()
+        if not nombre_canal:
+            nombre_canal = carpeta.name
+        try:
+            resultado = await client.create_channel(
+                title=nombre_canal,
+                about=f"Contenido de {carpeta.name}"
+            )
+            destino = resultado
+            styled_success(f"Canal creado: {nombre_canal}")
+        except Exception as e:
+            styled_error(f"Error creando canal: {e}")
+            return
+    else:
+        sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+        if not sel:
+            return
+        destino = sel["ent"]
+        if sel["tipo"] == "foro":
+            topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    # Confirmar subida
+    if not inquirer.confirm(f"¿Subir {len(archivos)} archivos?", default=True).execute():
+        return
+    
+    ok = 0
+    errores = 0
+    for i, archivo in enumerate(archivos):
+        if not await _comprobar_conexion(client):
+            break
+        styled_info(f"[{i+1}/{len(archivos)}] Subiendo {archivo.name}...")
+        try:
+            caption = archivo.stem
+            result = await subir_archivo_cli(client, archivo, [(destino, topico)], caption)
+            if result["estado"] == "ok":
+                ok += 1
+                styled_info(f"  ✅ {archivo.name}")
+            else:
+                errores += 1
+                styled_error(f"  ❌ {archivo.name}")
+        except Exception as e:
+            errores += 1
+            styled_error(f"  ❌ {archivo.name}: {e}")
+        await asyncio.sleep(0.5)
+    
+    styled_success(f"Completado: {ok} subidos, {errores} errores")
+
+
+async def _subir_video(client):
+    """Sube 1 video con caption y opciones de streaming."""
+    ruta = inquirer.text("Ruta del video:").execute().strip()
+    archivo = Path(ruta)
+    if not archivo.exists():
+        styled_error(f"No existe: {ruta}")
+        return
+    
+    # Información del video
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration,size",
+             "-of", "default=noprint_wrappers=1", str(archivo)],
+            capture_output=True, text=True, timeout=10
+        )
+        styled_info(f"Video: {archivo.name}")
+        styled_info(f"Tamaño: {archivo.stat().st_size / 1024**2:.1f}MB")
+    except Exception:
+        styled_info(f"Video: {archivo.name} ({archivo.stat().st_size / 1024**2:.1f}MB)")
+    
+    # Modo de subida
+    modo = inquirer.select("¿Cómo subir el video?", choices=[
+        {"name": "🎬  Video (streaming inline, se reproduce en Telegram)", "value": "video"},
+        {"name": "📄  Archivo (se descarga, no reproduce inline)", "value": "archivo"},
+    ], pointer="▸").execute()
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
+        return
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    caption = inquirer.text("Caption del video:").execute().strip()
+    if not caption:
+        caption = archivo.stem
+    
+    if not inquirer.confirm(f"¿Subir video a '{sel['nombre']}'?", default=True).execute():
+        return
+    
+    if modo == "video":
+        # Subir como video con streaming
+        from telethon import types
+        try:
+            await client.send_file(
+                destino,
+                archivo,
+                caption=caption,
+                video=True,
+                force_document=False,
+                supports_streaming=True,
+                progress_callback=lambda c, t: None
+            )
+            styled_success(f"✅ Video subido (streaming): {archivo.name}")
+        except Exception as e:
+            styled_error(f"❌ Error: {e}")
+    else:
+        # Subir como archivo
+        result = await subir_archivo_cli(client, archivo, [(destino, topico)], caption)
+        if result["estado"] == "ok":
+            styled_success(f"✅ Archivo subido: {archivo.name}")
+        else:
+            styled_error(f"❌ Error: {result.get('error', 'desconocido')}")
+
+
+async def _subir_fotos(client):
+    """Sube 1 o varias fotos con caption y opciones de compresión."""
+    ruta = inquirer.text("Ruta (archivo o carpeta):").execute().strip()
+    path = Path(ruta)
+    
+    if path.is_dir():
+        archivos = sorted([a for a in path.iterdir() 
+                          if a.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.gif')])
+    elif path.is_file():
+        archivos = [path]
+    else:
+        styled_error(f"No válido: {ruta}")
+        return
+    
+    if not archivos:
+        styled_warn("No se encontraron imágenes.")
+        return
+    
+    styled_info(f"{len(archivos)} imagen(es) encontrada(s)")
+    for a in archivos[:5]:
+        styled_info(f"  • {a.name} ({a.stat().st_size / 1024**2:.1f}MB)")
+    
+    # Modo de compresión
+    modo_compresion = inquirer.select("¿Cómo subir las imágenes?", choices=[
+        {"name": "📷  Original (sin cambios)", "value": "original"},
+        {"name": "📦  Comprimir (reducir tamaño, calidad 85%)", "value": "comprimir"},
+        {"name": "📐  Redimensionar + comprimir (max 1920px)", "value": "resize"},
+    ], pointer="▸").execute()
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
+        return
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    caption = inquirer.text("Caption (se aplicará a todas):").execute().strip()
+    
+    if not inquirer.confirm(f"¿Subir {len(archivos)} foto(s)?", default=True).execute():
+        return
+    
+    # Crear carpeta temporal si se necesita compresión
+    tmp_dir = None
+    if modo_compresion != "original":
+        import tempfile
+        tmp_dir = Path(tempfile.mkdtemp(prefix="imgs_"))
+    
+    ok = 0
+    for i, img in enumerate(archivos):
+        if not await _comprobar_conexion(client):
+            break
+        try:
+            img_subir = img
+            
+            if modo_compresion != "original":
+                from PIL import Image
+                img_pil = Image.open(img)
+                
+                if modo_compresion == "resize":
+                    # Redimensionar a max 1920px
+                    max_size = 1920
+                    if img_pil.width > max_size or img_pil.height > max_size:
+                        img_pil.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+                
+                # Comprimir
+                if img_pil.mode in ('RGBA', 'P'):
+                    img_pil = img_pil.convert('RGB')
+                
+                tmp_path = tmp_dir / f"compressed_{i}.jpg"
+                img_pil.save(tmp_path, "JPEG", quality=85, optimize=True)
+                img_subir = tmp_path
+                styled_info(f"  📦 {img.name} → {tmp_path.stat().st_size / 1024:.0f}KB")
+            
+            cap = f"{caption} ({i+1}/{len(archivos)})" if caption else img.stem
+            result = await subir_archivo_cli(client, img_subir, [(destino, topico)], cap)
+            if result["estado"] == "ok":
+                ok += 1
+        except ImportError:
+            styled_warn("Pillow no instalado. Subiendo originales.")
+            cap = f"{caption} ({i+1}/{len(archivos)})" if caption else img.stem
+            result = await subir_archivo_cli(client, img, [(destino, topico)], cap)
+            if result["estado"] == "ok":
+                ok += 1
+        except Exception as e:
+            styled_error(f"  ❌ {img.name}: {e}")
+        await asyncio.sleep(0.3)
+    
+    # Limpiar temporal
+    if tmp_dir and tmp_dir.exists():
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    
+    styled_success(f"Fotos subidas: {ok}/{len(archivos)}")
+
+
+async def _subir_audio(client):
+    """Sube archivos de audio."""
+    ruta = inquirer.text("Ruta (archivo o carpeta):").execute().strip()
+    path = Path(ruta)
+    
+    if path.is_dir():
+        archivos = sorted([a for a in path.iterdir() 
+                          if a.suffix.lower() in ('.mp3', '.m4a', '.ogg', '.wav', '.flac')])
+    elif path.is_file():
+        archivos = [path]
+    else:
+        styled_error(f"No válido: {ruta}")
+        return
+    
+    if not archivos:
+        styled_warn("No se encontraron archivos de audio.")
+        return
+    
+    styled_info(f"{len(archivos)} archivo(s) de audio")
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
+        return
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    caption = inquirer.text("Caption:").execute().strip()
+    
+    if not inquirer.confirm(f"¿Subir {len(archivos)} audio(s)?", default=True).execute():
+        return
+    
+    ok = 0
+    for audio in archivos:
+        if not await _comprobar_conexion(client):
+            break
+        try:
+            cap = caption if caption else audio.stem
+            result = await subir_archivo_cli(client, audio, [(destino, topico)], cap)
+            if result["estado"] == "ok":
+                ok += 1
+        except Exception as e:
+            styled_error(f"  ❌ {audio.name}: {e}")
+        await asyncio.sleep(0.3)
+    
+    styled_success(f"Audio subido: {ok}/{len(archivos)}")
+
+
+async def _subir_documento(client):
+    """Sube documentos (PDF, ZIP, etc)."""
+    ruta = inquirer.text("Ruta (archivo o carpeta):").execute().strip()
+    path = Path(ruta)
+    
+    if path.is_dir():
+        archivos = sorted([a for a in path.iterdir() if a.is_file()])
+    elif path.is_file():
+        archivos = [path]
+    else:
+        styled_error(f"No válido: {ruta}")
+        return
+    
+    if not archivos:
+        styled_warn("Sin archivos.")
+        return
+    
+    styled_info(f"{len(archivos)} archivo(s)")
+    for a in archivos[:5]:
+        styled_info(f"  • {a.name} ({a.stat().st_size / 1024**2:.1f}MB)")
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
+        return
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    caption = inquirer.text("Caption:").execute().strip()
+    
+    if not inquirer.confirm(f"¿Subir {len(archivos)} archivo(s)?", default=True).execute():
+        return
+    
+    ok = 0
+    for doc in archivos:
+        if not await _comprobar_conexion(client):
+            break
+        try:
+            cap = caption if caption else doc.stem
+            result = await subir_archivo_cli(client, doc, [(destino, topico)], cap)
+            if result["estado"] == "ok":
+                ok += 1
+        except Exception as e:
+            styled_error(f"  ❌ {doc.name}: {e}")
+        await asyncio.sleep(0.3)
+    
+    styled_success(f"Documentos subidos: {ok}/{len(archivos)}")
+
+
+async def _crear_canal_y_subir(client):
+    """Crea un canal nuevo y sube todo el contenido de una carpeta."""
+    nombre = inquirer.text("Nombre del nuevo canal:").execute().strip()
+    if not nombre:
+        styled_error("Nombre requerido.")
+        return
+    
+    descripcion = inquirer.text("Descripción del canal (opcional):").execute().strip()
+    
+    ruta = inquirer.text("Carpeta con contenido a subir:").execute().strip()
+    carpeta = Path(ruta)
+    if not carpeta.exists() or not carpeta.is_dir():
+        styled_error(f"Carpeta no válida: {ruta}")
+        return
+    
+    archivos = sorted([a for a in carpeta.iterdir() if a.is_file()])
+    if not archivos:
+        styled_warn("Carpeta vacía.")
+        return
+    
+    styled_info(f"Canal: {nombre}")
+    styled_info(f"Contenido: {len(archivos)} archivo(s)")
+    
+    if not inquirer.confirm("¿Crear canal y subir contenido?", default=True).execute():
+        return
+    
+    # Crear canal
+    try:
+        canal = await client.create_channel(
+            title=nombre,
+            about=descripcion or f"Canal creado automáticamente"
+        )
+        styled_success(f"Canal creado: {nombre}")
+    except Exception as e:
+        styled_error(f"Error creando canal: {e}")
+        return
+    
+    # Subir contenido
+    ok = 0
+    for i, archivo in enumerate(archivos):
+        if not await _comprobar_conexion(client):
+            break
+        styled_info(f"[{i+1}/{len(archivos)}] {archivo.name}")
+        try:
+            result = await subir_archivo_cli(client, archivo, [(canal, None)], archivo.stem)
+            if result["estado"] == "ok":
+                ok += 1
+        except Exception as e:
+            styled_error(f"  ❌ {e}")
+        await asyncio.sleep(0.5)
+    
+    styled_success(f"Canal '{nombre}' listo: {ok}/{len(archivos)} archivos subidos")
+
+
+async def _subir_lista_archivos(client):
+    """Sube una lista de archivos específicos (paths uno por uno)."""
+    styled_info("Introduce las rutas de los archivos (vacío = terminar):")
+    
+    archivos = []
+    while True:
+        ruta = inquirer.text(f"Archivo {len(archivos) + 1}:").execute().strip()
+        if not ruta:
+            break
+        path = Path(ruta)
+        if path.exists():
+            archivos.append(path)
+            styled_info(f"  ✓ {path.name}")
+        else:
+            styled_warn(f"  ✗ No existe: {ruta}")
+    
+    if not archivos:
+        styled_warn("Sin archivos.")
+        return
+    
+    sel = await _seleccionar_chat(client, "Canal DESTINO:", tipos=["canal", "grupo", "foro"])
+    if not sel:
+        return
+    destino = sel["ent"]
+    topico = None
+    if sel["tipo"] == "foro":
+        topico = await _seleccionar_tema(client, destino, "Tema destino:")
+    
+    styled_info(f"{len(archivos)} archivos a subir:")
+    for a in archivos:
+        styled_info(f"  • {a.name}")
+    
+    if not inquirer.confirm("¿Subir?", default=True).execute():
+        return
+    
+    ok = 0
+    for archivo in archivos:
+        if not await _comprobar_conexion(client):
+            break
+        try:
+            result = await subir_archivo_cli(client, archivo, [(destino, topico)], archivo.stem)
+            if result["estado"] == "ok":
+                ok += 1
+        except Exception as e:
+            styled_error(f"  ❌ {archivo.name}: {e}")
+        await asyncio.sleep(0.3)
+    
+    styled_success(f"Subidos: {ok}/{len(archivos)}")
 
 
 async def _calcular_destinos(archivo, default, grupos, foros):
@@ -2930,12 +3477,435 @@ async def _buscar_fotos_en_guardados(client):
 
 async def modulo_buscar_fotos(client):
     console.print(styled_panel("[bold white]BUSCAR FOTOS EN GUARDADOS[/bold white]", title="🔎", style=BG))
-    await _buscar_fotos_en_guardados(client)
+    
+    while True:
+        op = inquirer.select(
+            "¿Qué quieres hacer?",
+            choices=[
+                {"name": "🔍  Buscar por texto (caption/OCR)", "value": "texto"},
+                {"name": "🖼️  Buscar por imagen similar", "value": "imagen"},
+                {"name": "🏷️  Buscar por tipo (foto/video/doc)", "value": "tipo"},
+                {"name": "📅  Buscar por fecha", "value": "fecha"},
+                {"name": "📊  Estadísticas de Guardados", "value": "stats"},
+                {"name": "🔙  Volver", "value": "b"},
+            ],
+            pointer="▸",
+        ).execute()
+        
+        if op in ("b", None):
+            break
+        elif op == "texto":
+            await _buscar_fotos_en_guardados(client)
+        elif op == "imagen":
+            await _buscar_por_imagen(client)
+        elif op == "tipo":
+            await _buscar_por_tipo(client)
+        elif op == "fecha":
+            await _buscar_por_fecha(client)
+        elif op == "stats":
+            await _estadisticas_guardados(client)
 
 
 # ============================================================================
-# MÓDULO 12: Editar descripciones en Guardados (sin descargar archivos)
+# BÚSQUEDA POR IMAGEN SIMILAR
 # ============================================================================
+async def _buscar_por_imagen(client):
+    """Busca fotos similares a una imagen de referencia en Mensajes guardados."""
+    styled_info("Selecciona una imagen de referencia para buscar similares.")
+    
+    ruta_ref = inquirer.text("Ruta de la imagen de referencia:").execute().strip().strip('"').strip("'")
+    if not ruta_ref:
+        styled_error("Ruta vacía.")
+        return
+    
+    imagen_ref = Path(ruta_ref)
+    if not imagen_ref.exists():
+        styled_error(f"Archivo no encontrado: {imagen_ref}")
+        return
+    
+    # Check file extension
+    ext = imagen_ref.suffix.lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff'):
+        styled_error(f"Formato no soportado: {ext}")
+        return
+    
+    styled_info(f"Imagen de referencia: {imagen_ref.name}")
+    
+    # Calcular hash de la imagen de referencia
+    try:
+        from PIL import Image
+        import imagehash
+    except ImportError:
+        styled_error("Necesitas instalar: pip install Pillow imagehash")
+        return
+    
+    try:
+        img_ref = Image.open(imagen_ref)
+        hash_ref = imagehash.phash(img_ref)
+        styled_info(f"Hash de referencia: {hash_ref}")
+    except Exception as e:
+        styled_error(f"Error leyendo imagen: {e}")
+        return
+    
+    # Opciones de búsqueda
+    umbral = int(inquirer.text(
+        "Umbral de similitud (0-50, menor = más estricto, default: 10):",
+        default="10").execute().strip() or "10")
+    
+    limite = _pedir_numero("Máximo de fotos a revisar (vacío = 200):",
+                           minimo=1, por_defecto=200)
+    if limite is None:
+        limite = 200
+    
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tg_imgsearch_"))
+    resultados = []  # (msg, distancia, motivo)
+    
+    styled_info(f"Buscando fotos similares (umbral: {umbral})...")
+    
+    try:
+        n = 0
+        async for msg in client.iter_messages("me", filter=InputMessagesFilterPhotos,
+                                              limit=limite, wait_time=2):
+            n += 1
+            if n % 20 == 0:
+                styled_info(f"  Procesando: {n}/{limite}...")
+            
+            try:
+                ruta = await client.download_media(msg, file=tmp_dir)
+            except Exception:
+                continue
+            
+            if ruta and Path(ruta).is_file():
+                try:
+                    img_buscar = Image.open(ruta)
+                    hash_buscar = imagehash.phash(img_buscar)
+                    distancia = hash_ref - hash_buscar
+                    
+                    if distancia <= umbral:
+                        resultados.append((msg, distancia, f"Similitud: {100 - distancia}%"))
+                        styled_info(f"  ✅ Encontrada! ID: {msg.id} (distancia: {distancia})")
+                except Exception:
+                    pass
+                finally:
+                    # Limpiar archivo temporal
+                    try:
+                        Path(ruta).unlink(missing_ok=True)
+                    except Exception:
+                        pass
+    
+    except Exception as e:
+        styled_warn(f"Error durante la búsqueda: {e}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    
+    if not resultados:
+        styled_warn(f"No se encontraron fotos similares (umbral: {umbral}).")
+        return
+    
+    # Ordenar por similitud (menor distancia = más similar)
+    resultados.sort(key=lambda x: x[1])
+    
+    styled_success(f"Encontradas {len(resultados)} foto(s) similar(es).")
+    filas = []
+    for msg, dist, motivo in resultados:
+        fecha = str(getattr(msg, "date", ""))[:16]
+        cap = (getattr(msg, "text", "") or "").replace("\n", " ")[:40]
+        filas.append((msg.id, f"{100-dist}%", fecha, cap))
+    _tabla_resumen(["ID", "Similitud", "Fecha", "Descripción"], filas, titulo="Fotos similares")
+    
+    # Acciones
+    accion = inquirer.select("¿Qué hacer?", choices=[
+        {"name": "📥  Descargar todas las similares", "value": "descargar"},
+        {"name": "📌  Marcar/fijar las similares", "value": "fijar"},
+        {"name": "🗑️  Eliminar las duplicadas (mantener 1)", "value": "eliminar_dup"},
+        {"name": "📋  Copiar IDs al portapapeles", "value": "copiar"},
+        {"name": "🔙  Volver", "value": "volver"},
+    ], pointer="▸").execute()
+    
+    if accion == "descargar":
+        carpeta = _ruta_segura(inquirer.text(
+            "Carpeta destino (vacío = Descargas_Telegram/Similares):").execute().strip()
+            or str(CARPETA_BASE / "Similares"))
+        carpeta.mkdir(parents=True, exist_ok=True)
+        ok = 0
+        for msg, dist, _ in resultados:
+            if await download_media_robust(client, msg, carpeta):
+                ok += 1
+            await asyncio.sleep(0.2)
+        styled_success(f"Descargadas {ok}/{len(resultados)} fotos a {carpeta}")
+    
+    elif accion == "fijar":
+        ok = 0
+        for msg, _, _ in resultados:
+            try:
+                # Fijar mensaje (pin)
+                await client.pin_message("me", msg.id)
+                ok += 1
+                styled_info(f"  📌 Fijado ID: {msg.id}")
+            except Exception as e:
+                styled_error(f"  ❌ Error fijando ID {msg.id}: {e}")
+            await asyncio.sleep(0.3)
+        styled_success(f"Fijadas {ok}/{len(resultados)} fotos")
+    
+    elif accion == "eliminar_dup":
+        if not inquirer.confirm(
+            f"¿Eliminar {len(resultados)-1} duplicadas? (se mantiene la más similar)",
+            default=False).execute():
+            return
+        # Mantener solo la primera (más similar), eliminar el resto
+        ok = 0
+        for msg, _, _ in resultados[1:]:
+            try:
+                await client.delete_messages("me", [msg.id])
+                ok += 1
+            except Exception:
+                pass
+            await asyncio.sleep(0.3)
+        styled_success(f"Eliminadas {ok} duplicadas")
+    
+    elif accion == "copiar":
+        ids = ", ".join(str(msg.id) for msg, _, _ in resultados)
+        try:
+            import pyperclip
+            pyperclip.copy(ids)
+            styled_success(f"IDs copiados: {ids}")
+        except ImportError:
+            styled_info(f"IDs: {ids}")
+
+
+# ============================================================================
+# BÚSQUEDA POR TIPO (enfocado en video)
+# ============================================================================
+async def _buscar_por_tipo(client):
+    """Busca videos en Mensajes guardados con opciones avanzadas."""
+    limite = _pedir_numero("Máximo de videos a revisar (vacío = 100):",
+                           minimo=1, por_defecto=100)
+    if limite is None:
+        limite = 100
+    
+    styled_info(f"Buscando videos en Guardados (máx {limite})...")
+    
+    resultados = []
+    try:
+        async for msg in client.iter_messages("me", filter=InputMessagesFilterVideo,
+                                              limit=limite, wait_time=2):
+            if msg.video:
+                resultados.append(msg)
+    except Exception as e:
+        styled_warn(f"Error: {e}")
+    
+    if not resultados:
+        styled_warn("No se encontraron videos.")
+        return
+    
+    styled_success(f"Encontrados {len(resultados)} video(s).")
+    
+    # Mostrar resumen
+    for msg in resultados[:15]:
+        fecha = str(getattr(msg, "date", ""))[:10]
+        dur = getattr(msg.video, "duration", 0) or 0
+        cap = (getattr(msg, "text", "") or "").replace("\n", " ")[:30]
+        styled_info(f"  ID: {msg.id} | {fecha} | {dur//60}:{dur%60:02d} | {cap}")
+    
+    # Acciones
+    accion = inquirer.select("¿Qué hacer con los videos?", choices=[
+        {"name": "📥  Descargar todos", "value": "descargar"},
+        {"name": "🏷️  Añadir caption a todos", "value": "caption"},
+        {"name": "📌  Fijar todos", "value": "fijar"},
+        {"name": "🗑️  Eliminar todos", "value": "eliminar"},
+        {"name": "📋  Copiar IDs", "value": "copiar"},
+        {"name": "🔙  Volver", "value": "volver"},
+    ], pointer="▸").execute()
+    
+    if accion == "descargar":
+        carpeta = _ruta_segura(inquirer.text(
+            "Carpeta destino (vacío = Descargas_Telegram/Videos):").execute().strip()
+            or str(CARPETA_BASE / "Videos"))
+        carpeta.mkdir(parents=True, exist_ok=True)
+        ok = 0
+        for msg in resultados:
+            if await download_media_robust(client, msg, carpeta):
+                ok += 1
+            await asyncio.sleep(0.2)
+        styled_success(f"Descargados {ok}/{len(resultados)} videos a {carpeta}")
+    
+    elif accion == "caption":
+        caption_base = inquirer.text("Caption base (se añadirá número):").execute().strip()
+        if not caption_base:
+            styled_warn("Caption vacío.")
+            return
+        ok = 0
+        for i, msg in enumerate(resultados):
+            try:
+                nuevo_caption = f"{caption_base} ({i+1}/{len(resultados)})"
+                await client.edit_message("me", msg.id, nuevo_caption)
+                ok += 1
+                styled_info(f"  ✅ ID {msg.id}: {nuevo_caption}")
+            except Exception as e:
+                styled_error(f"  ❌ ID {msg.id}: {e}")
+            await asyncio.sleep(0.3)
+        styled_success(f"Actualizados {ok}/{len(resultados)} captions")
+    
+    elif accion == "fijar":
+        ok = 0
+        for msg in resultados:
+            try:
+                await client.pin_message("me", msg.id)
+                ok += 1
+            except Exception:
+                pass
+            await asyncio.sleep(0.3)
+        styled_success(f"Fijados {ok}/{len(resultados)} videos")
+    
+    elif accion == "eliminar":
+        if inquirer.confirm(f"¿Eliminar {len(resultados)} videos?", default=False).execute():
+            ok = 0
+            for msg in resultados:
+                try:
+                    await client.delete_messages("me", [msg.id])
+                    ok += 1
+                except Exception:
+                    pass
+                await asyncio.sleep(0.1)
+            styled_success(f"Eliminados {ok}/{len(resultados)} videos")
+    
+    elif accion == "copiar":
+        ids = ", ".join(str(msg.id) for msg in resultados)
+        styled_info(f"IDs: {ids}")
+
+
+# ============================================================================
+# BÚSQUEDA POR FECHA
+# ============================================================================
+async def _buscar_por_fecha(client):
+    """Busca mensajes de Guardados por rango de fechas."""
+    styled_info("Formato: YYYY-MM-DD")
+    
+    fecha_inicio = inquirer.text("Fecha inicio (vacío = hace 30 días):").execute().strip()
+    fecha_fin = inquirer.text("Fecha fin (vacío = hoy):").execute().strip()
+    
+    from datetime import datetime, timedelta
+    
+    if fecha_inicio:
+        try:
+            inicio = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+        except ValueError:
+            styled_error("Formato de fecha inválido.")
+            return
+    else:
+        inicio = datetime.now() - timedelta(days=30)
+    
+    if fecha_fin:
+        try:
+            fin = datetime.strptime(fecha_fin, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except ValueError:
+            styled_error("Formato de fecha inválido.")
+            return
+    else:
+        fin = datetime.now()
+    
+    styled_info(f"Buscando mensajes del {inicio.strftime('%Y-%m-%d')} al {fin.strftime('%Y-%m-%d')}...")
+    
+    resultados = []
+    try:
+        async for msg in client.iter_messages("me", offset_date=fin, reverse=True, wait_time=2):
+            if msg.date and msg.date.replace(tzinfo=None) >= inicio:
+                if msg.media:
+                    resultados.append(msg)
+            elif msg.date and msg.date.replace(tzinfo=None) < inicio:
+                break
+    except Exception as e:
+        styled_warn(f"Error: {e}")
+    
+    if not resultados:
+        styled_warn("No se encontraron mensajes en ese rango.")
+        return
+    
+    styled_success(f"Encontrados {len(resultados)} mensaje(s) con media.")
+    
+    # Acciones
+    accion = inquirer.select("¿Qué hacer?", choices=[
+        {"name": "📥  Descargar todos", "value": "descargar"},
+        {"name": "📋  Copiar IDs", "value": "copiar"},
+        {"name": "🔙  Volver", "value": "volver"},
+    ], pointer="▸").execute()
+    
+    if accion == "descargar":
+        carpeta = _ruta_segura(inquirer.text(
+            "Carpeta destino:").execute().strip() or str(CARPETA_BASE / "Guardados_Fecha"))
+        carpeta.mkdir(parents=True, exist_ok=True)
+        ok = 0
+        for msg in resultados:
+            if await download_media_robust(client, msg, carpeta):
+                ok += 1
+            await asyncio.sleep(0.2)
+        styled_success(f"Descargados {ok}/{len(resultados)} archivos")
+
+
+# ============================================================================
+# ESTADÍSTICAS DE GUARDADOS
+# ============================================================================
+async def _estadisticas_guardados(client):
+    """Muestra estadísticas de Mensajes guardados."""
+    styled_info("Analizando Mensajes guardados...")
+    
+    stats = {
+        "fotos": 0,
+        "videos": 0,
+        "audio": 0,
+        "docs": 0,
+        "texto": 0,
+        "total": 0,
+        "primer_msg": None,
+        "ultimo_msg": None,
+    }
+    
+    try:
+        n = 0
+        async for msg in client.iter_messages("me", limit=10000, wait_time=1):
+            n += 1
+            stats["total"] += 1
+            
+            if msg.photo:
+                stats["fotos"] += 1
+            elif msg.video:
+                stats["videos"] += 1
+            elif msg.voice or msg.audio:
+                stats["audio"] += 1
+            elif msg.document:
+                stats["docs"] += 1
+            else:
+                stats["texto"] += 1
+            
+            if stats["primer_msg"] is None:
+                stats["primer_msg"] = msg.date
+            
+            stats["ultimo_msg"] = msg.date
+            
+            if n % 500 == 0:
+                styled_info(f"  Procesados: {n}...")
+    
+    except Exception as e:
+        styled_warn(f"Error después de {n} mensajes: {e}")
+    
+    # Mostrar estadísticas
+    console.print(styled_panel(
+        f"""[bold]ESTADÍSTICAS DE GUARDADOS[/bold]
+
+📸 Fotos: {stats['fotos']}
+🎬 Videos: {stats['videos']}
+🎵 Audio/Voice: {stats['audio']}
+📝 Documentos: {stats['docs']}
+💬 Texto: {stats['texto']}
+📊 Total: {stats['total']}
+
+📅 Primer mensaje: {str(stats['primer_msg'])[:10] if stats['primer_msg'] else 'N/A'}
+📅 Último mensaje: {str(stats['ultimo_msg'])[:10] if stats['ultimo_msg'] else 'N/A'}""",
+        title="📊", style=BG
+    ))
+
+
+
 def _tipo_edicion_msg(msg):
     if msg.photo:
         return "FOTO"

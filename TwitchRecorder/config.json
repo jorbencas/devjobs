@@ -2,44 +2,84 @@
     "channels": {
         "sendosama": {
             "platform": [
-                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": false, "corte": false },
-                { "platform": "youtube", "channel": "sendosenpai" },
-                { "platform": "twitch", "detectar": false, "corte": false },
-                { "platform": "kick", "detectar": false, "corte": false }
+                {
+                    "platform": "web",
+                    "url": "https://watch.sendosama.net/",
+                    "detectar": false,
+                    "corte": false
+                },
+                {
+                    "platform": "youtube",
+                    "channel": "sendosenpai"
+                },
+                {
+                    "platform": "twitch",
+                    "detectar": false,
+                    "corte": false
+                },
+                {
+                    "platform": "kick",
+                    "detectar": false,
+                    "corte": false
+                }
             ],
-            "start_time": { "Sunday": "19:00", "*": "21:30" },
+            "start_time": {
+                "Sunday": "19:00",
+                "*": "21:30"
+            },
             "dias_plataforma": {
-                "Sunday": ["youtube", "twitch", "web", "kick"],
-                "*": ["web", "twitch", "kick"]
+                "Sunday": [
+                    "youtube",
+                    "web",
+                    "kick",
+                    "twitch"
+                ],
+                "*": [
+                    "web"
+                ]
             }
         },
         "midudev": {
             "platform": [
-                { "platform": "youtube" },
-                { "platform": "twitch", "detectar": false, "corte": false }
+                {
+                    "platform": "youtube",
+                    "detectar": false,
+                    "corte": false
+                },
+                {
+                    "platform": "twitch",
+                    "detectar": false,
+                    "corte": false
+                }
             ],
-            "days": ["Monday"],
+            "days": [
+                "Monday"
+            ],
             "start_time": "18:00"
         },
         "mouredev": {
             "platform": [
-                { "platform": "youtube" },
-                { "platform": "twitch", "detectar": false, "corte": false }
+                {
+                    "platform": "youtube",
+                    "detectar": false,
+                    "corte": false
+                },
+                {
+                    "platform": "twitch",
+                    "detectar": false,
+                    "corte": false
+                }
             ],
-            "days": ["Thursday"],
+            "days": [
+                "Thursday"
+            ],
             "start_time": "18:00"
         }
     },
-
     "record_path": "/recordings",
-
     "check_every": 30,
-
     "max_duration": "24:00:00",
-
     "retry_interval": 1,
-
     "copy_to_test": true,
-
     "test_path": "/recordings/test"
 }

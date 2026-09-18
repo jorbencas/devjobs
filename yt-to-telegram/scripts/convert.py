@@ -22,8 +22,8 @@ DOWNLOADS_DIR = DATA_DIR / "downloads"
 CONVERTED_DIR = DATA_DIR / "converted"
 LOGS_DIR = DATA_DIR / "logs"
 
-# Límite de Telegram (50MB)
-MAX_SIZE_MB = 50
+# Límite de Telegram (2GB)
+MAX_SIZE_MB = 2048
 MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
 
@@ -90,9 +90,9 @@ def two_pass_convert(video_file, output_path, video_bps, map_args, duration):
         "ffmpeg", "-y",
         "-fflags", "+genpts",
         "-i", video_file_str,
-        "-vf", "scale=-2:720",
+        "-vf", "scale=-2:1080",
         "-c:v", "libx264", "-b:v", str(video_bps),
-        "-preset", "fast", "-pass", "1",
+        "-preset", "medium", "-pass", "1",
         "-passlogfile", passlog,
         "-an", "-f", "null", "-"
     ], capture_output=True, text=True, timeout=7200)
@@ -104,7 +104,7 @@ def two_pass_convert(video_file, output_path, video_bps, map_args, duration):
             "-fflags", "+genpts",
             "-i", video_file_str,
             "-c:v", "libx264", "-b:v", str(video_bps),
-            "-preset", "fast", "-pass", "1",
+            "-preset", "medium", "-pass", "1",
             "-passlogfile", passlog,
             "-an", "-f", "null", "-"
         ], capture_output=True, text=True, timeout=7200)
@@ -114,9 +114,9 @@ def two_pass_convert(video_file, output_path, video_bps, map_args, duration):
         "ffmpeg", "-y",
         "-fflags", "+genpts",
         "-i", video_file_str,
-        "-vf", "scale=-2:720",
+        "-vf", "scale=-2:1080",
         "-c:v", "libx264", "-b:v", str(video_bps),
-        "-preset", "fast", "-pass", "2",
+        "-preset", "medium", "-pass", "2",
         "-passlogfile", passlog,
         "-c:a", "aac", "-b:a", "128k",
     ] + map_args + [
@@ -156,7 +156,7 @@ def convert_video(video_path, output_dir):
     has_audio = has_audio_stream(video_file)
     input_size = video_file.stat().st_size / (1024 * 1024)
 
-    # Si el original ya es <50MB y dura <5min, remux rápido con re-encode
+    # Si el original ya es <2GB y dura <5min, remux rápido con re-encode
     # (siempre H.264+AAC para compatibilidad Telegram)
     if input_size <= MAX_SIZE_MB and duration <= 300:
         logger.info(f"  📦 Original {input_size:.0f}MB < {MAX_SIZE_MB}MB, remux rápido...")
@@ -165,8 +165,8 @@ def convert_video(video_path, output_dir):
             map_args.extend(["-map", "0:a:0"])
         cmd = [
             "ffmpeg", "-y", "-i", str(video_file),
-            "-c:v", "libx264", "-crf", "28", "-preset", "fast",
-            "-vf", "scale=-2:720",
+            "-c:v", "libx264", "-crf", "28", "-preset", "medium",
+            "-vf", "scale=-2:1080",
             "-c:a", "aac", "-b:a", "128k",
         ] + map_args + [
             "-map_metadata", "0",
@@ -229,8 +229,8 @@ def convert_video(video_path, output_dir):
             "ffmpeg", "-y",
             "-fflags", "+genpts",
             "-i", str(video_file),
-            "-c:v", "libx264", "-crf", "28", "-preset", "fast",
-            "-vf", "scale=-2:720",
+            "-c:v", "libx264", "-crf", "28", "-preset", "medium",
+            "-vf", "scale=-2:1080",
             "-c:a", "aac", "-b:a", "128k",
         ] + map_args + [
             "-map_metadata", "0",
