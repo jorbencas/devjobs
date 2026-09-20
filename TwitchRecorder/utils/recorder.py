@@ -261,23 +261,54 @@ class Recorder:
         platform = src["platform"]
         s_url = src.get("url", "")
 
-        # Para la web, obtener el título de la API de Kick (la web es un wrapper de Kick)
+        # La web es SIEMPRE un wrapper de Kick o de Twitch. Nunca fiarse del <title>
+        # del HTML (los wrappers dan "<canal> (live)" genérico): consultar SIEMPRE la
+        # API real de la plataforma (Kick sin OAuth, Twitch vía yt-dlp sin OAuth).
+        # El HTML queda como ÚLTIMO recurso, no como primero.
         if platform == "web":
-            from utils.web import get_title as web_get_title
-            title = web_get_title(s_url or self.channel)
-            if title:
-                return title
-            # Fallback: intentar con la API de Kick
+            src_w = self._active or self.sources[0]
+            s_url_w = src_w.get("url", "") or s_url or ""
+            kick_ch = src_w.get("kick_channel") or src_w.get("channel")
+            twitch_ch = src_w.get("twitch_channel") or src_w.get("channel")
+
+            url_l = s_url_w.lower()
+            is_kick_url = "kick.com" in url_l
+            is_twitch_url = "twitch.tv" in url_l
+
+            # 1) Kick SIEMPRE primero (no requiere OAuth; cubre kick.com y wrappers Kick)
             try:
                 import requests
-                resp = requests.get(f"https://kick.com/api/v2/channels/{self.channel}", timeout=5)
+                resp = requests.get(
+                    f"https://kick.com/api/v2/channels/{kick_ch}", timeout=5
+                )
                 resp.raise_for_status()
                 data = resp.json()
                 session = data.get("livestream", {})
                 if session and session.get("is_live"):
-                    return session.get("session_title", "")
+                    t = (session.get("session_title") or "").strip()
+                    if t:
+                        return t
             except Exception:
                 pass
+
+            # 2) Si la URL es de Twitch (o el source mapea twitch_channel) → yt-dlp
+            #    resuelve el título real SIN OAuth
+            if is_twitch_url or twitch_ch:
+                info_web = self._fetch_live_info()
+                if info_web:
+                    t = (info_web.get("title") or "").strip()
+                    if t and not _is_generic_live_title(t, kick_ch or self.channel, info_web.get("uploader", "")):
+                        return t
+                    desc = (info_web.get("description") or "").strip()
+                    if desc:
+                        return desc
+
+            # 3) Último recurso: HTML
+            from utils.web import get_title as web_get_title
+            title = web_get_title(s_url_w or self.channel)
+            if title:
+                return title
+            return ""
 
         info = self._fetch_live_info()
         if not info:
