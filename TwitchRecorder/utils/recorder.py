@@ -390,10 +390,8 @@ class Recorder:
             self._stop_event.clear()
             self._last_start_time = time.time()
 
-            # Sidecar de configuración del directo para el monitor:
-            # solo se escribe en la primera grabación (no en reconexiones).
-            if not self._partes:
-                self._guardar_sidecar(output_path, src)
+            # Sidecar de configuración del directo para el monitor.
+            self._guardar_sidecar(output_path, src)
 
             return True
         except Exception as e:
@@ -795,11 +793,9 @@ class Recorder:
                         return
                 else:
                     # Misma plataforma de vuelta: se perdió la conexión.
-                    # NO llamar _add_parte_actual() — reanudar en el mismo archivo.
-                    log.warning(f"[{self.channel}] Conexión perdida, reconectando en mismo archivo...")
-                    self._terminar_proceso()
-                    if self._current_file and self._current_file.exists():
-                        self._reparar_video(self._current_file)
+                    # Cerrar parte actual y abrir nueva (evita desync A/V).
+                    log.warning(f"[{self.channel}] Conexión perdida, reconectando (nueva parte)...")
+                    self._add_parte_actual()
                     if not self.start():
                         log.warning(f"[{self.channel}] No se pudo reconectar, terminando grabación")
                         self.stop()
