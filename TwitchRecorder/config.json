@@ -42,9 +42,7 @@
             },
             "dias_plataforma": {
                 "*": [
-                    "web",
-                    "twitch",
-                    "kick"
+                    "web"
                 ]
             }
         },

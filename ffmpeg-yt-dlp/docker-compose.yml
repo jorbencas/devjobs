@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     user: root
     command: >-
-      sh -c "apk add --no-cache ffmpeg bash findutils python3 tesseract-ocr tesseract-ocr-data-eng &&
+      sh -c "apk add --no-cache ffmpeg bash findutils su-exec python3 tesseract-ocr tesseract-ocr-data-eng &&
       mkdir -p /watch /comprimidos &&
       chown -R 1000:1000 /watch /comprimidos &&
       exec su-exec 1000 bash /app/scripts/monitor_folder.sh"

@@ -1,5 +1,5 @@
 streamlink
-yt-dlp
+yt-dlp[impersonate]
 requests
 python-dotenv
 schedule
