@@ -8,28 +8,12 @@
                     "url": "https://watch.sendosama.net/",
                     "detectar": true,
                     "corte": false
-                },
-                {
-                    "platform": "twitch",
-                    "detectar": false,
-                    "corte": false
-                },
-                {
-                    "platform": "kick",
-                    "detectar": false,
-                    "corte": false
                 }
             ],
-            "start_time": {
-                "Sunday": "19:00",
-                "*": "21:30"
-            },
+            "start_time": "21:30",
             "dias_plataforma": {
                 "*": [
-                    "web",
-                    "youtube",
-                    "kick",
-                    "twitch"
+                    "web"
                 ]
             }
         },
@@ -42,10 +26,6 @@
                     "corte": false
                 },
                 {
-                    "platform": "youtube",
-                    "channel": "sendosenpai"
-                },
-                {
                     "platform": "twitch",
                     "detectar": false,
                     "corte": false
@@ -63,11 +43,13 @@
             "dias_plataforma": {
                 "*": [
                     "web",
-                    "youtube"
+                    "twitch",
+                    "kick"
                 ]
             }
         },
-        "sendosenpai":{
+        "sendosenpai": {
+            "enabled": false,
             "platform": [
                 {
                     "platform": "youtube",
@@ -75,16 +57,11 @@
                     "corte": false
                 }
             ],
-            "start_time": {
-                "Sunday": "19:00"
-            },
-            "days": {
-                "*": [
-                    "web",
-                    "youtube"
-                ]
-            }
-        }
+            "start_time": "19:00",
+            "days": [
+                "sunday"
+            ]
+        },
         "midudev": {
             "platform": [
                 {
