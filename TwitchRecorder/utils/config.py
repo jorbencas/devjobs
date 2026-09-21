@@ -84,6 +84,8 @@ def get_channels_with_platform(config: dict) -> list:
         result = []
         for name, info in channels.items():
             if isinstance(info, dict):
+                if info.get("enabled") is False:
+                    continue
                 platform_name = info.get("platform", "twitch")
                 url = info.get("url", "")
                 extra = {k: v for k, v in info.items() if k not in ("platform", "url")}

@@ -50,54 +50,66 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 
 ---
 
-## 🎬 PIPELINE: Directos de Twitch → Telegram
+## 🎬 PIPELINE: Directos → Telegram (Sending Pipeline)
 
-Automatización que graba los directos de **sendosama**, los comprime y los sube a varios grupos de Telegram, **sin intervención**.
+Automatización que graba directos de **Twitch/YouTube/Kick/Web**, los comprime, detecta episodios por OCR y los sube a Telegram **sin intervención**.
 
 ```
-┌──────────────┐   *_completed.mp4   ┌──────────────────┐   *_compressed.mp4   ┌──────────────────┐
-│ TwitchRecorder│ ────────────────► │ ffmpeg-yt-dlp     │ ──────────────────► │ downloader_telegram│
-│  (grabar)     │    copiar a test/ │  monitor *720p*    │      a 720p         │  uploader (subir) │
-└──────────────┘                    └──────────────────┘                      └──────────────────┘
-   data/pipeline/grabaciones/      data/pipeline/comprimidos/                    N grupos
+┌──────────────┐  *_completed.mp4  ┌──────────────────┐  *_compressed.mp4  ┌──────────────────┐
+│ TwitchRecorder│ ──────────────► │ ffmpeg-yt-dlp     │ ────────────────► │ downloader_telegram│
+│  (grabar)     │  copiar a test/ │  monitor + OCR    │    comprimir      │  uploader (subir) │
+└──────────────┘                  └──────────────────┘                    └──────────────────┘
+   data/pipeline/grabaciones/    data/pipeline/comprimidos/                  N grupos/temas
 ```
 
 ### Flujo completo
 
-| Paso | Servicio | Qué hace |
-|------|----------|----------|
-| 1. **Grabar** | `twitchrecorder-sendo` | Detecta directo, graba calidad original, concatena partes si cambia plataforma |
-| 2. **Keyword** | — | Extrae título → `*_KW_<keyword>_completed.mp4` (viaja por todo el pipeline) |
-| 3. **Cola** | — | Copia a `test/` (original queda en grabaciones/) |
-| 4. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p, detecta episodios OCR, gestiona archivos auxiliares de metadatos |
-| 5. **Subir** | `telegram-uploader-sendo` | Rutea por keyword, sube a temas de Telegram, limpia residuos |
+| Paso | Contenedor | Qué hace |
+|------|------------|----------|
+| 1. **Detectar** | `twitchrecorder-sendo` | Comprueba directos cada 30s en web → YouTube → Kick → Twitch (orden configurable) |
+| 2. **Grabar** | `twitchrecorder-sendo` | Graba calidad original con yt-dlp, concatena partes si cambia de plataforma |
+| 3. **Keyword** | — | Extrae título del directo → `*_KW_<keyword>_completed.mp4` |
+| 4. **Cola** | — | Copia a `test/` (el original queda en `grabaciones/`) |
+| 5. **OCR** | `ffmpeg_monitor-sendo` | Detecta episodios/temporada/película por OCR de la franja superior |
+| 6. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p (CRF 28), recorta extremos si `corte: true` |
+| 7. **Subir** | `telegram-uploader-sendo` | Rutea por keyword a grupos/temas de Telegram, divide si >2GB |
+| 8. **Limpiar** | `telegram-uploader-sendo` | Marca como enviado, borra comprimido y residuos |
 
 ### Contenedores Docker
 
-| Contenedor | Servicio | Qué hace |
-|------------|----------|----------|
-| `twitchrecorder-sendo` | Grabador | Detecta directos, graba calidad original, concatena partes |
-| `ffmpeg_monitor-sendo` | Compresor | Convierte a 720p, detecta episodios por OCR |
-| `telegram-uploader-sendo` | Subidor | Rutea por keyword, sube a temas de Telegram |
+| Contenedor | Servicio | Puerto | Estado |
+|------------|----------|--------|--------|
+| `twitchrecorder-sendo` | Grabador (daemon) | — | `unless-stopped` |
+| `ffmpeg_monitor-sendo` | Compresor + OCR (daemon) | — | `unless-stopped` |
+| `telegram-uploader-sendo` | Subidor (daemon) | — | `unless-stopped` |
+
+### Detección de episodios (OCR)
+
+El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 segundos:
+
+1. **Preprocesamiento**: escala de grises → contraste 2x → sharpen → binarizar
+2. **OCR triple**: 3 modos PSM (3, 6, 7) y se queda el con más patrones
+3. **Patrones**: `Episodio 5`, `EP. 3`, `S01E02`, `1x02`, `#12`, fuzzy OCR
+4. **Filtrado**: descarta outliers con solapamiento significativo (>50% + 3x muestras)
+5. **Clasificación**: episodios, temporada, o película (por frecuencia de "película")
 
 ### Configuración
 
-`TwitchRecorder/config.json` controla todo el comportamiento del grabador. Cada canal define sus propias plataformas, horarios y opciones de detección.
+`TwitchRecorder/config.json` controla todo el comportamiento del grabador.
 
 ```json
 {
     "channels": {
         "sendosama": {
             "platform": [
-                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": false, "corte": false },
+                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
                 { "platform": "youtube", "channel": "sendosenpai" },
                 { "platform": "twitch", "detectar": false, "corte": false },
                 { "platform": "kick", "detectar": false, "corte": false }
             ],
             "start_time": { "Sunday": "19:00", "*": "21:30" },
             "dias_plataforma": {
-                "Sunday": ["youtube", "twitch", "web", "kick"],
-                "*": ["web", "twitch", "kick"]
+                "*": ["web", "youtube", "kick", "twitch"]
             }
         }
     },
@@ -112,42 +124,42 @@ Automatización que graba los directos de **sendosama**, los comprime y los sube
 
 **Campos globales:**
 
-| Campo | Qué hace | Por defecto | Si no está |
-|-------|----------|-------------|------------|
-| `record_path` | Ruta donde se guardan las grabaciones crudas | `/recordings` | No graba nada |
-| `check_every` | Segundos entre cada comprobación de directo | `30` | Usa 30s |
-| `max_duration` | Duración máxima de grabación (`HH:MM:SS`) | `24:00:00` | Sin límite |
-| `retry_interval` | Segundos de espera antes de reconectar si pierde la conexión | `1` | Usa 1s |
-| `copy_to_test` | Al terminar, copia la grabación a `test_path` renombrándola a `*_completed.mp4` | `false` | No copia, el pipeline no detecta el archivo |
-| `test_path` | Carpeta de los `*_completed.mp4` que vigila ffmpeg_monitor | `/recordings/test` | No se alimenta el pipeline |
+| Campo | Qué hace | Default |
+|-------|----------|---------|
+| `record_path` | Ruta de grabaciones crudas | `/recordings` |
+| `check_every` | Segundos entre comprobaciones | `30` |
+| `max_duration` | Duración máxima (`HH:MM:SS`) | `24:00:00` |
+| `retry_interval` | Segundos antes de reconectar | `1` |
+| `copy_to_test` | Copiar a `test_path` como `*_completed.mp4` al terminar | `false` |
+| `test_path` | Carpeta que vigila el monitor | `/recordings/test` |
 
-**Campos por canal** (dentro de `channels.<canal>`):
+**Campos por canal:**
 
-| Campo | Qué hace | Si no está |
-|-------|----------|------------|
-| `platform` | Lista de fuentes en orden de prioridad. El grabador intenta la primera, si falla pasa a la siguiente | Requerido |
-| `days` | Días de la semana en los que comprobar (`["Monday", "Thursday"]`) | Todos los días |
-| `start_time` | Hora mínima para empezar a comprobar. `str` (`"18:00"`) o `dict` por día con comodín `"*"` | `19:55` |
-| `dias_plataforma` | Reordena/sustituye las fuentes por día (ej: domingos primero YouTube) | Respeta el orden de `platform` |
+| Campo | Qué hace | Default |
+|-------|----------|---------|
+| `enabled` | Si `false`, el canal se salta completamente (útil para desactivar sin borrar la config) | `true` |
+| `platform` | Lista de fuentes en orden de prioridad | Requerido |
+| `days` | Días de comprobación (`["Monday", "Thursday"]`) | Todos |
+| `start_time` | Hora mínima (`"18:00"` o `{"Sunday": "19:00", "*": "21:30"}`) | `19:55` |
+| `dias_plataforma` | Reordena fuentes por día | Respeta `platform` |
 
-**Campos por plataforma** (dentro de `platform`):
+**Campos por plataforma:**
 
-| Campo | Qué hace | Si no está |
-|-------|----------|------------|
-| `platform` | Tipo: `web`, `youtube`, `twitch` o `kick` | Requerido |
+| Campo | Qué hace | Default |
+|-------|----------|---------|
+| `platform` | Tipo: `web`, `youtube`, `twitch`, `kick` | Requerido |
 | `url` | URL directa (solo `web`) | — |
 | `channel` | Nombre del canal (YouTube/Kick) | — |
-| `detectar` | Si `true`, el monitor hace OCR para detectar episodios en la grabación | `true` |
-| `corte` | Si `true`, el monitor recorta intro/outro por episodios. Si `false`, no recorta aunque detecte | `true` |
+| `detectar` | OCR de episodios en el monitor | `true` |
+| `corte` | Recortar intro/outro según episodios | `true` |
 
-`detectar` y `corte` son **independientes**: puedes detectar sin cortar (`"detectar": true, "corte": false`) pero no tiene sentido cortar sin detectar. La config actual los desactiva en todos los canales para evitar recortes indeseados.
+`detectar` y `corte` son **independientes**: puedes detectar sin cortar pero no cortar sin detectar.
 
-**`dias_plataforma` en detalle:** Permite que un canal priorice una plataforma en días concretos. Por ejemplo, sendosama emite en YouTube los domingos pero no entre semana, así que el domingo se intenta YouTube primero y el resto se salta directamente a web/twitch/kick:
+**`dias_plataforma` en detalle:** Controla qué plataformas se usan y en qué orden según el día. La web va primera por defecto (máxima prioridad). Si un día no está listado, se usa `"*"`:
 
 ```json
 "dias_plataforma": {
-    "Sunday": ["youtube", "twitch", "web", "kick"],
-    "*": ["web", "twitch", "kick"]
+    "*": ["web", "youtube", "kick", "twitch"]
 }
 ```
 
@@ -329,17 +341,29 @@ tg_bot
 
 | Alias | Descripción |
 |-------|-------------|
-| `pipe_up` | Arrancar pipeline Twitch (3 daemons) |
-| `pipe_down` | Parar pipeline Twitch |
-| `plogs` | Logs de los 3 daemons |
-| `pipe_ps` | Estado de los 3 contenedores |
+| `pipe_up` | Arrancar pipeline (3 daemons) |
+| `pipe_down` | Parar pipeline |
 | `pipe_rebuild` | Rebuild + recrear (cambios en código) |
+| `pipe_ps` | Estado de los 3 contenedores |
+| `pipe_logs` | Logs de los 3 daemons en tiempo real |
+| `pipe_once` | Ejecutar uploader una sola vez (sin bucle) |
+| `pipe_setup` | Iniciar sesión del uploader (interactivo) |
 | `yt_up` | Arrancar pipeline YouTube |
 | `yt_down` | Parar pipeline YouTube |
 | `yt_logs` | Logs del pipeline YouTube |
 | `tg_bot` | Arrancar bot Telegram |
 | `tg_bot_logs` | Logs del bot |
 | `docker_help` | Ver todos los comandos |
+
+### Scripts del pipeline (`servicios/`)
+
+| Script | Qué hace |
+|--------|----------|
+| `pipe_rebuild.sh` | Rebuild + recreate de los 3 containers |
+| `pipe_ps.sh` | Estado de containers (pipeline + resto) |
+| `pipe_once.sh` | Uploader una sola pasada |
+| `pipe_setup.sh` | Login interactivo del uploader |
+| `pipe_logs.sh` | Logs en tiempo real de los 3 daemons |
 
 > **[📖 Referencia completa: docker_help.txt](docker_help.txt)**
 

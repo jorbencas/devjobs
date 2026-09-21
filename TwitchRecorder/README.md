@@ -343,6 +343,7 @@ GET https://kick.com/api/v2/channels/sendosama
 
 | Campo del canal | Descripción |
 |---|---|
+| `enabled` | Si `false`, el canal se ignora por completo (default `true`). Útil para desactivar temporalmente sin borrar la config |
 | `platform` | Fuente o lista de fuentes en orden de prioridad (ver arriba) |
 | `days` | Días de la semana en los que comprobar si hay directo. Por defecto **todos los días** |
 | `start_time` | Hora mínima para empezar a comprobar. `str` o `dict` por día con comodín `"*"`. Por defecto `19:55` |

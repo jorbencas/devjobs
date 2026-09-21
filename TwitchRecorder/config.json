@@ -1,11 +1,44 @@
 {
     "channels": {
+        "sendobabyface": {
+            "enabled": false,
+            "platform": [
+                {
+                    "platform": "web",
+                    "url": "https://watch.sendosama.net/",
+                    "detectar": true,
+                    "corte": false
+                },
+                {
+                    "platform": "twitch",
+                    "detectar": false,
+                    "corte": false
+                },
+                {
+                    "platform": "kick",
+                    "detectar": false,
+                    "corte": false
+                }
+            ],
+            "start_time": {
+                "Sunday": "19:00",
+                "*": "21:30"
+            },
+            "dias_plataforma": {
+                "*": [
+                    "web",
+                    "youtube",
+                    "kick",
+                    "twitch"
+                ]
+            }
+        },
         "sendosama": {
             "platform": [
                 {
                     "platform": "web",
                     "url": "https://watch.sendosama.net/",
-                    "detectar": false,
+                    "detectar": true,
                     "corte": false
                 },
                 {
@@ -28,17 +61,30 @@
                 "*": "21:30"
             },
             "dias_plataforma": {
-                "Sunday": [
-                    "youtube",
-                    "web",
-                    "kick",
-                    "twitch"
-                ],
                 "*": [
-                    "web"
+                    "web",
+                    "youtube"
                 ]
             }
         },
+        "sendosenpai":{
+            "platform": [
+                {
+                    "platform": "youtube",
+                    "detectar": false,
+                    "corte": false
+                }
+            ],
+            "start_time": {
+                "Sunday": "19:00"
+            },
+            "days": {
+                "*": [
+                    "web",
+                    "youtube"
+                ]
+            }
+        }
         "midudev": {
             "platform": [
                 {
