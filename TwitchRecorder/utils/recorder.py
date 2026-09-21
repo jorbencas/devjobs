@@ -139,6 +139,8 @@ class Recorder:
         self._current_file = None
         self._partes = []
         self._stop_event = threading.Event()
+        self._consecutive_fails = 0
+        self._last_start_time = 0
 
     @property
     def _active_source(self) -> dict:
@@ -386,10 +388,12 @@ class Recorder:
             self.is_recording = True
             self._current_file = output_path
             self._stop_event.clear()
+            self._last_start_time = time.time()
 
             # Sidecar de configuración del directo para el monitor:
-            # siempre se guarda para incluir el título como caption.
-            self._guardar_sidecar(output_path, src)
+            # solo se escribe en la primera grabación (no en reconexiones).
+            if not self._partes:
+                self._guardar_sidecar(output_path, src)
 
             return True
         except Exception as e:
@@ -468,6 +472,7 @@ class Recorder:
             "--write-thumbnail",
             "--convert-thumbnails", "jpg",
             "--no-warnings",
+            "--remote-components", "ejs:github",
         ]
 
         self.process = subprocess.Popen([ytdlp_exe] + cmd, **popen_kwargs)
@@ -760,6 +765,20 @@ class Recorder:
                 # puede ser un cambio de plataforma en marcha (p. ej. la web se
                 # cae y Kick/Twitch aún no ha arrancado).
                 prev_platform = self._active_source["platform"]
+                # Backoff: si el proceso muere muy rápido (<30s), esperar más
+                elapsed_since_start = time.time() - self._last_start_time
+                if elapsed_since_start < 30:
+                    self._consecutive_fails += 1
+                    if self._consecutive_fails >= 5:
+                        log.error(f"[{self.channel}] {self._consecutive_fails} fallos consecutivos rápidos, terminando grabación")
+                        self.stop()
+                        return
+                    backoff = min(30 * self._consecutive_fails, 120)
+                    log.warning(f"[{self.channel}] Proceso murió en {int(elapsed_since_start)}s, backoff {backoff}s (fallo {self._consecutive_fails}/5)")
+                    time.sleep(backoff)
+                else:
+                    self._consecutive_fails = 0
+
                 new_platform = self._esperar_directo(prev_platform)
                 if new_platform is None:
                     log.info(f"[{self.channel}] Directo finalizado")
@@ -776,8 +795,11 @@ class Recorder:
                         return
                 else:
                     # Misma plataforma de vuelta: se perdió la conexión.
-                    log.warning(f"[{self.channel}] Conexión perdida, reconectando...")
-                    self._add_parte_actual()
+                    # NO llamar _add_parte_actual() — reanudar en el mismo archivo.
+                    log.warning(f"[{self.channel}] Conexión perdida, reconectando en mismo archivo...")
+                    self._terminar_proceso()
+                    if self._current_file and self._current_file.exists():
+                        self._reparar_video(self._current_file)
                     if not self.start():
                         log.warning(f"[{self.channel}] No se pudo reconectar, terminando grabación")
                         self.stop()
