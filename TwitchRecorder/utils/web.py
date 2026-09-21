@@ -35,7 +35,7 @@ def _get_hls_domain(url: str) -> str:
     """
     try:
         base = url.rstrip("/")
-        resp = requests.get(f"{base}/api/playback-domain", timeout=5)
+        resp = requests.get(f"{base}/api/playback-domain", timeout=10)
         resp.raise_for_status()
         data = resp.json()
         domain = data.get("domain", "")
