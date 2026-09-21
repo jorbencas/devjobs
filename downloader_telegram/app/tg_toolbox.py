@@ -1377,16 +1377,12 @@ async def _clonar_canal_a_canal(client):
                         if not cap:
                             return None
                         return await client.send_message(destino, cap)
-                    # Modo copia: sin "Forwarded from" (quitar remitente) o chat protegido.
-                    es_protegido = getattr(origen, 'noforward', False)
-                    if quitar_rem or quitar_cap or es_protegido:
-                        if m.media:
-                            return await client.send_file(destino, m.media, caption=cap)
-                        if not cap:
-                            return None
-                        return await client.send_message(destino, cap)
-                    # Modo reenvío normal (con remitente y caption original).
-                    return await client.send_message(destino, m)
+                    # Siempre modo copia: funciona en chats protegidos y normales.
+                    if m.media:
+                        return await client.send_file(destino, m.media, caption=cap)
+                    if not cap:
+                        return None
+                    return await client.send_message(destino, cap)
 
                 await _reintentar(_enviar, etiqueta=f"clonado ID {message.id}")
                 if descargar and message.media:
