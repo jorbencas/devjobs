@@ -770,7 +770,7 @@ class Recorder:
                         log.error(f"[{self.channel}] {self._consecutive_fails} fallos consecutivos rápidos, terminando grabación")
                         self.stop()
                         return
-                    backoff = min(30 * self._consecutive_fails, 120)
+                    backoff = min(5 * self._consecutive_fails, 30)
                     log.warning(f"[{self.channel}] Proceso murió en {int(elapsed_since_start)}s, backoff {backoff}s (fallo {self._consecutive_fails}/5)")
                     time.sleep(backoff)
                 else:
