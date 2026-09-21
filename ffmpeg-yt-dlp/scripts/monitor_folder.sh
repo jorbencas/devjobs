@@ -1,7 +1,17 @@
 #!/bin/bash
-# ── Monitor de carpeta para compresión automática ───────────────────
-# Uso: ./monitor_folder.sh [carpeta] [opcionales]
-# Vigila una carpeta y comprime vídeos nuevos automáticamente
+# ═══════════════════════════════════════════════════════════════════════════════
+# Monitor de carpeta para compresión automática del PIPELINE DE ENVÍO
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# PASO 2 del pipeline:
+#   1. TwitchRecorder → graba directos a /recordings/
+#   2. monitor_folder.sh → comprime y detecta episodios (ESTE SCRIPT)
+#   3. subir_videos.py → sube a Telegram
+#
+# Configuración via variables de entorno (Docker):
+#   WATCH_DIR, OUTPUT_DIR, CRF, PRESET, CODEC, TAMANO_MAX_MB,
+#   OCR_STEP, CORTE_MARGEN, MIN_DURACION, POLL_INTERVAL, etc.
+# ═══════════════════════════════════════════════════════════════════════════════
 
 set -e
 
@@ -52,7 +62,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-RED='\033[0;31m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
@@ -330,45 +339,7 @@ process_pending() {
     return $count
 }
 
-show_help() {
-    # Muestra la ayuda de uso del monitor (opciones por CLI y ejemplo).
-    echo "Uso: $0 [opciones] [carpeta_a_vigilar]"
-    echo ""
-    echo "Opciones:"
-    echo "  -o, --output DIR     Directorio de salida (default: ~/data/pipeline/comprimidos)"
-    echo "  -c, --crf VALUE      Calidad CRF (default: 28, menor = mejor)"
-    echo "  -p, --preset NAME    Preset de velocidad (default: fast)"
-    echo "  --codec NAME         Códec de vídeo (default: libx264)"
-    echo "  -r, --resolution N   Escalar a altura N px con pad 16:9, ej: 720 (default: sin reescalar)"
-    echo "  -t, --threads N      Hilos ffmpeg (default: 4)"
-    echo "  --completed-only     Procesar solo archivos *_completed.* / *_compressed.*"
-    echo "  --interval SEGS      Intervalo de polling en segundos (default: 30)"
-    echo "  --min-duration S     Duración mínima para procesar (default: 60)"
-    echo "  -h, --help           Mostrar ayuda"
-    echo ""
-    echo "Ejemplo:"
-    echo "  $0 ~/Downloads/videos"
-    echo "  $0 -o /mnt/comp -c 23 -p medium ~/Videos/nuevos"
-}
-
 # ── Main ─────────────────────────────────────────────────────────────
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -o|--output)   OUTPUT_DIR="$2"; shift 2 ;;
-        -c|--crf)      CRF="$2"; shift 2 ;;
-        -p|--preset)   PRESET="$2"; shift 2 ;;
-        --codec)       CODEC="$2"; shift 2 ;;
-        -r|--resolution) RESOLUTION="$2"; shift 2 ;;
-        -t|--threads)    THREADS="$2"; shift 2 ;;
-        --completed-only) COMPLETED_ONLY="true"; shift ;;
-        --interval)    POLL_INTERVAL="$2"; shift 2 ;;
-        --min-duration) MIN_DURACION="$2"; shift 2 ;;
-        -h|--help)     show_help; exit 0 ;;
-        -*)            echo -e "${RED}Opción desconocida: $1${NC}"; show_help; exit 1 ;;
-        *)             WATCH_DIR="$1"; shift ;;
-    esac
-done
-
 mkdir -p "$WATCH_DIR" "$OUTPUT_DIR" "$PROCESSED_DIR"
 
 log "${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -407,28 +378,3 @@ while true; do
 
     sleep "$POLL_INTERVAL"
 done
-
-# Fix: Asegurar que return $count no trunca (>255)
-# Cambiar a: count=$((count+1)) y quitar el return $count al final,
-# o usar: exit $((count % 256)) si se necesita devolver un código
-
-# Fix: Validar que duration no esté vacío antes de usarlo en aritmética
-if [[ -n "$cut_inicio" && -n "$cut_fin" ]]; then
-    duration=$(( cut_fin - cut_inicio ))
-    # Validar que duration sea positivo
-    if [[ "$duration" -le 0 ]]; then
-        log_warn "Duración calculada inválida ($duration), usando duración original"
-        duration=""
-    fi
-fi
-
-# Fix: Proteger división por cero en cálculo de savings
-if [[ "$input_size" -gt 0 ]]; then
-    savings=$(( (input_size - output_size) * 100 / input_size ))
-else
-    savings=0
-fi
-
-# Fix: Usar passlogfile con ruta única en lugar de nombres globales
-# (en lugar de: rm -f ffmpeg2pass-*.log)
-# Usar: ffmpeg -passlogfile "/ruta/absoluta/ffmpeg2pass-$(basename $input).log"
