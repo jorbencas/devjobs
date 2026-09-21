@@ -159,35 +159,40 @@ Salida → es la carpeta que vigila el servicio `uploader` de `downloader_telegr
 
 #### Uso directo (host, sin Docker)
 
+Toda la configuración es via **variables de entorno**. El directorio a vigilar se pasa como primer argumento:
+
 ```bash
 # Monitor con configuración por defecto
-bash scripts/monitor_folder.sh ~/Downloads/videos
+WATCH_DIR=~/Downloads/videos bash scripts/monitor_folder.sh
 
 # Personalizar CRF, preset y destino
-bash scripts/monitor_folder.sh -o /mnt/comp -c 23 -p medium ~/Videos/nuevos
+CRF=23 PRESET=medium OUTPUT_DIR=/mnt/comp WATCH_DIR=~/Videos/nuevos bash scripts/monitor_folder.sh
 
 # Con intervalo de polling personalizado
-bash scripts/monitor_folder.sh --interval 60 ~/Videos/para_comprimir
+POLL_INTERVAL=60 WATCH_DIR=~/Videos/para_comprimir bash scripts/monitor_folder.sh
 
 # Solo procesar grabaciones terminadas, escalando a 720p (uso en pipeline)
-bash scripts/monitor_folder.sh --completed-only -r 720 /ruta/a/vigilar
+COMPLETED_ONLY=true RESOLUTION=720 WATCH_DIR=/ruta/a/vigilar bash scripts/monitor_folder.sh
 ```
-
-#### Flags
-
-| Flag | Descripción | Default |
-|---|---|---|
-| `-o, --output DIR` | Directorio de salida | `../data/pipeline/comprimidos` |
-| `-c, --crf VALUE` | Calidad CRF (menor = mejor) | `28` |
-| `-p, --preset NAME` | Preset de velocidad | `fast` |
-| `--codec NAME` | Códec de vídeo | `libx264` |
-| `-r, --resolution N` | Escalar altura a `N`px (ej: `720`) | sin reescalar |
-| `--completed-only` | Procesar solo `*_completed.*` | off |
-| `--interval SEGS` | Segundos entre comprobaciones | `30` |
 
 #### Variables de entorno
 
-`RESOLUTION`, `COMPLETED_ONLY`, `CRF`, `PRESET`, `CODEC`, `AUDIO_CODEC`, `AUDIO_BITRATE`, `POLL_INTERVAL`, `OUTPUT_DIR`, `TAMANO_MAX_MB`, `OCR_STEP`, `CORTE_MARGEN`, `MIN_DURACION`.
+| Variable | Descripción | Default |
+|---|---|---|
+| `WATCH_DIR` | Carpeta a vigilar | `~/data/pipeline/grabaciones/test` |
+| `OUTPUT_DIR` | Directorio de salida | `~/data/pipeline/comprimidos` |
+| `CRF` | Calidad CRF (menor = mejor) | `28` |
+| `PRESET` | Preset de velocidad | `fast` |
+| `CODEC` | Códec de vídeo | `libx264` |
+| `RESOLUTION` | Escalar altura a `N`px (ej: `720`) | sin reescalar |
+| `COMPLETED_ONLY` | Procesar solo `*_completed.*` (`true`/`false`) | `false` |
+| `POLL_INTERVAL` | Segundos entre comprobaciones | `30` |
+| `TAMANO_MAX_MB` | Tamaño máximo en MB (si supera, 2 pasadas) | `1900` |
+| `AUDIO_CODEC` | Códec de audio | `aac` |
+| `AUDIO_BITRATE` | Bitrate de audio | `128k` |
+| `OCR_STEP` | Paso de OCR en segundos | `180` |
+| `CORTE_MARGEN` | Margen de corte en segundos | `300` |
+| `MIN_DURACION` | Duración mínima en segundos | `60` |
 
 #### Servicio Docker `monitor`
 
