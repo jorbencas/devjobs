@@ -3,6 +3,7 @@ services:
     build: .
     container_name: twitchrecorder-sendo
     restart: unless-stopped
+    user: "1000:1000"
     volumes:
       - ./config.json:/app/config.json:ro
       - ../data/pipeline/grabaciones:/recordings

@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /recordings
+RUN mkdir -p /recordings && chown 1000:1000 /recordings
 
 ENTRYPOINT ["python", "-u", "main.py"]
 CMD []
