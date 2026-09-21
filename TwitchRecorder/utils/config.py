@@ -77,7 +77,9 @@ def get_channels_with_platform(config: dict) -> list:
     prioridad (p. ej. [{"platform": "web", "url": "..."}, "kick", "twitch"]).
     `url` es la URL opcional asociada al canal (p. ej. la web del streamer).
     `extra` es el resto de la config del canal (days, start_time, ...) para
-    los horarios por canal del scheduler."""
+    los horarios por canal del scheduler.
+
+    Si un canal tiene "enabled": false, se omite."""
     channels = config.get("channels", [])
 
     if isinstance(channels, dict):

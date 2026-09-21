@@ -49,7 +49,9 @@ def _dias_para(extra: dict, config: dict) -> list:
     dias = extra.get("days") or config.get("days")
     if isinstance(dias, str):
         dias = [dias]
-    return list(dias) if dias else ALL_DAYS
+    if not dias:
+        return ALL_DAYS
+    return [d.capitalize() for d in dias]
 
 
 def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:

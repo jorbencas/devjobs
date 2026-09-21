@@ -100,8 +100,7 @@ def parse_sources(platform, url: str = "") -> list:
       un str (plataforma) o un dict {"platform": ..., "url": ...} (para la
       fuente "web" con su URL).
     - Mantiene compatibilidad con la config antigua (platform como str).
-    - Conserva campos extra del dict (ej. "channel" para un handle distinto al
-      del canal, o "descripcion": true para captions propios).
+    - Conserva campos extra del dict (ej. "detectar": false, "corte": true).
     Devuelve una lista de dicts {'platform', 'url', ...}."""
     if isinstance(platform, (list, tuple)):
         sources = []
@@ -150,16 +149,15 @@ class Recorder:
         delegando en el módulo correspondiente."""
         platform = src["platform"]
         s_url = src.get("url", "")
-        canal = src.get("channel") or self.channel
         if platform == "twitch":
             from utils.twitch import is_live
-            return is_live(canal)
+            return is_live(self.channel)
         elif platform == "youtube":
             from utils.youtube import is_live
-            return is_live(canal)
+            return is_live(self.channel)
         elif platform == "kick":
             from utils.kick import is_live
-            return is_live(canal)
+            return is_live(self.channel)
         elif platform == "web":
             from utils.web import is_live
             return is_live(s_url or self.channel)
@@ -240,13 +238,12 @@ class Recorder:
         src = self._active or self.sources[0]
         platform = src["platform"]
         s_url = src.get("url", "")
-        canal = src.get("channel") or self.channel
         if platform == "twitch":
-            return f"https://www.twitch.tv/{canal}"
+            return f"https://www.twitch.tv/{self.channel}"
         elif platform == "youtube":
-            return f"https://www.youtube.com/@{canal}/live"
+            return f"https://www.youtube.com/@{self.channel}/live"
         elif platform == "kick":
-            return f"https://kick.com/{canal}"
+            return f"https://kick.com/{self.channel}"
         elif platform == "web":
             from utils.web import get_stream_url as web_get_stream_url
             return web_get_stream_url(s_url or self.channel)
@@ -268,8 +265,8 @@ class Recorder:
         if platform == "web":
             src_w = self._active or self.sources[0]
             s_url_w = src_w.get("url", "") or s_url or ""
-            kick_ch = src_w.get("kick_channel") or src_w.get("channel")
-            twitch_ch = src_w.get("twitch_channel") or src_w.get("channel")
+            kick_ch = src_w.get("kick_channel") or self.channel
+            twitch_ch = src_w.get("twitch_channel") or self.channel
 
             url_l = s_url_w.lower()
             is_kick_url = "kick.com" in url_l

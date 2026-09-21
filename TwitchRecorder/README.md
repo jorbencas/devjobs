@@ -169,25 +169,22 @@ Fin   Concatena partes → un solo vídeo en Telegram
 `platform` admite un **str** (una sola fuente) o una **lista** de fuentes en orden de
 **prioridad**: se graba de la primera que esté en directo. Cada elemento es un str
 (plataforma) o un dict `{"platform": "web", "url": "..."}` para una web. Un dict
-puede llevar campos extra: **`channel`** (handle distinto al del canal, p. ej.
-el YouTube de Sendo es `@sendosenpai`).
+puede llevar campos extra: **`detectar`**, **`corte`**.
 
 ```json
 "channels": {
     "sendosama": {
         "platform": [
             { "platform": "web", "url": "https://watch.sendosama.net/" },
-            { "platform": "youtube", "channel": "sendosenpai" },
-            "twitch",
-            "kick"
+            { "platform": "twitch" },
+            { "platform": "kick" }
         ]
     }
 }
 ```
 
 En este ejemplo, si la web del streamer está emitiendo (su servidor, que muestra
-el directo real y los capítulos) se graba de ahí; si no, se prueba el YouTube de
-Sendo (donde normalmente emite los **domingos**), luego Twitch (lo normal) y Kick.
+el directo real y los capítulos) se graba de ahí; si no, se prueba Twitch y Kick.
 
 > **Ojo — la web suele estar CAÍDA.** Es un servidor propio que Sendo enciende
 > solo cuando quiere mostrar los capítulos (normalmente emite en Twitch y la
@@ -204,12 +201,11 @@ semana**. Se define a nivel de canal con `dias_plataforma`, un dict con la clave
 "sendosama": {
     "platform": [
         { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-        { "platform": "youtube", "channel": "sendosenpai" },
         { "platform": "twitch", "detectar": true, "corte": true },
         { "platform": "kick", "detectar": true, "corte": true }
     ],
     "dias_plataforma": {
-        "Sunday":     ["youtube", "twitch", "web", "kick"],
+        "Sunday":     ["twitch", "web", "kick"],
         "*":          ["web", "twitch", "kick"]
     }
 }
@@ -220,9 +216,7 @@ existe, usa `"*"`. Las cadenas de la lista deben coincidir con el `platform` o e
 `"platform"` de cada fuente del canal (**web/twitch/kick/youtube**).
 
 > **Sustituyen, no reordenan.** A diferencia de `platform`, la lista del día
-> **descarta** las fuentes que no aparecen y usa ese orden. Ej.: los **domingos**
-> se prioriza **YouTube** (donde Sendo normalmente emite) y se cae a Twitch/web/kick;
-> el **resto de días** se omite YouTube por completo (`web → twitch → kick`).
+> **descarta** las fuentes que no aparecen y usa ese orden.
 
 ### Detección de episodios y corte: configurables por fuente
 
@@ -252,7 +246,6 @@ ni corta:
 "sendosama": {
     "platform": [
         { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-        { "platform": "youtube", "channel": "sendosenpai" },
         { "platform": "twitch", "detectar": true, "corte": true },
         { "platform": "kick", "detectar": true, "corte": true }
     ]
@@ -360,12 +353,11 @@ la semana (en inglés) con la clave especial `"*"` como comodín:
     "sendosama": {
         "platform": [
             { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": true },
-            { "platform": "youtube", "channel": "sendosenpai" },
             { "platform": "twitch", "detectar": true, "corte": true },
             { "platform": "kick", "detectar": true, "corte": true }
         ],
         "dias_plataforma": {
-            "Sunday": ["youtube", "twitch", "web", "kick"],
+            "Sunday": ["twitch", "web", "kick"],
             "*": ["web", "twitch", "kick"]
         },
         "start_time": { "Sunday": "19:00", "*": "21:30" }

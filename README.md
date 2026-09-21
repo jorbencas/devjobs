@@ -103,7 +103,6 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
         "sendosama": {
             "platform": [
                 { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
-                { "platform": "youtube", "channel": "sendosenpai" },
                 { "platform": "twitch", "detectar": false, "corte": false },
                 { "platform": "kick", "detectar": false, "corte": false }
             ],
@@ -149,7 +148,6 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
 |-------|----------|---------|
 | `platform` | Tipo: `web`, `youtube`, `twitch`, `kick` | Requerido |
 | `url` | URL directa (solo `web`) | — |
-| `channel` | Nombre del canal (YouTube/Kick) | — |
 | `detectar` | OCR de episodios en el monitor | `true` |
 | `corte` | Recortar intro/outro según episodios | `true` |
 
