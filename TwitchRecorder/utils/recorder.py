@@ -470,7 +470,6 @@ class Recorder:
             "--write-thumbnail",
             "--convert-thumbnails", "jpg",
             "--no-warnings",
-            "--remote-components", "ejs:github",
         ]
 
         self.process = subprocess.Popen([ytdlp_exe] + cmd, **popen_kwargs)
