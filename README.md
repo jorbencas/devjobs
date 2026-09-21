@@ -108,7 +108,7 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
             ],
             "start_time": { "Sunday": "19:00", "*": "21:30" },
             "dias_plataforma": {
-                "*": ["web", "youtube", "kick", "twitch"]
+                "*": ["web", "twitch", "kick"]
             }
         }
     },
@@ -157,7 +157,7 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
 
 ```json
 "dias_plataforma": {
-    "*": ["web", "youtube", "kick", "twitch"]
+    "*": ["web", "twitch", "kick"]
 }
 ```
 
