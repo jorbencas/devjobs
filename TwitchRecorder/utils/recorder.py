@@ -75,7 +75,7 @@ def _get_duration_str(file_path: Path) -> str:
              "-of", "csv=p=0", str(file_path)],
             stderr=subprocess.DEVNULL,
         )
-        seconds = float(out.decode().strip())
+        seconds = float(out.decode().strip().splitlines()[0])
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
@@ -638,7 +638,7 @@ class Recorder:
                 )
                 out = out.decode().strip()
                 if out:
-                    heights.append(int(out))
+                    heights.append(int(out.splitlines()[0]))
             if not heights:
                 return False
             h = min(heights)
@@ -831,7 +831,7 @@ class Recorder:
                     [_FFPROBE, "-v", "error", "-select_streams", "v:0",
                      "-show_entries", "stream=codec_height,codec_name", "-of", "csv=p=0", str(p)],
                     stderr=subprocess.DEVNULL,
-                ).decode().strip()
+                ).decode().strip().splitlines()[0]
                 parts_info = out.split(",")
                 height = int(parts_info[0]) if len(parts_info) > 0 else None
                 vcodec = parts_info[1] if len(parts_info) > 1 else None
