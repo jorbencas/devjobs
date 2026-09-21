@@ -228,7 +228,12 @@ async def modulo_clonacion(client):
             if trad and texto:
                 await client.send_message(destino, texto, file=message.media if not descargar else None)
             else:
-                await client.send_message(destino, message)
+                # Copia directa (sin forward) para兼容 chats protegidos
+                cap = message.message or None
+                if message.media:
+                    await client.send_file(destino, message.media, caption=cap)
+                elif cap:
+                    await client.send_message(destino, cap)
 
             if descargar and message.media:
                 cola_descarga.append(message)

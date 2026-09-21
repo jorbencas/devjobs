@@ -1377,8 +1377,9 @@ async def _clonar_canal_a_canal(client):
                         if not cap:
                             return None
                         return await client.send_message(destino, cap)
-                    # Modo copia: sin "Forwarded from" (quitar remitente).
-                    if quitar_rem or quitar_cap:
+                    # Modo copia: sin "Forwarded from" (quitar remitente) o chat protegido.
+                    es_protegido = getattr(origen, 'noforward', False)
+                    if quitar_rem or quitar_cap or es_protegido:
                         if m.media:
                             return await client.send_file(destino, m.media, caption=cap)
                         if not cap:
@@ -3182,7 +3183,14 @@ async def modulo_vigilante(client):
                         else:
                             await client.send_message(dest, alerta + origen)
                     else:
-                        await client.send_message(dest, msg)
+                        # Reenviar como copia para evitar error en chats protegidos
+                        cap = msg.message or None
+                        if msg.media:
+                            await client.send_file(dest, msg.media, caption=cap)
+                        elif cap:
+                            await client.send_message(dest, cap)
+                        else:
+                            await client.send_message(dest, alerta + origen)
                     contador["reenviadas"] += 1
                 else:
                     if cfg.get("marcar_razon"):
