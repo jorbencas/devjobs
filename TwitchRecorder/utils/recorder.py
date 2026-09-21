@@ -16,6 +16,10 @@ from utils.logger import log
 
 IS_WINDOWS = platform.system() == "Windows"
 
+# Cache de rutas de ffmpeg/ffprobe (se resuelven una sola vez)
+_FFMPEG = shutil.which("ffmpeg")
+_FFPROBE = shutil.which("ffprobe")
+
 
 def _normalize_keyword(text: str, max_len: int = 40) -> str:
     """Reduce el título del directo a una keyword segura para el nombre del archivo."""
@@ -31,24 +35,12 @@ def _normalize_keyword(text: str, max_len: int = 40) -> str:
     return "_".join(selected)[:max_len]
 
 
-def _find_streamlink() -> str:
-    """Localiza el ejecutable de streamlink (o su módulo -m como fallback)."""
+def _find_executable(name: str, module: str) -> tuple:
+    """Localiza un ejecutable (o su módulo -m como fallback en Windows)."""
     if IS_WINDOWS:
-        return sys.executable, ["-m", "streamlink"]
-    exe = shutil.which("streamlink")
-    if exe:
-        return exe, []
-    return sys.executable, ["-m", "streamlink"]
-
-
-def _find_ytdlp() -> str:
-    """Localiza el ejecutable de yt-dlp (o su módulo -m como fallback)."""
-    if IS_WINDOWS:
-        return sys.executable, ["-m", "yt_dlp"]
-    exe = shutil.which("yt-dlp")
-    if exe:
-        return exe, []
-    return sys.executable, ["-m", "yt_dlp"]
+        return sys.executable, ["-m", module]
+    exe = shutil.which(name)
+    return (exe, []) if exe else (sys.executable, ["-m", module])
 
 
 def _is_generic_live_title(title: str, channel: str, uploader: str = "") -> bool:
@@ -75,12 +67,11 @@ def _format_size(size_bytes: int) -> str:
 
 def _get_duration_str(file_path: Path) -> str:
     """Obtiene la duración de un vídeo en formato HH:MM:SS usando ffprobe."""
-    ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
+    if not _FFPROBE:
         return "duración desconocida"
     try:
         out = subprocess.check_output(
-            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+            [_FFPROBE, "-v", "error", "-show_entries", "format=duration",
              "-of", "csv=p=0", str(file_path)],
             stderr=subprocess.DEVNULL,
         )
@@ -117,6 +108,11 @@ def parse_sources(platform, url: str = "") -> list:
     return [{"platform": platform, "url": url or ""}]
 
 
+def _sidecar_path(video_path: Path) -> Path:
+    """Ruta del sidecar _descripcion.json para un vídeo."""
+    return video_path.with_name(video_path.stem + "_descripcion.json")
+
+
 class Recorder:
     """Grabador de un canal. Gestiona el ciclo completo: detección de directo
     entre fuentes ordenadas, arranque de streamlink/yt-dlp, corte en partes
@@ -143,6 +139,11 @@ class Recorder:
         self._current_file = None
         self._partes = []
         self._stop_event = threading.Event()
+
+    @property
+    def _active_source(self) -> dict:
+        """Fuente activa (la que está grabando) o la primera de la lista."""
+        return self._active or self.sources[0]
 
     def _is_source_live(self, src: dict) -> bool:
         """Comprueba si una fuente (twitch/youtube/kick/web) está en directo,
@@ -235,7 +236,7 @@ class Recorder:
 
     def get_stream_url(self) -> str:
         """URL directa del stream de la fuente activa (o la 1ª) lista para yt-dlp."""
-        src = self._active or self.sources[0]
+        src = self._active_source
         platform = src["platform"]
         s_url = src.get("url", "")
         if platform == "twitch":
@@ -254,7 +255,7 @@ class Recorder:
         Algunos canales de Twitch dejan el título genérico ("<canal> (live)") en
         el campo title, pero ponen el título real en la descripción. Si detectamos
         un título genérico, usamos la descripción como fuente del título."""
-        src = self._active or self.sources[0]
+        src = self._active_source
         platform = src["platform"]
         s_url = src.get("url", "")
 
@@ -263,7 +264,7 @@ class Recorder:
         # API real de la plataforma (Kick sin OAuth, Twitch vía yt-dlp sin OAuth).
         # El HTML queda como ÚLTIMO recurso, no como primero.
         if platform == "web":
-            src_w = self._active or self.sources[0]
+            src_w = self._active_source
             s_url_w = src_w.get("url", "") or s_url or ""
             kick_ch = src_w.get("kick_channel") or self.channel
             twitch_ch = src_w.get("twitch_channel") or self.channel
@@ -376,7 +377,7 @@ class Recorder:
             popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
         try:
-            src = self._active or self.sources[0]
+            src = self._active_source
             if src["platform"] == "twitch":
                 self._start_streamlink(output_path, popen_kwargs)
             else:
@@ -422,7 +423,7 @@ class Recorder:
         if not data:
             return
         try:
-            sidecar = output_path.with_name(output_path.stem + "_descripcion.json")
+            sidecar = _sidecar_path(output_path)
             sidecar.write_text(
                 json.dumps(data, ensure_ascii=False),
                 encoding="utf-8",
@@ -441,7 +442,7 @@ class Recorder:
 
         log.info(f"[{self.channel}] Calidad: {quality}")
 
-        sl_exe, sl_prefix = _find_streamlink()
+        sl_exe, sl_prefix = _find_executable("streamlink", "streamlink")
         cmd = sl_prefix + [
             f"https://www.twitch.tv/{self.channel}",
             quality,
@@ -454,7 +455,7 @@ class Recorder:
     def _start_ytdlp(self, output_path: Path, popen_kwargs: dict) -> None:
         """Lanza yt-dlp para grabar YouTube/Kick/web en 'best' (con thumbnail jpg)."""
         url = self.get_stream_url()
-        ytdlp_exe, ytdlp_prefix = _find_ytdlp()
+        ytdlp_exe, ytdlp_prefix = _find_executable("yt-dlp", "yt_dlp")
 
         output_template = str(output_path)
 
@@ -537,13 +538,11 @@ class Recorder:
         moov sin recodificar."""
         if not file_path.exists():
             return
-        ffprobe = shutil.which("ffprobe")
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffprobe or not ffmpeg:
+        if not _FFPROBE or not _FFMPEG:
             return
         try:
             subprocess.check_output(
-                [ffprobe, "-v", "error", "-show_entries", "format=duration",
+                [_FFPROBE, "-v", "error", "-show_entries", "format=duration",
                  "-of", "csv=p=0", str(file_path)],
                 stderr=subprocess.DEVNULL,
             )
@@ -554,7 +553,7 @@ class Recorder:
         repaired = file_path.with_name(file_path.stem + "_reparado.mp4")
         try:
             subprocess.run(
-                [ffmpeg, "-y", "-err_detect", "ignore_err", "-i", str(file_path),
+                [_FFMPEG, "-y", "-err_detect", "ignore_err", "-i", str(file_path),
                  "-c", "copy", "-movflags", "+faststart", str(repaired)],
                 check=True,
                 stdout=subprocess.DEVNULL,
@@ -595,33 +594,23 @@ class Recorder:
         final = base.with_name(base.stem + ".mp4")
         tmp = final.with_name(final.stem + "_tmp.mp4")
         log.info(f"[{self.channel}] Concatenando {len(partes)} partes del directo...")
-        # Intentar concat con -c copy primero (muy rápido si los códecs coinciden)
-        if self._concatenar_con_copy(partes, tmp):
-            # Primero colocar el concat en su nombre final y SOLO entonces borrar
-            # las partes (si algo falla antes, las partes siguen intactas).
-            try:
-                shutil.move(str(tmp), str(final))
-            except Exception as e:
-                log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
-                return
-        else:
-            # Fallback: reencode completo (método original, más lento pero compatible)
-            if not self._concatenar(partes, tmp):
-                log.warning(f"[{self.channel}] No se pudo concatenar; se mantienen las partes por separado")
-                return
-            # Primero colocar el concat en su nombre final y SOLO entonces borrar
-            # las partes (si algo falla antes, las partes siguen intactas).
-            try:
-                shutil.move(str(tmp), str(final))
-            except Exception as e:
-                log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
-                return
+        # Intentar concat con -c copy primero (muy rápido si los códecs coinciden);
+        # si falla, reencode completo (más lento pero compatible).
+        ok = self._concatenar_con_copy(partes, tmp) or self._concatenar(partes, tmp)
+        if not ok:
+            log.warning(f"[{self.channel}] No se pudo concatenar; se mantienen las partes por separado")
+            return
+        try:
+            shutil.move(str(tmp), str(final))
+        except Exception as e:
+            log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
+            return
         # Sidecar de descripción de la primera parte (si existe) → archivo final
         for p in partes:
-            sc = p.with_name(p.stem + "_descripcion.json")
+            sc = _sidecar_path(p)
             if sc.exists():
                 try:
-                    shutil.copy(sc, final.with_name(final.stem + "_descripcion.json"))
+                    shutil.copy(sc, _sidecar_path(final))
                 except Exception:
                     pass
                 break
@@ -634,16 +623,14 @@ class Recorder:
     def _concatenar(self, partes: list, output: Path) -> bool:
         """Concatena las partes con ffmpeg (concat filter + re-encode), escalando
         cada entrada a la altura común más baja para que el filtro no falle."""
-        ffmpeg = shutil.which("ffmpeg")
-        ffprobe = shutil.which("ffprobe")
-        if not ffmpeg or not ffprobe:
+        if not _FFMPEG or not _FFPROBE:
             log.warning(f"[{self.channel}] ffmpeg/ffprobe no disponibles, sin concatenar")
             return False
         try:
             heights = []
             for p in partes:
                 out = subprocess.check_output(
-                    [ffprobe, "-v", "error", "-select_streams", "v:0",
+                    [_FFPROBE, "-v", "error", "-select_streams", "v:0",
                      "-show_entries", "stream=height", "-of", "csv=p=0", str(p)],
                     stderr=subprocess.DEVNULL,
                 )
@@ -658,7 +645,7 @@ class Recorder:
             vlabels = "".join(f"[v{i}]" for i in range(n))
             alabels = "".join(f"[{i}:a]" for i in range(n))
             filters.append(f"{vlabels}{alabels}concat=n={n}:v=1:a=1[vout][aout]")
-            cmd = [ffmpeg, "-y"]
+            cmd = [_FFMPEG, "-y"]
             for p in partes:
                 cmd += ["-i", str(p)]
             cmd += [
@@ -681,9 +668,9 @@ class Recorder:
         self.test_path.mkdir(parents=True, exist_ok=True)
         dest = self.test_path / f"{orig.stem}_completed.mp4"
         shutil.copy2(str(orig), str(dest))
-        sidecar = orig.with_name(orig.stem + "_descripcion.json")
+        sidecar = _sidecar_path(orig)
         if sidecar.exists():
-            shutil.copy2(str(sidecar), str(dest.with_name(dest.stem + "_descripcion.json")))
+            shutil.copy2(str(sidecar), str(_sidecar_path(dest)))
             log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
         return dest
 
@@ -717,7 +704,7 @@ class Recorder:
         wait_start = time.time()
         while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
             if self.is_live():
-                new_platform = self._active["platform"] if self._active else prev_platform
+                new_platform = self._active_source["platform"]
                 log.info(f"[{self.channel}] El directo vuelve en {new_platform}")
                 return new_platform
             remaining = int(max_wait - (time.time() - wait_start))
@@ -772,7 +759,7 @@ class Recorder:
                 # acabó el directo. No dar la grabación por terminada todavía:
                 # puede ser un cambio de plataforma en marcha (p. ej. la web se
                 # cae y Kick/Twitch aún no ha arrancado).
-                prev_platform = self._active["platform"] if self._active else self.sources[0]["platform"]
+                prev_platform = self._active_source["platform"]
                 new_platform = self._esperar_directo(prev_platform)
                 if new_platform is None:
                     log.info(f"[{self.channel}] Directo finalizado")
@@ -816,8 +803,7 @@ class Recorder:
         """Intenta concatenar las partes usando ffmpeg concat demuxer con
         -c copy (muy rápido, lossless si los códecs coinciden). Si falla,
         retorna False para que el caller use _concatenar (reencode)."""
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
+        if not _FFMPEG or not _FFPROBE:
             return False
         # Verificar que todas las partes tengan el mismo códec y resolución
         first_height = None
@@ -825,7 +811,7 @@ class Recorder:
         for p in partes:
             try:
                 out = subprocess.check_output(
-                    ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                    [_FFPROBE, "-v", "error", "-select_streams", "v:0",
                      "-show_entries", "stream=codec_height,codec_name", "-of", "csv=p=0", str(p)],
                     stderr=subprocess.DEVNULL,
                 ).decode().strip()
@@ -846,7 +832,7 @@ class Recorder:
                 for p in partes:
                     f.write(f"file '{p.resolve()}'\n")
             cmd = [
-                ffmpeg, "-y",
+                _FFMPEG, "-y",
                 "-f", "concat", "-safe", "0",
                 "-i", str(list_file),
                 "-c", "copy",

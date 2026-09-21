@@ -18,13 +18,3 @@ def is_live(channel: str) -> bool:
             return info and info.get("is_live", False)
     except Exception:
         return False
-
-
-def get_quality(channel: str) -> str:
-    """Calidad de grabación en YouTube (siempre 'best')."""
-    return "best"
-
-
-def get_stream_url(channel: str) -> str:
-    """URL del directo de YouTube del canal."""
-    return f"https://www.youtube.com/@{channel}/live"

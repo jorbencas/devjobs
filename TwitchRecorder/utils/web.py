@@ -22,6 +22,11 @@ _COLA_FUERA = 60
 _MEDIA_STATE = {}
 
 
+def _build_hls_url(domain: str) -> str:
+    """Construye la URL del m3u8 HLS a partir del dominio del edge server."""
+    return _build_hls_url(domain)
+
+
 def _get_hls_domain(url: str) -> str:
     """Obtiene el dominio del servidor HLS desde la API interna de watch.sendosama.net.
 
@@ -175,7 +180,7 @@ def is_live(url: str) -> bool:
         domain = _get_hls_domain(url)
         if not domain:
             return False
-        hls_url = f"https://{domain}/hls/public/ts:abr.m3u8"
+        hls_url = _build_hls_url(domain)
         estado = _hls_estado(hls_url)
         if estado == "f":
             return False
@@ -191,7 +196,7 @@ def is_live(url: str) -> bool:
             "skip_download": True,
             "socket_timeout": 6,
         }
-        hls_url = f"https://{domain}/hls/public/ts:abr.m3u8"
+        hls_url = _build_hls_url(domain)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(hls_url, download=False)
             if not info:
@@ -202,11 +207,6 @@ def is_live(url: str) -> bool:
             return bool(formats)
     except Exception:
         return False
-
-
-def get_quality(url: str) -> str:
-    """Calidad de grabación de la web (yt-dlp la elige: siempre 'best')."""
-    return "best"
 
 
 def get_stream_url(url: str) -> str:
@@ -220,7 +220,7 @@ def get_stream_url(url: str) -> str:
         return url
     domain = _get_hls_domain(url)
     if domain:
-        hls_url = f"https://{domain}/hls/public/ts:abr.m3u8"
+        hls_url = _build_hls_url(domain)
         log.info(f"[web] HLS URL: {hls_url}")
         return hls_url
     log.warning(f"[web] No se pudo obtener dominio HLS para {url}")
@@ -244,7 +244,6 @@ def get_title(url: str) -> str:
         resp.raise_for_status()
         html = resp.text
         # Buscar <title>
-        import re
         m = re.search(r"<title>([^<]+)</title>", html, re.IGNORECASE)
         if m:
             title = m.group(1).strip()
@@ -272,7 +271,7 @@ def probe(url: str, out_dir: str = "") -> dict:
     formats = []
     try:
         domain = _get_hls_domain(url)
-        hls_url = f"https://{domain}/hls/public/ts:abr.m3u8" if domain else url
+        hls_url = _build_hls_url(domain) if domain else url
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
