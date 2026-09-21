@@ -24,7 +24,7 @@ _MEDIA_STATE = {}
 
 def _build_hls_url(domain: str) -> str:
     """Construye la URL del m3u8 HLS a partir del dominio del edge server."""
-    return _build_hls_url(domain)
+    return f"https://{domain}/hls/public/ts:abr.m3u8"
 
 
 def _get_hls_domain(url: str) -> str:
