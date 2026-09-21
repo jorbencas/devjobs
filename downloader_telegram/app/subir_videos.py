@@ -1,18 +1,57 @@
 #!/usr/bin/env python3
 """Subir videos comprimidos a grupos de Telegram (Telethon).
 
-Reutiliza las credenciales cifradas en config.bin + secret.key del proyecto
-downloader_telegram, pero usa su PROPIA sesion (uploader.session) para no
-entrar en conflicto con la sesion del menu interactivo (ultimate_session).
+Este script forma parte del PIPELINE DE ENVÍO (sending pipeline):
+  1. TwitchRecorder graba directos de Twitch/YouTube/Kick/Web
+  2. monitor_folder.sh comprime y detecta episodios (detectar_episodios.py)
+  3. Este script (subir_videos.py) SUBE los vídeos a Telegram
 
-Modos:
-  --setup       Iniciar sesion una vez (genera uploader.session).
-  --list-chats  Mostrar tus chats/grupos para configurar grupos.json.
-  --list-topics Listar los temas (series) de un grupo con foro.
-  --autoupload  Vigilar CARPETAS/ y subir cada *_compressed.mp4 a los
-                grupos de grupos.json (y a los temas de grupo_series).
-                (modo por defecto)
-  --once        Procesar una sola pasada y salir (sin bucle).
+Flujo del autoupload (modo por defecto):
+  1. Vigila carpetas de comprimidos cada N segundos (UPLOADER_INTERVALO)
+  2. Para cada *_compressed.mp4 nuevo:
+     a. Extrae keyword y canal del nombre del archivo
+     b. Rutea a grupos/temas según la keyword (grupos.json)
+     c. Detecta episodios (OCR o metadata del monitor)
+     d. Genera caption: "1-4", "Temporada 2 · 1-4", "🎬 Directo de canal"
+     e. Si >2GB, divide en partes de 90 min (ffmpeg -c copy)
+     f. Sube a cada destino (grupo + tema del foro)
+     g. Reenvía al canal de forward si la keyword coincide
+     h. Marca como enviado (enviados.json) y limpia restos
+
+Credenciales:
+  - config.bin: api_id + api_hash cifrados con Fernet
+  - secret.key: clave Fernet para descifrar config.bin
+  - uploader.session: sesión de Telegram (generada con --setup)
+  - Alternativa: variables de entorno UPLOADER_API_ID / UPLOADER_API_HASH
+
+Modos CLI:
+  --setup         Iniciar sesión una vez (genera uploader.session).
+  --list-chats    Mostrar tus chats/grupos para configurar grupos.json.
+  --list-topics   Listar los temas (series) de un grupo con foro.
+  --create-topics Crear temas nuevos en un grupo con foro.
+  --delete-videos Eliminar vídeos de un grupo (con confirmación).
+  --autoupload    Modo por defecto: vigilar carpetas y subir.
+  --once          Procesar una sola pasada y salir (sin bucle).
+
+Config (grupos.json):
+  {
+    "default": <id_grupo_fallback>,
+    "grupos": [{"nombre": "prueba", "id": <id>}, ...],
+    "foros": [{
+      "id": <id_chat_con_foro>,
+      "nombre": "sendo",
+      "general": <id_tema_general>,
+      "temas": [{"nombre": "serie", "id": <topic>}, ...]
+    }]
+  }
+
+Variables de entorno:
+  UPLOADER_INTERVALO     Segundos entre pasadas (default: 60)
+  UPLOADER_FORWARD_CHANNEL Canal de reenvío automático
+  UPLOADER_FORWARD_KEYWORD Keyword que activa el reenvío
+  UPLOADER_MAX_ENVIADOS  Límite de enviados.json (default: 15)
+  UPLOADER_OCR_STEP      Paso de escaneo OCR en segundos (default: 90)
+  UPLOADER_CARPETAS      Carpetas a vigilar (separadas por :)
 """
 
 import argparse
@@ -510,8 +549,9 @@ def detectar_episodios(archivo):
     """Detecta el contenido de la franja superior (episodios/temporada o
     película) mediante OCR de varios frames.
 
-    Escanea el vídeo con un paso (3 min por defecto, configurable con
-    UPLOADER_OCR_STEP), recorta la franja superior, hace OCR y:
+    Escanea el vídeo con un paso (90s por defecto, configurable con
+    UPLOADER_OCR_STEP), recorta la franja superior (top 25%), hace OCR
+    en múltiples modos PSM y:
       - Si aparecen 'EPISODIO/CAPÍTULO N' (opcionalmente con 'TEMPORADA N'),
         devuelve 'Episodio 1-4' o 'Temporada 2 · Episodio 1-4'.
       - Si aparece 'película', devuelve 'Película · TÍTULO' (por frecuencia
@@ -520,7 +560,93 @@ def detectar_episodios(archivo):
     Necesita ffmpeg y tesseract-ocr (con tesseract-ocr-data-eng) disponibles."""
     import re
     from collections import Counter
-    paso = int(os.environ.get("UPLOADER_OCR_STEP", "180"))
+
+    STOP = {
+        "episodio", "episodios", "capitulo", "capitulos", "capítulo", "capítulos",
+        "temporada", "temp", "pelicula", "peliculas", "película", "películas",
+        "la", "el", "los", "las", "de", "en", "y", "a", "que",
+    }
+
+    # Patrones de episodios: de más específico a más general
+    PATRONES_EP = [
+        r"s(\d+)e(\d+)",           # S01E02
+        r"(\d+)x(\d+)",            # 1x02
+        r"(?:episodio|episodios|ep|cap[ií]tulo|cap|chapter)\s*(\d+)",
+        r"(\d+)\s*(?:episodio|episodios|ep|cap[ií]tulo|cap|chapter)",
+        r"(?:ep|cap)\s*\.?\s*(\d+)",  # EP. 1, EP1, CAP. 3
+        r"#\s*(\d+)",              # #1, #23
+    ]
+
+    FUZZY_DIGIT = {
+        'o': '0', 'O': '0',
+        'l': '1', 'I': '1', 'i': '1', '|': '1',
+        'z': '2', 'Z': '2',
+        's': '5', 'S': '5',
+        '&': '8', 'B': '8', 'b': '8',
+        'g': '9',
+    }
+
+    def _fuzzy_a_digito(texto):
+        if not texto:
+            return None
+        limpio = ""
+        for c in texto:
+            if c.isdigit():
+                limpio += c
+            elif c in FUZZY_DIGIT:
+                limpio += FUZZY_DIGIT[c]
+            else:
+                return None
+        try:
+            num = int(limpio)
+            return num if 1 <= num <= 999 else None
+        except ValueError:
+            return None
+
+    def _ocr_texto(img_path):
+        """OCR en 3 pasadas (PSM 3, 7, 6), devuelve la con más patrones."""
+        textos = []
+        for psm in ("3", "7", "6"):
+            try:
+                ocr = subprocess.run(
+                    ["tesseract", str(img_path), "stdout", "-l", "eng",
+                     "--psm", psm],
+                    capture_output=True, text=True)
+                if ocr.stdout:
+                    textos.append(ocr.stdout)
+            except Exception:
+                pass
+        if not textos:
+            return ""
+        if len(textos) == 1:
+            return textos[0]
+        def _puntos(txt):
+            bajo = txt.lower()
+            pts = len(re.findall(r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*\S{0,4}\d", bajo))
+            pts += len(re.findall(r"\d\s*[xX]\s*\d", bajo))
+            pts += len(re.findall(r"[sS]\d+[eE]\d+", bajo))
+            pts += len(re.findall(r"(?:temporada|temp|season)\s*\d+", bajo))
+            pts += len(re.findall(r"pel[ií]cula", bajo))
+            pts += len(re.findall(r"#\s*\d+", bajo))
+            return pts
+        return max(textos, key=_puntos)
+
+    def _preprocess_image(img_path):
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter
+            img = Image.open(img_path)
+            img = img.convert('L')
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.0)
+            img = img.filter(ImageFilter.SHARPEN)
+            img = img.point(lambda x: 0 if x < 128 else 255)
+            processed_path = img_path.parent / f"proc_{img_path.name}"
+            img.save(processed_path)
+            return processed_path
+        except Exception:
+            return img_path
+
+    paso = int(os.environ.get("UPLOADER_OCR_STEP", "90"))
     try:
         dur_out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -532,14 +658,9 @@ def detectar_episodios(archivo):
     if not dur or dur <= 0:
         return ""
 
-    STOP = {
-        "episodio", "episodios", "capitulo", "capitulos", "capítulo", "capítulos",
-        "temporada", "temp", "pelicula", "peliculas", "película", "películas",
-        "la", "el", "los", "las", "de", "en", "y", "a", "que",
-    }
-    episodios = set()
-    temporadas = set()
-    pelicula_times = 0
+    episodios = {}     # num -> [primero, ultimo, muestras]
+    temporadas = {}    # num -> [primero, ultimo]
+    pelicula_times = []
     palabras = Counter()
     muestras = 0
     tmp = Path("/tmp") / (archivo.stem + "_ep")
@@ -550,25 +671,65 @@ def detectar_episodios(archivo):
         try:
             subprocess.run(
                 ["ffmpeg", "-y", "-ss", str(t), "-i", str(archivo),
-                 "-frames:v", "1", "-vf", "crop=iw:ih*0.2:0:0,scale=iw*2:-1",
+                 "-frames:v", "1", "-vf", "crop=iw:ih*0.25:0:0,scale=iw*2:-1",
                  "-q:v", "2", img],
                 capture_output=True, text=True, check=True)
-            ocr = subprocess.run(
-                ["tesseract", img, "stdout", "-l", "eng"],
-                capture_output=True, text=True)
-            texto = ocr.stdout
+            proc_img = _preprocess_image(Path(img))
+            texto = _ocr_texto(proc_img)
             texto_bajo = texto.lower()
-            for m in re.finditer(r"(?:episodio|cap[ií]tulo)\s*(\d+)", texto, re.IGNORECASE):
-                episodios.add(int(m.group(1)))
-            for m in re.finditer(r"(?:temporada|temp)[a-z]*\s*(\d+)", texto, re.IGNORECASE):
-                temporadas.add(int(m.group(1)))
+
+            # Extraer episodios con patrones mejorados
+            for patron in PATRONES_EP:
+                for m in re.finditer(patron, texto, re.IGNORECASE):
+                    groups = m.groups()
+                    if len(groups) == 2:
+                        try:
+                            temp_num = int(groups[0])
+                            ep_num = int(groups[1])
+                            if 1 <= temp_num <= 50:
+                                temporadas.setdefault(temp_num, [t, t])
+                                temporadas[temp_num][1] = t
+                            if 1 <= ep_num <= 999:
+                                episodios.setdefault(ep_num, [t, t, 1])
+                                episodios[ep_num][1] = t
+                                episodios[ep_num][2] += 1
+                        except ValueError:
+                            pass
+                    else:
+                        texto_num = groups[0]
+                        try:
+                            num = int(texto_num)
+                        except ValueError:
+                            num = _fuzzy_a_digito(texto_num)
+                        if num is not None and 1 <= num <= 999:
+                            episodios.setdefault(num, [t, t, 1])
+                            episodios[num][1] = t
+                            episodios[num][2] += 1
+
+            # Temporadas
+            for m in re.finditer(r"(?:temporada|temp|season)\s*(\d+)", texto, re.IGNORECASE):
+                try:
+                    num = int(m.group(1))
+                except ValueError:
+                    num = _fuzzy_a_digito(m.group(1))
+                if num is not None and 1 <= num <= 50:
+                    temporadas.setdefault(num, [t, t])
+                    temporadas[num][1] = t
+
             if re.search(r"pel[ií]cula", texto_bajo):
-                pelicula_times += 1
+                pelicula_times.append(t)
+
             for m in re.finditer(r"[a-záéíóúñü]{3,}", texto_bajo):
                 w = m.group(0)
                 if w not in STOP:
                     palabras[w] += 1
             muestras += 1
+
+            if proc_img != Path(img):
+                try:
+                    proc_img.unlink(missing_ok=True)
+                except OSError:
+                    pass
         except Exception:
             pass
         finally:
@@ -579,18 +740,39 @@ def detectar_episodios(archivo):
         n += 1
         t = n * paso
 
-    if pelicula_times >= 2:
+    es_pelicula = len(pelicula_times) >= 2
+
+    if es_pelicula:
         umbral = max(3, int(muestras * 0.25))
-        orden = [w for w, c in palabras.most_common() if c >= umbral]
+        orden = [w for w, c in palabras.most_common() if c >= umbral and w not in STOP]
         titulo = " ".join(orden).upper()
         return f"Película · {titulo}" if titulo else "Película"
 
     if not episodios:
         return ""
-    episodios = sorted(episodios)
+
+    # Filtrar outliers con solapamiento significativo
+    if len(episodios) > 1:
+        ordenados = sorted(episodios.items(), key=lambda kv: -kv[1][2])
+        firmes = dict(ordenados[:1])
+        for num, v in ordenados[1:]:
+            solapado = False
+            for w in firmes.values():
+                solap_ini = max(v[0], w[0])
+                solap_fin = min(v[1], w[1])
+                solap = max(0, solap_fin - solap_ini)
+                dur_corta = min(v[1] - v[0], w[1] - w[0]) + paso
+                if dur_corta > 0 and solap > dur_corta * 0.5 and w[2] >= 3 * v[2]:
+                    solapado = True
+                    break
+            if not solapado:
+                firmes[num] = v
+        episodios = firmes
+
+    nums = sorted(episodios)
     grupos = []
-    inicio = prev = episodios[0]
-    for e in episodios[1:]:
+    inicio = prev = nums[0]
+    for e in nums[1:]:
         if e == prev + 1:
             prev = e
         else:
