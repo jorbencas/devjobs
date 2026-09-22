@@ -1,0 +1,9 @@
+FROM alpine:latest
+
+RUN apk add --no-cache ffmpeg bash findutils su-exec python3 tesseract-ocr tesseract-ocr-data-eng
+
+RUN adduser -D -u 1000 monitor
+
+RUN mkdir -p /watch /comprimidos && chown 1000:1000 /watch /comprimidos
+
+WORKDIR /app

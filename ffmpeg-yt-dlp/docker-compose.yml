@@ -18,15 +18,14 @@ services:
       su-exec jorge bash midu.sh"
 
   monitor:
-    image: alpine:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
     container_name: ffmpeg_monitor-sendo
     restart: unless-stopped
     user: root
     command: >-
-      sh -c "apk add --no-cache ffmpeg bash findutils su-exec python3 tesseract-ocr tesseract-ocr-data-eng &&
-      mkdir -p /watch /comprimidos &&
-      chown -R 1000:1000 /watch /comprimidos &&
-      exec su-exec 1000 bash /app/scripts/monitor_folder.sh"
+      su-exec 1000 bash /app/scripts/monitor_folder.sh
     volumes:
       - ./:/app
       - ../data/pipeline/grabaciones/test:/watch
