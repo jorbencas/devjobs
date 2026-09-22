@@ -1,6 +1,8 @@
 services:
   downloader:
-    image: alpine:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.downloader
     container_name: yt_ffmpeg_downloader
     volumes:
       - ./:/app
@@ -8,14 +10,7 @@ services:
     user: root
     tty: true
     stdin_open: true
-    environment:
-      - PIP_ROOT_USER_ACTION=ignore
-    command: >-
-      sh -c "apk update && apk add --no-cache ffmpeg bash su-exec python3 py3-pip jq &&
-      pip install --break-system-packages yt-dlp &&
-      id -u jorge >/dev/null 2>&1 || adduser -D -u 1000 jorge &&
-      chown -R jorge:jorge /app/test_video &&
-      su-exec jorge bash midu.sh"
+    command: bash midu.sh
 
   monitor:
     build:
@@ -25,7 +20,7 @@ services:
     restart: unless-stopped
     user: root
     command: >-
-      su-exec 1000 bash /app/scripts/monitor_folder.sh
+      bash /app/scripts/monitor_folder.sh
     volumes:
       - ./:/app
       - ../data/pipeline/grabaciones/test:/watch
@@ -37,5 +32,5 @@ services:
       - COMPLETED_ONLY=true
       - CODEC=libx264
       - CRF=28
-      - PRESET=ultrafast
+      - PRESET=fast
       - THREADS=8
