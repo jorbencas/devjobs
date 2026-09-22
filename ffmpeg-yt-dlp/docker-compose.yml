@@ -37,5 +37,5 @@ services:
       - COMPLETED_ONLY=true
       - CODEC=libx264
       - CRF=28
-      - PRESET=fast
-      - THREADS=4
+      - PRESET=ultrafast
+      - THREADS=8

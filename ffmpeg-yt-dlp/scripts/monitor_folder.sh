@@ -221,7 +221,7 @@ compress_video() {
     ffmpeg_args+=(-map 0:v:0)
     [[ -n "$has_audio" ]] && ffmpeg_args+=(-map 0:a:0)
     ffmpeg_args+=(-map_metadata 0)
-    ffmpeg_args+=(-movflags +faststart)
+    # faststart omitido: en archivos grandes ffmpeg se atasca reescribiendo el moov atom
     # -f mp4 explícito: el temporal acaba en .tmp y ffmpeg necesita el formato
     # para no fallar al elegir muxer por extensión.
     ffmpeg_args+=(-f mp4)
