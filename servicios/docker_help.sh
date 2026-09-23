@@ -34,6 +34,13 @@ FFMPEG-YT-DLP (Monitor):
   watcher          Preview watcher (host)
   watcher_daemon   Preview watcher como daemon
 
+TELEGRAM BOT:
+  tg_bot           Arrancar bot
+  tg_bot_logs      Ver logs del bot
+  tg_bot_stop      Parar bot
+  tg_bot_restart   Reiniciar bot
+  tg_bot_rebuild   Reconstruir bot
+
 TELEGRAM CLI:
   tg_menu          Toolbox interactivo de Telegram
   tg_sessions      Gestionar sesiones
