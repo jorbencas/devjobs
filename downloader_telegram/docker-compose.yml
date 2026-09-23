@@ -61,4 +61,4 @@ services:
       - BOT_ADMINS=${BOT_ADMINS}
       - TEST_GH_DIR=/data/.test_githubActions
       - DOWNLOAD_DIR=/data/descargas
-    command: python -u /app/app/telegram_bot.py
+    command: python -u /app/app/bot/telegram_bot.py

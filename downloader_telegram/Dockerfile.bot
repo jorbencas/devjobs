@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements_bot.txt
 
 COPY app/ /app/app/
 
-CMD ["python", "-u", "/app/app/telegram_bot.py"]
+CMD ["python", "-u", "/app/app/bot/telegram_bot.py"]

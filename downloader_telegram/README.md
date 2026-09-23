@@ -74,7 +74,7 @@ python test_download_protected_content_telegram.py
 
 ---
 
-## 🤖 Bot API interactivo (`telegram_bot.py`)
+## 🤖 Bot API interactivo (`app/bot/telegram_bot.py`)
 
 Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. Un solo bot que genera contenido IA y descarga vídeos de cualquier plataforma.
 
@@ -766,13 +766,14 @@ Uso de `UpdatePinnedMessageRequest` / `UnpinAllMessagesRequest` (Telethon 1.44).
 ```
 downloader_telegram/
 ├── app/                                      # código Python
+│   ├── bot/                                  # Bot API interactivo
+│   │   ├── telegram_bot.py                   # Bot API (comandos + botones + @mención)
+│   │   ├── bot_commands.py                   # Handlers de comandos (/status, /tip, etc.)
+│   │   ├── bot_callbacks.py                  # Handlers de botones inline
+│   │   └── bot_inline_keyboards.py           # Teclados inline reutilizables
 │   ├── tg_toolbox.py                         # CLI unificada (menú interactivo)
 │   ├── cli_base.py                           # utilidades autónomas del CLI (credenciales, ruteo, subida)
 │   ├── subir_videos.py                       # uploader automático a grupos (pipeline)
-│   ├── telegram_bot.py                       # Bot API interactivo (comandos + botones + @mención)
-│   ├── bot_commands.py                       # Handlers de comandos (/status, /tip, etc.)
-│   ├── bot_callbacks.py                      # Handlers de botones inline
-│   ├── bot_inline_keyboards.py               # Teclados inline reutilizables
 │   ├── pipeline_bridge.py                    # IPC: status.json + control.json + logs.json
 │   ├── migrar_temas.py                       # migración de canales a temas de foros
 │   ├── gestion_canales.py                    # crear/archivar canales + temas + migrar/borrar
