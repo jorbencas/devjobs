@@ -41,24 +41,3 @@ services:
       UPLOADER_FORWARD_CHANNEL: "-1004359591062"
       UPLOADER_FORWARD_KEYWORD: "diarios_boticaria"
     command: python -u /app/app/subir_videos.py /comprimidos
-
-  #          ============================================================
-  #          Bot API (@jorbencas_bot)
-  #          ============================================================
-  telegram_bot:
-    build:
-      context: .
-      dockerfile: Dockerfile.bot
-    container_name: telegram-bot
-    restart: unless-stopped
-    volumes:
-      - ./app:/app/app
-      - /home/jorge/dev/test_githubActions:/data/.test_githubActions
-      - /home/jorge/dev/devjobs/data/jorbencas_bot:/data/descargas
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - BOT_ADMINS=${BOT_ADMINS}
-      - TEST_GH_DIR=/data/.test_githubActions
-      - DOWNLOAD_DIR=/data/descargas
-    command: python -u /app/app/telegram_bot.py

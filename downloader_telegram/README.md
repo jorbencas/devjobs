@@ -29,7 +29,6 @@
 
 - [Requisitos](#requisitos)
 - [Despliegue](#despliegue)
-- [Bot API interactivo](#bot-api-interactivo-telegram_botpy)
 - [Uploader a Telegram](#uploader-a-telegram-subir_videospy)
 - [CLI consolidada](#cli-consolidada-tg_toolboxpy)
 - [Estructura](#estructura)
@@ -70,111 +69,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install telethon mtranslate cryptography cryptg rich inquirerpy
 python test_download_protected_content_telegram.py
-```
-
----
-
-## 🤖 Bot API interactivo (`telegram_bot.py`)
-
-Bot de Telegram con **comandos**, **botones inline** y **descarga de vídeos**. Un solo bot que genera contenido IA y descarga vídeos de cualquier plataforma.
-
-### Características
-
-| Función | Detalle |
-|---|---|
-| 💡 Contenido IA | Tips de programación, conceptos con código, herramientas AI |
-| 📥 Descarga vídeos | Descarga de cualquier plataforma via yt-dlp (YouTube, Twitch, etc.) |
-| 🎬 Conversión automática | Convierte a MP4 H.264/AAC, genera thumbnail, envía como vídeo |
-| 📰 Noticias | Muestra las últimas noticias scrapeadas |
-| ⬆️ Botones inline | Navegación por botones en cada respuesta |
-
-### Comandos disponibles
-
-| Comando | Descripción | Botones |
-|---|---|---|
-| `/start` | Mensaje de bienvenida | — |
-| `/ayuda` | Pantalla de ayuda completa | — |
-| `/ping` | Comprobar conexión del bot | — |
-| `/tip` | Tip de programación (Gemini + DB) | 🔄 Otro tip, 💡 Concepto, 🛠 Tool |
-| `/concepto` | Concepto con código de ejemplo | 🔄 Otro, 💡 Tip, 🛠 Tool |
-| `/tool` | Herramienta AI (Gemini + DB) | 🔄 Otro, 💡 Tip, 📖 Concepto |
-| `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
-| `/descarga URL` | Descargar vídeo de cualquier plataforma | — |
-| `/download URL` | Alias de /descarga | — |
-
-### Descarga de vídeos
-
-El bot descarga vídeos de cualquier plataforma soportada por yt-dlp + HLS fallback:
-
-```
-Usuario: /descarga https://www.youtube.com/watch?v=...
-Bot: 📥 Descargando...
-Bot: 🎬 [Vídeo enviado con thumbnail]
-```
-
-**Flujo:**
-1. Descarga el vídeo con yt-dlp (formato `bv+ba/b` para YouTube)
-2. Si yt-dlp falla → busca streams HLS en la página y los descarga
-3. Convierte a MP4 H.264/AAC (compatible con Telegram)
-4. Genera thumbnail
-5. Envía como vídeo con preview
-6. Elimina el archivo local
-
-**Timeout:** 30 minutos (para vídeos largos o conexiones lentas)
-
-**Plataformas soportadas:** YouTube, ok.ru, Twitch, TikTok, Dailymotion, Vimeo, +1000 sitios
-
-**Funciona en:**
-- Chat privado: envía cualquier URL
-- Grupos: menciona al bot con una URL (`@jorbencas_bot URL`)
-
-### Variables de entorno
-
-| Variable | Descripción | Default |
-|---|---|---|
-| `BOT_TOKEN` | Token del bot (de @BotFather) | **requerido** |
-| `GEMINI_API_KEY` | API key de Google Gemini | para tips/tools |
-| `BOT_ADMINS` | IDs de admins (separados por coma) | vacío |
-| `TEST_GH_DIR` | Ruta a test_githubActions | `/data/.test_githubActions` |
-| `DOWNLOAD_DIR` | Ruta de descargas | `/data/descargas` |
-
-### Arrancar el bot
-
-```bash
-cd downloader_telegram
-
-# Configurar variables
-export BOT_TOKEN="tu-token-de-BotFather"
-export GEMINI_API_KEY="tu-api-key"
-
-# Arrancar bot
-docker compose up -d telegram_bot
-
-# Ver logs
-docker compose logs -f telegram_bot
-```
-
-### Arquitectura
-
-```
-┌─────────────────────────────────────────────┐
-│         🤖 BOT API (python-telegram-bot)    │
-├─────────────────────────────────────────────┤
-│  💡 Contenido IA (tips, tools)              │
-│  📥 Descarga vídeos (yt-dlp + ffmpeg)       │
-│  📰 Noticias scrapeadas                     │
-└──────────┬──────────────┬──────────────────┘
-           │              │
-    Lee/escribe       Lee/escribe
-    descargas/        scripts/
-           │              │
-           v              v
-┌──────────────────┐  ┌──────────────────┐
-│  Descargas bot   │  │ test_githubActions│
-│  *.mp4           │  │  scripts/         │
-│                  │  │  utils/           │
-│                  │  │  tips_database    │
-└──────────────────┘  └──────────────────┘
 ```
 
 ---
@@ -428,14 +322,12 @@ El servicio corre con `restart: unless-stopped`, vigila `/comprimidos` cada 60 s
 
 ### Docker y dos instancias sin conflicto
 
-El `docker-compose.yml` define cuatro servicios:
+El `docker-compose.yml` define dos servicios:
 
 | Servicio | Sesión | Uso |
 |---|---|---|
 | `telegram` | `sessions/tg_toolbox.session` | Cli interactivo (descargas manuales) |
 | `uploader` | `sessions/uploader.session` | Subida automática del pipeline |
-| `telegram_bot` | — | Bot API interactivo (comandos + @mención) |
-| `ollama` | — | Modelo local para respuestas IA |
 
 Cada uno monta su **propio** archivo de sesión, por lo que pueden ejecutarse simultáneamente sin pisarse.
 
@@ -770,10 +662,6 @@ downloader_telegram/
 │   ├── tg_toolbox.py                         # CLI unificada (menú interactivo)
 │   ├── cli_base.py                           # utilidades autónomas del CLI (credenciales, ruteo, subida)
 │   ├── subir_videos.py                       # uploader automático a grupos (pipeline)
-│   ├── telegram_bot.py                       # Bot API interactivo (comandos + botones + @mención)
-│   ├── bot_commands.py                       # Handlers de comandos (/status, /tip, etc.)
-│   ├── bot_callbacks.py                      # Handlers de botones inline
-│   ├── bot_inline_keyboards.py               # Teclados inline reutilizables
 │   ├── pipeline_bridge.py                    # IPC: status.json + control.json + logs.json
 │   ├── migrar_temas.py                       # migración de canales a temas de foros
 │   ├── gestion_canales.py                    # crear/archivar canales + temas + migrar/borrar
@@ -788,9 +676,7 @@ downloader_telegram/
 │   └── uploader.session                      # sesión del daemon uploader
 ├── Descargas_Telegram/                       # (gitignored) carpeta de descargas del cli
 ├── Dockerfile                                # imagen Python + dependencias + ffmpeg
-├── Dockerfile.bot                            # imagen del bot API
-├── docker-compose.yml                        # servicios telegram (cli) + uploader + bot + ollama
-├── requirements_bot.txt                      # dependencias del bot API
+├── docker-compose.yml                        # servicios telegram (cli) + uploader
 ├── .env.example                              # plantilla de credenciales
 ├── LICENSE                                   # MIT
 └── README.md
