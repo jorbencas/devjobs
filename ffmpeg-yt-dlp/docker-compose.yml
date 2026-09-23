@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     user: root
     command: >-
-      bash /app/scripts/monitor_folder.sh
+      su-exec 1000 bash /app/scripts/monitor_folder.sh
     volumes:
       - ./:/app
       - ../data/pipeline/grabaciones/test:/watch
