@@ -1,9 +1,7 @@
-name: Generate Project Ideas
-
+name: "[PROJECTS] Generate Projects → Dispatch to test_githubActions"
 on:
   schedule:
-    # Cada lunes a las 9:00 UTC (ajustar según zona horaria)
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1'  # Cada lunes 9:00 UTC
   workflow_dispatch:
     inputs:
       count:
@@ -23,85 +21,25 @@ on:
         description: 'Filtrar por lenguaje (python/javascript/typescript/csharp/go/rust)'
         required: false
         type: string
+      ai_provider:
+        description: 'Proveedor IA (openai/anthropic/gemini/deterministic)'
+        required: false
+        default: 'gemini'
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  generate-and-report:
+  dispatch_to_test_githubactions:
+    name: Dispatch to test_githubActions
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID: ${{ secrets.TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai' }}
-      AI_MODEL: ${{ vars.AI_MODEL || 'gpt-4o-mini' }}
-      PROJECTS_PER_RUN: ${{ github.event.inputs.count || vars.PROJECTS_PER_RUN || '5' }}
-      SCRAPE_TUWEB_DEV: ${{ vars.SCRAPE_TUWEB_DEV || 'true' }}
-      DATA_DIR: ./data
-    
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Trigger project generation in test_githubActions
+        uses: peter-evans/repository-dispatch@v3
         with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: project_generator/requirements.txt
-      
-      - name: Install dependencies
-        run: |
-          cd project_generator
-          pip install -r requirements.txt
-      
-      - name: Create data directory
-        run: mkdir -p project_generator/data
-      
-      - name: Generate projects
-        id: generate
-        run: |
-          cd project_generator
-          
-          # Construir argumentos opcionales
-          ARGS=()
-          if [[ -n "${{ github.event.inputs.nivel }}" ]]; then
-            ARGS+=(--nivel "${{ github.event.inputs.nivel }}")
-          fi
-          if [[ -n "${{ github.event.inputs.scope }}" ]]; then
-            ARGS+=(--scope "${{ github.event.inputs.scope }}")
-          fi
-          if [[ -n "${{ github.event.inputs.lenguaje }}" ]]; then
-            ARGS+=(--lenguaje "${{ github.event.inputs.lenguaje }}")
-          fi
-          
-          python -m src.main generate "${ARGS[@]}"
-        env:
-          PYTHONPATH: project_generator/src
-      
-      - name: Upload history artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: project-history
-          path: project_generator/data/generated_projects.json
-          retention-days: 90
-      
-      - name: Commit history if changed
-        run: |
-          cd project_generator
-          if git diff --quiet data/generated_projects.json; then
-            echo "No changes in history"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add data/generated_projects.json
-            git commit -m "chore: update project history [skip ci]"
-            git push
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
+          repository: jorbencas/test_githubActions
+          event-type: generate_projects
+          client-payload: '{"count": "${{ github.event.inputs.count || vars.PROJECTS_PER_RUN || 5 }}", "nivel": "${{ github.event.inputs.nivel }}", "scope": "${{ github.event.inputs.scope }}", "lenguaje": "${{ github.event.inputs.lenguaje }}", "ai_provider": "${{ github.event.inputs.ai_provider || vars.AI_PROVIDER || 'gemini' }}"}'
