@@ -1,0 +1,49 @@
+name: "[PROJECTS] Generate Projects"
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Cada lunes 9:00 UTC
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'Número de proyectos a generar'
+        required: false
+        default: '5'
+        type: string
+      nivel:
+        description: 'Filtrar por nivel (junior/semisenior/senior)'
+        required: false
+        type: string
+      scope:
+        description: 'Filtrar por scope (miniproyecto/proyecto/multiproyecto)'
+        required: false
+        type: string
+      lenguaje:
+        description: 'Filtrar por lenguaje (python/javascript/typescript/csharp/go/rust)'
+        required: false
+        type: string
+      ai_provider:
+        description: 'Proveedor IA (openai/anthropic/gemini/deterministic)'
+        required: false
+        default: 'gemini'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  call_generate:
+    name: Generate Projects
+    uses: ./.github/workflows/generate-projects-internal.yml
+    with:
+      count: ${{ github.event.inputs.count || '5' }}
+      nivel: ${{ github.event.inputs.nivel }}
+      scope: ${{ github.event.inputs.scope }}
+      lenguaje: ${{ github.event.inputs.lenguaje }}
+      ai_provider: ${{ github.event.inputs.ai_provider || 'gemini' }}
+    secrets:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID: ${{ secrets.TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
