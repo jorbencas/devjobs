@@ -33,4 +33,4 @@ services:
       - CODEC=libx264
       - CRF=28
       - PRESET=fast
-      - THREADS=8
+      - THREADS=4

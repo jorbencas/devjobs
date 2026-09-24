@@ -6,7 +6,8 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-User=root
+User=jorge
+WorkingDirectory=/home/jorge/dev/devjobs
 
 # 1) TwitchRecorder (grabar)
 ExecStart=/usr/bin/docker compose -f /home/jorge/dev/devjobs/TwitchRecorder/docker-compose.yml up -d twitchrecorder
