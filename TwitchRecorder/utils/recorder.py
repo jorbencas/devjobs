@@ -330,7 +330,13 @@ class Recorder:
             return {}
         try:
             from yt_dlp import YoutubeDL
-            with YoutubeDL({"quiet": True, "skip_download": True, "noplaylist": True}) as ydl:
+            with YoutubeDL({
+                "quiet": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "js_runtimes": ["deno"],
+                "remote_components": ["ejs:github"],
+            }) as ydl:
                 return ydl.extract_info(url, download=False) or {}
         except Exception:
             return {}
@@ -470,6 +476,8 @@ class Recorder:
             "--write-thumbnail",
             "--convert-thumbnails", "jpg",
             "--no-warnings",
+            "--js-runtimes", "deno",
+            "--remote-components", "ejs:github",
         ]
 
         self.process = subprocess.Popen([ytdlp_exe] + cmd, **popen_kwargs)
