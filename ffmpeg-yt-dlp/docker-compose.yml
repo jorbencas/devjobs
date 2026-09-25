@@ -14,15 +14,15 @@ services:
 
   monitor:
     build:
-      context: .
-      dockerfile: Dockerfile.monitor
+      context: ..
+      dockerfile: ffmpeg-yt-dlp/Dockerfile.monitor
     container_name: ffmpeg_monitor-sendo
     restart: unless-stopped
     user: root
     command: >-
-      su-exec 1000 bash /app/scripts/monitor_folder.sh
+      su-exec 1000 bash /app/ffmpeg-yt-dlp/scripts/monitor_folder.sh
     volumes:
-      - ./:/app
+      - ..:/app
       - ../data/pipeline/grabaciones/test:/watch
       - ../data/pipeline/comprimidos:/comprimidos
     environment:
@@ -34,3 +34,4 @@ services:
       - CRF=28
       - PRESET=fast
       - THREADS=4
+      - MONITOR_CONFIG_FILE=/app/TwitchRecorder/config.json

@@ -72,10 +72,8 @@ from telethon.tl.types import (
     DocumentAttributeVideo,
 )
 
-try:
-    from pipeline_bridge import update_status, remove_status, append_log
-except ImportError:
-    update_status = remove_status = append_log = None
+# pipeline_bridge eliminado: no se usa. Los estados/logs van a stdout (docker logs).
+update_status = remove_status = append_log = None
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_DIR = SCRIPT_DIR.parent
@@ -1346,17 +1344,7 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         canal = canal or canal_from_filename(archivo.name)
                         caption_base = f"🎬 Directo de {canal}" if canal else "🎬 Directo"
                         log("WARN", f"{archivo.name}: caption por defecto (descripción no usada)")
-                    if update_status:
-                        update_status("uploader",
-                                      status="uploading",
-                                      file=archivo.name,
-                                      destination=str(destinos),
-                                      started_at=datetime.now().isoformat())
-                    if append_log:
-                        append_log("uploader", f"Subiendo {archivo.name} → {destinos}")
                     await subir_archivo(client, archivo, destinos, caption_base, keyword)
-                    if remove_status:
-                        remove_status("uploader")
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")
         if una_pasada:

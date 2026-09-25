@@ -118,13 +118,14 @@ class Recorder:
     entre fuentes ordenadas, arranque de streamlink/yt-dlp, corte en partes
     por cambio de plataforma, reparación de mp4 truncados y concatenación."""
 
-    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None):
+    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None, schedule: list = None):
         """Prepara el grabador: normaliza fuentes, guarda config de rutas,
-        duración máxima, prioridad por día (dias_plataforma) y flags."""
+        duración máxima, prioridad por día (schedule unificado) y flags."""
         self.channel = channel
         self.sources = parse_sources(platform_name, url)
         self.platform_name = self.sources[0]["platform"]
         self.dias_plataforma = dias_plataforma or {}
+        self.schedule = schedule
         self._active = None
         self._probed_sources = set()
         self.record_path = Path(record_path)
@@ -186,15 +187,43 @@ class Recorder:
             log.warning(f"[{self.channel}] web.probe falló: {e}")
 
     def _reordenar_por_dia(self) -> None:
-        """Fija las plataformas a usar según el día (p.ej. siendo: domingo YT/Twitch,
-        resto de días sin YouTube). El mapa REPLACE la lista de fuentes: solo se
-        usan las plataformas indicadas, en ese orden."""
-        if not self.dias_plataforma:
-            return
-        day = datetime.now().strftime("%A")
-        order = self.dias_plataforma.get(day) or self.dias_plataforma.get("*")
+        """Fija las plataformas a usar según el día usando schedule unificado.
+        
+        Si existe `self.schedule` (formato unificado), lo usa.
+        Sino, cae al legacy `dias_plataforma`.
+        """
+        now = datetime.now()
+        day = now.strftime("%A")
+        current_minutes = now.hour * 60 + now.minute
+        
+        # Determinar plataformas ordenadas para hoy
+        order = None
+        
+        if self.schedule:
+            # Formato unificado: lista de reglas con days, time, platforms
+            for rule in self.schedule:
+                rule_days = rule.get("days", [])
+                rule_time = rule.get("time", "00:00")
+                rule_platforms = rule.get("platforms", [])
+                
+                if day in rule_days:
+                    try:
+                        rule_h, rule_m = map(int, rule["time"].split(":"))
+                        rule_minutes = rule_h * 60 + rule_m
+                    except Exception:
+                        continue
+                    if current_minutes >= rule_minutes:
+                        order = rule_platforms
+                        break
+        else:
+            # Legacy: dias_plataforma dict
+            if not self.dias_plataforma:
+                return
+            order = self.dias_plataforma.get(day) or self.dias_plataforma.get("*")
+        
         if not order:
             return
+        
         by_platform = {}
         for src in self.sources:
             by_platform.setdefault(src["platform"], []).append(src)
@@ -396,49 +425,10 @@ class Recorder:
             self._stop_event.clear()
             self._last_start_time = time.time()
 
-            # Sidecar de configuración del directo para el monitor.
-            self._guardar_sidecar(output_path, src)
-
             return True
         except Exception as e:
             log.error(f"[{self.channel}] Error al iniciar grabación: {e}")
             return False
-
-    def _guardar_sidecar(self, output_path: Path, src: dict) -> None:
-        """Guarda '<output>_descripcion.json' con la configuración del directo:
-        - "titulo": título del directo/vídeo (siempre se guarda si está disponible).
-        - "descripcion": descripción del directo (solo si "descripcion": true).
-        - "detectar": false cuando la fuente está configurada sin detección de
-          episodios (el monitor no hace OCR).
-        - "corte": false cuando la fuente está configurada sin corte de extremos
-          (el monitor no recorta, aunque el OCR siga disponible).
-        Detección y corte son independientes: se puede detectar sin cortar.
-        """
-        data = {}
-        titulo = self.get_live_title()
-        if titulo:
-            data["titulo"] = titulo[:1024]
-        if src.get("descripcion"):
-            desc = self.get_live_description()
-            if not desc:
-                log.warning(f"[{self.channel}] Sin descripción que guardar")
-            else:
-                data["descripcion"] = desc[:1024]
-        if src.get("detectar") is False:
-            data["detectar"] = False
-        if src.get("corte") is False:
-            data["corte"] = False
-        if not data:
-            return
-        try:
-            sidecar = _sidecar_path(output_path)
-            sidecar.write_text(
-                json.dumps(data, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            log.info(f"[{self.channel}] Sidecar guardado para el monitor: {data}")
-        except Exception as e:
-            log.warning(f"[{self.channel}] No se pudo guardar el sidecar: {e}")
 
     def _start_streamlink(self, output_path: Path, popen_kwargs: dict) -> None:
         """Lanza streamlink para grabar Twitch en la mejor calidad disponible."""

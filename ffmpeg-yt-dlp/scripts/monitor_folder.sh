@@ -113,36 +113,22 @@ compress_video() {
 
     log_info "Comprimiendo: $filename"
 
-    # Detectar episodios para recortar extremos y guardar metadata para el uploader
-    local det_json="${OUTPUT_DIR}/${name}_episodios.json"
-    local cut_inicio=""
-    local cut_fin=""
-    local duration
-    # Sidecar '*_descripcion.json' del recorder (config por fuente). Campos:
-    #   {"descripcion": "..."}  → caption propio (p. ej. YouTube): se omite la
-    #                             detección de episodios y el corte de extremos.
-    #   {"detectar": false}     → fuente SIN detección de episodios (sin OCR).
-    #   {"corte": false}        → fuente SIN corte de extremos (aunque detecte).
-    # Detección y corte son independientes. Sin sidecar → por defecto se detecta
-    # (OCR) y se puede cortar. El corte lo decide siempre el sidecar (`corte`).
-    local sc_desc=""
-    local sc_detectar="true"
-    local sc_corte="true"
-    local desc_sidecar="${input%.*}_descripcion.json"
-    if [[ -f "$desc_sidecar" ]]; then
-        sc_desc=$(python3 -c "import sys,json;d=json.load(open('$desc_sidecar'));print(d.get('titulo','') or d.get('descripcion',''))" 2>/dev/null)
-        sc_detectar=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('detectar',True)).lower())" 2>/dev/null)
-        sc_corte=$(python3 -c "import sys,json;print(str(json.load(open('$desc_sidecar')).get('corte',True)).lower())" 2>/dev/null)
-    fi
+    # Config desde config.json (vía helper) en lugar de sidecar.
+    # Devuelve JSON: {"detectar": true/false, "corte": true/false, "descripcion": true/false}
+    local config_json
+    config_json=$(python3 "$SCRIPT_DIR/get_monitor_config.py" "$input" 2>/dev/null || echo '{}')
+    local sc_detectar sc_corte sc_descripcion
+    sc_detectar=$(echo "$config_json" | python3 -c "import sys,json;print(str(json.load(sys.stdin).get('detectar',True)).lower())" 2>/dev/null || echo "true")
+    sc_corte=$(echo "$config_json" | python3 -c "import sys,json;print(str(json.load(sys.stdin).get('corte',True)).lower())" 2>/dev/null || echo "true")
+    sc_descripcion=$(echo "$config_json" | python3 -c "import sys,json;print(str(json.load(sys.stdin).get('descripcion',False)).lower())" 2>/dev/null || echo "false")
 
     local skip_detectar="false"
-    if [[ -n "$sc_desc" ]]; then
-        cp "$desc_sidecar" "$det_json" 2>/dev/null
-        log_info "  Descripción propia del canal: se omite detección y corte de episodios"
+    if [[ "$sc_descripcion" == "true" ]]; then
+        # Fuente con descripción propia (YouTube): se omite OCR y corte
         skip_detectar="true"
+        log_info "  Fuente con descripción propia (config): se omite OCR y corte"
     elif [[ "$sc_detectar" != "true" ]]; then
         log_info "  Fuente sin detección de episodios (config): se omite OCR y corte"
-        rm -f "$det_json"
         skip_detectar="true"
     fi
 
@@ -172,12 +158,12 @@ compress_video() {
         fi
     fi
 
-    # Corte de extremos: solo por fuente (sidecar). La detección (OCR) ya se hizo
+    # Corte de extremos: solo por fuente (config). La detección (OCR) ya se hizo
     # arriba de forma independiente.
     if [[ "$sc_corte" != "true" ]]; then
         cut_inicio=""
         cut_fin=""
-        [[ -z "$sc_desc" ]] && log_info "  Fuente sin corte (config): se mantiene el vídeo completo"
+        log_info "  Fuente sin corte (config): se mantiene el vídeo completo"
     fi
 
     # Obtener duración para calcular progreso
@@ -276,9 +262,6 @@ compress_video() {
         mkdir -p "$PROCESSED_DIR"
         mv "$input" "$PROCESSED_DIR/$filename"
         log_info "  Original movido a: $PROCESSED_DIR/$filename"
-        # El sidecar de descripción ya se copió al episodios.json; se limpia
-        # para no re-procesarlo en el futuro.
-        rm -f "$desc_sidecar"
 
         return 0
     else
