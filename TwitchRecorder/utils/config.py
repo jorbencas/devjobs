@@ -90,7 +90,8 @@ def get_channels_with_platform(config: dict) -> list:
                     continue
                 platform_name = info.get("platform", "twitch")
                 url = info.get("url", "")
-                extra = {k: v for k, v in info.items() if k not in ("platform", "url")}
+                # Guardamos platform en extra para que el scheduler pueda leer schedules por platform
+                extra = {k: v for k, v in info.items() if k != "url"}
             else:
                 platform_name = "twitch"
                 url = ""
