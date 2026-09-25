@@ -1,7 +1,5 @@
-name: "[PROJECTS] Generate Projects → Dispatch to test_githubActions"
+name: "[PROJECTS] Generate Projects → Dispatch to test_githubActions (DEPRECATED)"
 on:
-  schedule:
-    - cron: '0 9 * * 1'  # Cada lunes 9:00 UTC
   workflow_dispatch:
     inputs:
       count:
@@ -31,15 +29,17 @@ permissions:
   contents: read
 
 jobs:
-  dispatch_to_test_githubactions:
-    name: Dispatch to test_githubActions
+  deprecated:
+    name: ⚠️ Este workflow está deprecado
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: Trigger project generation in test_githubActions
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.GH_PAT }}
-          repository: jorbencas/test_githubActions
-          event-type: generate_projects
-          client-payload: '{"count": "${{ github.event.inputs.count || vars.PROJECTS_PER_RUN || 5 }}", "nivel": "${{ github.event.inputs.nivel }}", "scope": "${{ github.event.inputs.scope }}", "lenguaje": "${{ github.event.inputs.lenguaje }}", "ai_provider": "${{ github.event.inputs.ai_provider || vars.AI_PROVIDER || 'gemini' }}"}'
+      - name: Info
+        run: |
+          echo "⚠️ DEPRECADO: Este workflow ya no se usa."
+          echo "El Project Generator ahora corre LOCALMENTE en test_githubActions via workflow 'Generate & Send Projects (local in test_githubActions)'"
+          echo "Los secrets necesarios están en test_githubActions:"
+          echo "  - TELEGRAM_BOT_TOKEN"
+          echo "  - TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID"
+          echo "  - GEMINI_API_KEY (o OPENAI_API_KEY / ANTHROPIC_API_KEY)"
+          echo "  - GH_PAT (para commit history)"
+          exit 0
