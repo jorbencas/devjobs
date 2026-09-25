@@ -16,7 +16,19 @@
                     "web",
                     "kick"
                 ]
-            }
+            },
+            "schedule": [
+                {
+                    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                    "time": "21:30",
+                    "platforms": ["web", "kick"]
+                },
+                {
+                    "days": ["Sunday"],
+                    "time": "19:00",
+                    "platforms": ["web", "kick"]
+                }
+            ]
         },
         "sendosama": {
             "platform": [
@@ -45,7 +57,19 @@
                 "*": [
                     "web"
                 ]
-            }
+            },
+            "schedule": [
+                {
+                    "days": ["Sunday"],
+                    "time": "19:00",
+                    "platforms": ["web"]
+                },
+                {
+                    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                    "time": "21:30",
+                    "platforms": ["web"]
+                }
+            ]
         },
         "sendosenpai": {
             "enabled": false,
@@ -59,6 +83,13 @@
             "start_time": "19:00",
             "days": [
                 "sunday"
+            ],
+            "schedule": [
+                {
+                    "days": ["Sunday"],
+                    "time": "19:00",
+                    "platforms": ["youtube"]
+                }
             ]
         },
         "midudev": {
@@ -72,7 +103,14 @@
             "days": [
                 "Monday"
             ],
-            "start_time": "18:00"
+            "start_time": "18:00",
+            "schedule": [
+                {
+                    "days": ["Monday"],
+                    "time": "18:00",
+                    "platforms": ["twitch"]
+                }
+            ]
         },
         "mouredev": {
             "platform": [
@@ -90,7 +128,14 @@
             "days": [
                 "Thursday"
             ],
-            "start_time": "18:00"
+            "start_time": "18:00",
+            "schedule": [
+                {
+                    "days": ["Thursday"],
+                    "time": "18:00",
+                    "platforms": ["youtube", "twitch"]
+                }
+            ]
         }
     },
     "record_path": "/recordings",
