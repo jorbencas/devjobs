@@ -3346,12 +3346,14 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}33)${NC} HLS                   ${DIM}— Preparar vídeo para streaming (m3u8)${NC}"
     echo -e "    ${GREEN}34)${NC} Ayuda                 ${DIM}— Ver todos los flags, modos y ejemplos${NC}"
     echo -e "    ${GREEN}35)${NC} Sincronizar audio     ${DIM}— Corregir desfase audio/vídeo${NC}"
+    echo -e "    ${GREEN}36)${NC} Descarga web genérica ${DIM}— Cualquier URL (yt-dlp → HLS → Selenium)${NC}"
     echo ""
-    read -rp "  → Selecciona [1-35] (h = ayuda, 0 = salir): " mode_val
+    read -rp "  → Selecciona [1-36] (h = ayuda, 0 = salir): " mode_val
     echo ""
 
     case "$mode_val" in
         1)  MODE="download" ;;
+        36) MODE="web-extract" ;;
         2)  MODE="cut" ;;
         3)  MODE="convert" ;;
         4)  MODE="gif" ;;
@@ -3472,8 +3474,67 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             echo ""
             ;;
 
-        # -- Concat: pide lista de archivos --
-        concat)
+        # -- Descarga web genérica (fallback automático) --
+        web-extract)
+            echo -e "${BOLD}  ► URL de página web (cualquier sitio)${NC}"
+            echo -e "  ${DIM}Intenta: 1) yt-dlp  2) HLS/m3u8 parsing  3) Selenium (opcional)${NC}"
+            read -rp "  → URL: " URL
+            [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
+
+            echo -e "  ${DIM}Intentando extracción automática...${NC}"
+            
+            # Intentar con yt-dlp primero
+            echo -e "  ${DIM}Probando yt-dlp...${NC}"
+            if yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
+                echo -e "  ${GREEN}✓${NC} yt-dlp soporta este sitio directamente"
+                MODE="download"
+                # Reutiliza la lógica de descarga normal
+                MODE="download"
+                continue
+            fi
+            
+            # Fallback 2: Buscar m3u8/HLS en la página
+            echo -e "  ${DIM}Buscando streams HLS/m3u8 en la página...${NC}"
+            local hls_url=$(curl -sL "$URL" | grep -oE 'https?://[^"\'"'"'< >]+\.m3u8[^"\'"'"'< >]*' | head -1)
+            if [[ -n "$hls_url" ]]; then
+                echo -e "  ${GREEN}✓${NC} Stream HLS encontrado: $hls_url"
+                URL="$hls_url"
+                MODE="download"
+                continue
+            fi
+            
+            # Fallback 3: Selenium/Playwright (opcional, si está instalado)
+            echo -e "  ${YELLOW}!${NC} No se pudo extraer automáticamente"
+            echo -e "  ${DIM}Opciones:${NC}"
+            echo -e "  ${DIM}  1) Probar con Selenium (requiere chromedriver)${NC}"
+            echo -e "  ${DIM}  2) Probar con Playwright (requiere playwright install)${NC}"
+            echo -e "  ${DIM}  3) Especificar URL directa manualmente${NC}"
+            read -rp "  → Opción [1-3]: " fallback_opt
+            case "$fallback_opt" in
+                1)
+                    if command -v chromedriver &>/dev/null && python3 -c "import selenium" 2>/dev/null; then
+                        echo -e "  ${DIM}Ejecutando Selenium...${NC}"
+                        # TODO: Implementar Selenium
+                    else
+                        echo -e "${RED}✗${NC} Selenium no instalado (chromedriver + python3-selenium)"
+                    fi
+                    ;;
+                2)
+                    if python3 -c "import playwright" 2>/dev/null; then
+                        echo -e "  ${DIM}Ejecutando Playwright...${NC}"
+                        # TODO: Implementar Playwright
+                    else
+                        echo -e "${RED}✗${NC} Playwright no instalado (pip install playwright && playwright install)"
+                    fi
+                    ;;
+                3)
+                    read -rp "  → URL directa: " URL
+                    MODE="download"
+                    continue
+                    ;;
+                *) echo -e "${RED}✗${NC} Opción inválida"; exit 1 ;;
+            esac
+            ;;
             echo -e "${BOLD}  ► Archivos a unir${NC}"
             echo -e "  ${DIM}Escribe las rutas separadas por espacio${NC}"
             echo -e "  ${DIM}Ejemplo: /videos/a.mkv /videos/b.mkv /videos/c.mkv${NC}"
