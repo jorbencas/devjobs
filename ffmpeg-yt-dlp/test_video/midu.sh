@@ -3523,8 +3523,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         web-extract)
             echo -e "${BOLD}  ► URL de página web (cualquier sitio)${NC}"
             echo -e "  ${DIM}Intenta: 1) yt-dlp  2) HLS/m3u8 parsing  3) Selenium (opcional)${NC}"
-            read -rp "  → URL: " URL
-            [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
+            # Si URL ya viene de CLI (--web-extract URL), no pedir interactivamente
+            if [[ -z "$URL" ]]; then
+                read -rp "  → URL: " URL
+                [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
+            fi
 
             echo -e "  ${DIM}Intentando extracción automática...${NC}"
             
@@ -3540,7 +3543,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             
             # Fallback 2: Buscar m3u8/HLS en la página
             echo -e "  ${DIM}Buscando streams HLS/m3u8 en la página...${NC}"
-            local hls_url=$(curl -sL "$URL" | grep -oE 'https?://[^"\'"'"'< >]+\.m3u8[^"\'"'"'< >]*' | head -1)
+            hls_url=$(curl -sL "$URL" 2>/dev/null | grep -oE 'https?://[^"\'"'"'< >]+\.m3u8[^"\'"'"'< >]*' | head -1)
             if [[ -n "$hls_url" ]]; then
                 echo -e "  ${GREEN}✓${NC} Stream HLS encontrado: $hls_url"
                 URL="$hls_url"
@@ -4894,6 +4897,44 @@ case "$MODE" in
             exit 1
         fi
         echo -e "${GREEN}✓${NC} URL válida"
+        download_video "$URL" "$OUTPUT_DIR"
+        exit $?
+        ;;
+    web-extract)
+        if [[ -z "$URL" ]]; then
+            echo -e "${RED}✗${NC} Se requiere URL para descargar"
+            echo "  Uso: ./midu.sh --web-extract <URL>"
+            exit 1
+        fi
+        # Validar que la URL esté soportada
+        echo -e "${BOLD}► Comprobando URL...${NC}"
+        if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
+            echo -e "${RED}✗${NC} URL no soportada o no válida"
+            echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
+            echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓${NC} URL válida"
+        download_video "$URL" "$OUTPUT_DIR"
+        exit $?
+        ;;
+    web-extract-login)
+        if [[ -z "$URL" ]]; then
+            echo -e "${RED}✗${NC} Se requiere URL para descargar"
+            echo "  Uso: ./midu.sh --web-extract-login <URL>"
+            exit 1
+        fi
+        # Validar que la URL esté soportada
+        echo -e "${BOLD}► Comprobando URL...${NC}"
+        if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
+            echo -e "${RED}✗${NC} URL no soportada o no válida"
+            echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
+            echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓${NC} URL válida"
+        # Para login, usar la lógica de web-extract-login que ya existe
+        echo -e "${BOLD}► Iniciando extracción con login...${NC}"
         download_video "$URL" "$OUTPUT_DIR"
         exit $?
         ;;
