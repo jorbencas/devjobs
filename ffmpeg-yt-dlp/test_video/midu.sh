@@ -3535,16 +3535,9 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 *) echo -e "${RED}✗${NC} Opción inválida"; exit 1 ;;
             esac
             ;;
-            echo -e "${BOLD}  ► Archivos a unir${NC}"
-            echo -e "  ${DIM}Escribe las rutas separadas por espacio${NC}"
-            echo -e "  ${DIM}Ejemplo: /videos/a.mkv /videos/b.mkv /videos/c.mkv${NC}"
-            read -rp "  → Archivos: " -a CONCAT_FILES
-            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"; exit 1; }
-            echo ""
-            ;;
-
-        # -- Concat smart: pide archivos + crossfade --
-        concat-smart)
+        
+        # -- Concat: pide lista de archivos --
+        concat)
             echo -e "${BOLD}  ► Archivos a unir (inteligente)${NC}"
             echo -e "  ${DIM}Auto-detecta compatibilidad. Si son distintos, re-codifica automáticamente${NC}"
             read -rp "  → Archivos: " -a CONCAT_FILES
