@@ -277,12 +277,14 @@ def _canales_colisionan(config: dict, channels: list) -> list:
     """Devuelve [(canal_a, canal_b, dia, hora)] de canales distintos que emiten a la vez.
 
     La grabación en paralelo es posible, pero avisar ayuda a decidir si conviene
-    ajustar 'days'/'start_time' (o añadir 'priority') en la config."""
+    ajustar schedule si no es deseado."""
     programados = {}
     for channel, platform_name, url, extra in channels:
-        for day in _dias_para(extra, config):
-            hora = _hora_inicio_para(extra, config, day)
-            programados.setdefault((day, hora), []).append(channel)
+        schedule = _get_channel_schedule(extra, config)
+        for rule in schedule:
+            for day in rule.get("days", []):
+                hora = rule.get("time", "19:55")
+                programados.setdefault((day, hora), []).append(channel)
     return [
         (lista[0], ch, day, hora)
         for (day, hora), lista in programados.items()
