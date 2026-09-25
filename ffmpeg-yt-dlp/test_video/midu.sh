@@ -3347,13 +3347,15 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}34)${NC} Ayuda                 ${DIM}— Ver todos los flags, modos y ejemplos${NC}"
     echo -e "    ${GREEN}35)${NC} Sincronizar audio     ${DIM}— Corregir desfase audio/vídeo${NC}"
     echo -e "    ${GREEN}36)${NC} Descarga web genérica ${DIM}— Cualquier URL (yt-dlp → HLS → Selenium)${NC}"
+    echo -e "    ${GREEN}37)${NC} Descarga web con login ${DIM}— Sitios con login/Cloudflare (HLS + login)${NC}"
     echo ""
-    read -rp "  → Selecciona [1-36] (h = ayuda, 0 = salir): " mode_val
+    read -rp "  → Selecciona [1-37] (h = ayuda, 0 = salir): " mode_val
     echo ""
 
     case "$mode_val" in
         1)  MODE="download" ;;
         36) MODE="web-extract" ;;
+        37) MODE="web-extract-login" ;;
         2)  MODE="cut" ;;
         3)  MODE="convert" ;;
         4)  MODE="gif" ;;
@@ -3534,23 +3536,222 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                     ;;
                 *) echo -e "${RED}✗${NC} Opción inválida"; exit 1 ;;
             esac
-            ;;
+;;
         
-        # -- Concat: pide lista de archivos --
-        concat)
-            echo -e "${BOLD}  ► Archivos a unir (inteligente)${NC}"
-            echo -e "  ${DIM}Auto-detecta compatibilidad. Si son distintos, re-codifica automáticamente${NC}"
-            read -rp "  → Archivos: " -a CONCAT_FILES
-            [[ ${#CONCAT_FILES[@]} -lt 2 ]] && { echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"; exit 1; }
-            echo ""
-            echo -e "${BOLD}  ► ¿Crossfade entre clips?${NC}"
-            echo -e "  ${DIM}Transición suave (fade) al unir. Deja vacío para saltar${NC}"
-            read -rp "  → Duración en segundos (ej: 1): " CROSSFADE_DURATION
-            echo ""
-            ;;
+        # -- Descarga web con login (HLS + login) --
+        web-extract-login)
+            echo -e "${BOLD}  ► URL de página web con login (HLS + login)${NC}"
+            echo -e "  ${DIM}Para sitios con login/Cloudflare que exponen HLS tras login${NC}"
+            read -rp "  → URL: " URL
+            [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
 
-        # -- Chain: pide operaciones --
-        chain)
+            # Credenciales (pueden venir de variables de entorno)
+            local WEB_USER="${WEB_LOGIN_USER:-}"
+            local WEB_PASS="${WEB_LOGIN_PASS:-}"
+            
+            if [[ -z "$WEB_USER" ]]; then
+                read -rp "  → Usuario: " WEB_USER
+            fi
+            if [[ -z "$WEB_PASS" ]]; then
+                read -rsp "  → Contraseña: " WEB_PASS
+                echo ""
+            fi
+            [[ -z "$WEB_USER" || -z "$WEB_PASS" ]] && { echo -e "${RED}✗${NC} Usuario y contraseña requeridos"; exit 1; }
+
+            echo -e "  ${DIM}Iniciando navegador con login...${NC}"
+
+            # Verificar dependencias
+            if ! command -v chromium &>/dev/null && ! command -v chromium-browser &>/dev/null && ! command -v google-chrome &>/dev/null; then
+                echo -e "${RED}✗${NC} Chromium/Chrome no instalado"
+                exit 1
+            fi
+
+            if ! python3 -c "import DrissionPage" 2>/dev/null; then
+                echo -e "${YELLOW}!${NC} DrissionPage no instalado. Instalando..."
+                pip install --break-system-packages DrissionPage 2>/dev/null || pip3 install DrissionPage
+            fi
+
+            # Crear script Python para extracción con login
+            local PY_SCRIPT=$(cat << 'PYEOF'
+import sys
+import time
+import json
+import os
+import re
+from DrissionPage import ChromiumPage, ChromiumOptions
+
+url = sys.argv[1]
+user = sys.argv[2]
+passw = sys.argv[3]
+domain = sys.argv[4] if len(sys.argv) > 4 else None
+
+co = ChromiumOptions()
+co.set_browser_path("/usr/bin/chromium")
+co.headless(False)
+co.set_user_data_path("/tmp/drission_profile")
+co.set_local_port(9312)
+co.set_argument("--no-sandbox")
+co.set_argument("--disable-dev-shm-usage")
+co.set_argument("--remote-allow-origins=*")
+co.set_argument("--disable-blink-features=AutomationControlled")
+co.set_argument("--window-size=1400,900")
+co.set_argument("--start-maximized")
+co.set_argument("--force-device-scale-factor=1")
+co.set_argument("--lang=es-ES,es")
+co.set_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+
+page = ChromiumPage(co)
+page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source="""Object.defineProperty(navigator, 'webdriver', {get: () => undefined});""")
+page.run_cdp("Emulation.setTimezoneOverride", timezoneId="Europe/Madrid")
+
+# Navegar a la URL
+page.get(url)
+time.sleep(3)
+
+# Detectar formulario de login
+try:
+    # Buscar campos comunes de login
+    user_el = page.ele("css:input[name=username], input[name=username], input[id*=user], input[type=email]", timeout=5)
+    pass_el = page.ele("css:input[name=password], input[name=pass], input[type=password]", timeout=5)
+    if user_el and pass_el:
+        user_el.input(user)
+        time.sleep(0.5)
+        pass_el.input(passw)
+        time.sleep(0.5)
+        # Buscar botón submit
+        btn = page.ele("css:button[type=submit], input[type=submit], button[type=submit], .btn-login, .btn-primary, button:contains(Entrar), button:contains(Login), button:contains(Acceder)", timeout=3)
+        if btn:
+            btn.click()
+        else:
+            # Enter en password
+            from DrissionPage import Keys
+            pass_el.input(Keys.ENTER)
+        time.sleep(3)
+except:
+    pass
+
+# Esperar a que cargue la página tras login
+time.sleep(5)
+
+# Buscar m3u8 en la página (en requests de red o en HTML)
+m3u8_urls = set()
+for req in page.listen.wait_for_new_request(10):
+    if ".m3u8" in req.url:
+        print(f"M3U8_FOUND:{req.url}")
+        break
+
+# Si no se encontró en requests, buscar en HTML
+if not m3u8_urls:
+    html = page.html
+    m3u8_matches = re.findall(r'https?://[^"\'<>]+\.m3u8[^"\'<>]*', html)
+    for m in m3u8_matches:
+        print(f"M3U8_FOUND:{m}")
+        break
+
+page.quit()
+PYEOF
+
+# Escribir script Python a archivo temporal
+        local py_script_file=$(mktemp --suffix=.py)
+        cat > "$py_script_file" << 'PYEOF'
+import sys
+import time
+import json
+import os
+import re
+from DrissionPage import ChromiumPage, ChromiumOptions
+
+url = sys.argv[1]
+user = sys.argv[2]
+passw = sys.argv[3]
+domain = sys.argv[4] if len(sys.argv) > 4 else None
+
+co = ChromiumOptions()
+co.set_browser_path("/usr/bin/chromium")
+co.headless(False)
+co.set_user_data_path("/tmp/drission_profile")
+co.set_local_port(9312)
+co.set_argument("--no-sandbox")
+co.set_argument("--disable-dev-shm-usage")
+co.set_argument("--remote-allow-origins=*")
+co.set_argument("--disable-blink-features=AutomationControlled")
+co.set_argument("--window-size=1400,900")
+co.set_argument("--start-maximized")
+co.set_argument("--force-device-scale-factor=1")
+co.set_argument("--lang=es-ES,es")
+co.set_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+
+page = ChromiumPage(co)
+page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source="""Object.defineProperty(navigator, 'webdriver', {get: () => undefined});""")
+page.run_cdp("Emulation.setTimezoneOverride", timezoneId="Europe/Madrid")
+
+# Navegar a la URL
+page.get(url)
+time.sleep(3)
+
+# Detectar formulario de login
+try:
+    # Buscar campos comunes de login
+    user_el = page.ele("css:input[name=username], input[name=username], input[id*=user], input[type=email]", timeout=5)
+    pass_el = page.ele("css:input[name=password], input[name=pass], input[type=password]", timeout=5)
+    if user_el and pass_el:
+        user_el.input(user)
+        time.sleep(0.5)
+        pass_el.input(passw)
+        time.sleep(0.5)
+        # Buscar botón submit
+        btn = page.ele("css:button[type=submit], input[type=submit], button[type=submit], .btn-login, .btn-primary, button:contains(Entrar), button:contains(Login), button:contains(Acceder)", timeout=3)
+        if btn:
+            btn.click()
+        else:
+            # Enter en password
+            from DrissionPage import Keys
+            pass_el.input(Keys.ENTER)
+        time.sleep(3)
+except:
+    pass
+
+# Esperar a que cargue la página tras login
+time.sleep(5)
+
+# Buscar m3u8 en la página (en requests de red o en HTML)
+m3u8_urls = set()
+for req in page.listen.wait_for_new_request(10):
+    if ".m3u8" in req.url:
+        print(f"M3U8_FOUND:{req.url}")
+        break
+
+# Si no se encontró en requests, buscar en HTML
+if not m3u8_urls:
+    html = page.html
+    m3u8_matches = re.findall(r'https?://[^"\'<>]+\.m3u8[^"\'<>]*', html)
+    for m in m3u8_matches:
+        print(f"M3U8_FOUND:{m}")
+        break
+
+page.quit()
+PYEOF
+
+# Ejecutar script Python
+echo -e "  ${DIM}Iniciando navegador y login...${NC}"
+python3 "$py_script_file" "$URL" "$WEB_USER" "$WEB_PASS" "$DOMAIN" 2>/dev/null
+# Limpiar
+rm -f "$py_script_file"
+
+# Leer resultado
+if [[ -n "$hls_url" ]]; then
+    echo -e "  ${GREEN}✓${NC} Stream HLS encontrado: $hls_url"
+    URL="$hls_url"
+    MODE="download"
+    continue
+else
+    echo -e "${RED}✗${NC} No se pudo extraer stream HLS tras login"
+    exit 1
+fi
+;;
+
+        # -- Concat smart: pide archivos + crossfade --
+        concat-smart)
             echo -e "${BOLD}  ► Pipeline encadenado${NC}"
             echo -e "  ${DIM}Encadena varios pasos en uno solo${NC}"
             echo -e "  ${DIM}Operaciones disponibles:${NC}"
