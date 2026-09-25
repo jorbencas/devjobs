@@ -88,7 +88,10 @@
                     "schedule": [
                         {
                             "days": [
-                                "Monday"
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday"
                             ],
                             "time": "18:00"
                         }
@@ -98,19 +101,6 @@
         },
         "mouredev": {
             "platform": [
-                {
-                    "platform": "youtube",
-                    "detectar": false,
-                    "corte": false,
-                    "schedule": [
-                        {
-                            "days": [
-                                "Thursday"
-                            ],
-                            "time": "18:00"
-                        }
-                    ]
-                },
                 {
                     "platform": "twitch",
                     "detectar": false,
