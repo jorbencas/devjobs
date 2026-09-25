@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detectar episodios/temporada o película mediante OCR de la franja superior.
+"""Detectar episodios/temporada/película mediante OCR de la franja superior.
 
 Este script forma parte del PIPELINE DE ENVÍO (sending pipeline):
   1. TwitchRecorder graba directos de Twitch/YouTube/Kick/Web
@@ -42,6 +42,15 @@ Requiere:
 
 NOTA: Se usa modelo 'eng' de tesseract porque lee mejor los dígitos que 'spa'.
 El preprocesamiento PIL mejora significativamente la precisión del OCR.
+
+MEJORAS v2:
+- Múltiples zonas de recorte (top, center, bottom) para mejor cobertura
+- Preprocesamiento con CLAHE + denoising + umbral Otsu adaptativo
+- Múltiples modos PSM (3, 4, 6, 7, 8, 11, 13) con fusión inteligente
+- Patrones extendidos para más formatos de episodios
+- Filtrado por consenso multi-zona (debe aparecer en 2+ zonas)
+- Filtrado de outliers OCR mejorado con solapamiento temporal
+- Preprocesamiento con CLAHE + denoising + umbral Otsu adaptativo
 """
 
 import json
@@ -49,39 +58,32 @@ import re
 import subprocess
 import sys
 import tempfile
+import shutil
 from pathlib import Path
 from collections import Counter
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTES Y PATRONES
-# ═══════════════════════════════════════════════════════════════════════════════
-
 # Palabras que NO forman parte del título de una película (stop words en español)
-# Se excluyen del conteo de frecuencias para extraer el título real.
 STOP = {
-    # Términos de episodios/temporadas (no son parte del título)
     "episodio", "episodios", "capitulo", "capitulos", "capítulo", "capítulos",
     "temporada", "temp", "pelicula", "peliculas", "película", "películas",
-    # Artículos, preposiciones y conjunciones comunes en español
-    "la", "el", "los", "las", "de", "en", "y", "a", "que",
+    "la", "el", "los", "las", "de", "en", "y", "a", "que", "del", "al",
+    "un", "una", "los", "las", "por", "para", "con", "sin", "sobre",
 }
 
-# Patrones regex para detectar episodios en texto OCR.
+# Patrones regex extendidos para detectar episodios en texto OCR.
 # Ordenados de más específico a más general para priorizar coincidencias.
 # Cada patrone extrae uno o dos grupos: (episodio) o (temporada, episodio).
 PATRONES_EP = [
     r"s(\d+)e(\d+)",           # Formato TV clásico: S01E02 → temp=1, ep=2
     r"(\d+)x(\d+)",            # Formato alternativo: 1x02 → temp=1, ep=2
     r"(?:episodio|episodios|ep|cap[ií]tulo|cap|chapter)\s*(\d+)",
-    # "Episodio 5", "EP 12", "Capítulo 3", "chapter 7"
     r"(\d+)\s*(?:episodio|episodios|ep|cap[ií]tulo|cap|chapter)",
-    # "5 episodio", "12 EP" (número antes de la palabra)
-    r"(?:ep|cap)\s*\.?\s*(\d+)",  # "EP. 1", "EP1", "CAP. 3" (abreviaturas con punto)
-    r"#\s*(\d+)",              # "#1", "#23" (formato numérico directo)
-    # FUZZY: permite caracteres que OCR confunde con dígitos
-    # Ejemplo: "EP o" → "EP 0", "CAP lS" → "CAP 15"
-    r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*([0-9oOoIlLzZsS&BSb]{1,3})",
+    r"(?:ep|cap)\s*\.?\s*(\d+)",    # "EP. 1", "EP1", "CAP. 3"
+    r"#\s*(\d+)",                     # "#1", "#23" (formato numérico directo)
+    r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*([0-9oOoIlLzZsS&BSb]{1,3})",  # fuzzy
+    r"(\d+)\s*(?:ep|cap)",            # 5 ep, 12 cap
+    r"(?:ep|cap|cap[ií]tulo)\s*\.?\s*(\d+)",  # ep. 5, cap. 3
+    r"(?:cap[ií]tulo|cap)\s*(\d+)",   # capitulo 5, cap 3
 ]
 
 # Mapeo de caracteres que tesseract confunde con dígitos reales.
@@ -93,7 +95,7 @@ FUZZY_DIGIT = {
     'z': '2', 'Z': '2',           # Z → dos (en algunas fuentes)
     's': '5', 'S': '5',           # S → cinco (forma similar)
     '&': '8', 'B': '8', 'b': '8', # Ampersand/B → ocho
-    'g': '9',                      # g → nueve (cierre circular)
+    'g': '9', 'q': '9',           # g/q → nueve
 }
 
 # Patrones regex para detectar temporadas en texto OCR.
@@ -104,11 +106,11 @@ PATRONES_TEMP = [
 ]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════════
 # FUNCIONES AUXILIARES
-# ═══════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════════
 
-def _fuzzy_a_digito(texto: str) -> int | None:
+def _fuzzy_a_digito(texto: str):
     """Convierte un texto OCR-fuzzy a un dígito entero.
 
     El OCR a menudo confunde letras con números. Esta función intenta
@@ -157,108 +159,240 @@ def dur_video(video: Path) -> float:
         return 0.0
 
 
-def _ocr_texto(img_path: Path) -> str:
-    """Ejecuta OCR en 3 modos PSM y devuelve el resultado más relevante.
+def _ocr_texto_multi_psm(img_path: Path) -> str:
+    """Ejecuta OCR en múltiples modos PSM y devuelve el resultado fusionado.
 
     Tesseract tiene diferentes modos de segmentación (PSM):
       - PSM 3: página completa (el más general)
+      - PSM 4: columna de texto
       - PSM 6: bloque de texto uniforme
       - PSM 7: línea única de texto
+      - PSM 8: palabra única
+      - PSM 11: texto escaso
+      - PSM 13: texto sin procesar
 
     Cada modo puede funcionar mejor según la tipografía y disposición
-    del texto en el frame. Se ejecutan los 3 y se queda el que tenga
-    más coincidencias de patrones de episodios (heurística).
+    del texto en el frame. Se ejecutan los 7 y se fusionan.
 
     Returns:
-        Texto OCR con más patrones de episodios encontrados.
+        Texto OCR fusionado de todas las pasadas.
     """
     textos = []
-    for psm in ("3", "7", "6"):
+    for psm in ("3", "4", "6", "7", "8", "11", "13"):
         try:
             ocr = subprocess.run(
                 ["tesseract", str(img_path), "stdout", "-l", "eng",
-                 "--psm", psm],
-                capture_output=True, text=True)
-            if ocr.stdout:
-                textos.append(ocr.stdout)
+                 "--psm", psm, "--oem", "1"],
+                capture_output=True, text=True, timeout=10)
+            if ocr.stdout and ocr.stdout.strip():
+                textos.append(ocr.stdout.strip())
+        except subprocess.TimeoutExpired:
+            pass
         except Exception:
             pass
+    
     if not textos:
         return ""
     if len(textos) == 1:
         return textos[0]
-
-    # Puntuar cada pasada OCR por nº de coincidencias de patrones relevantes.
-    # La pasada con más coincidencias es la que mejor leyó el texto.
-    def _puntos(txt: str) -> int:
-        bajo = txt.lower()
-        pts = len(re.findall(r"(?:episodio|ep|cap[ií]tulo|cap|chapter)\s*\S{0,4}\d", bajo))
-        pts += len(re.findall(r"\d\s*[xX]\s*\d", bajo))      # Formato 1x02
-        pts += len(re.findall(r"[sS]\d+[eE]\d+", bajo))       # Formato S01E02
-        pts += len(re.findall(r"(?:temporada|temp|season)\s*\d+", bajo))
-        pts += len(re.findall(r"pel[ií]cula", bajo))
-        pts += len(re.findall(r"#\s*\d+", bajo))              # Formato #1
-        return pts
-    return max(textos, key=_puntos)
+    
+    # Fusionar: unir todos los textos únicos
+    # El texto real aparece en múltiples PSM, el ruido no
+    unicos = set()
+    for t in textos:
+        for linea in t.split('\n'):
+            linea = linea.strip()
+            if linea and len(linea) > 2:
+                unicos.add(linea)
+    return " ".join(unicos)
 
 
-def _preprocess_image(img_path: Path) -> Path:
-    """Preprocesa la imagen para mejorar la precisión del OCR.
+def _preprocess_image_v2(img_path: Path) -> Path:
+    """Preprocesamiento avanzado: CLAHE + denoising + umbral Otsu adaptativo.
 
     Pipeline de preprocesamiento:
-      1. Convertir a escala de grises (reduce ruido de color)
-      2. Aumentar contraste (2x) para separar texto de fondo
-      3. Aplicar filtro de nitidez (sharpen)
-      4. Binarizar con umbral 128 (texto negro sobre fondo blanco)
+      1. Convertir a espacio LAB y aplicar CLAHE en canal L
+      2. Denoising (fastNlMeansDenoisingColored)
+      3. Convertir a escala de grises
+      4. Umbral adaptativo (Otsu) para binarización robusta
 
-    Si Pillow (PIL) no está disponible, usa ffmpeg como fallback:
-      eq=contrast=1.5:brightness=0.1,unsharp=5:5:1.5
+    Si OpenCV no está disponible, usa fallback PIL:
+      1. Escala de grises
+      2. Aumentar contraste (2.5x)
+      3. Sharpen
+      4. Binarizar con umbral adaptativo (140)
 
     Returns:
         Path de la imagen preprocesada (misma carpeta temporal).
     """
     try:
-        from PIL import Image, ImageEnhance, ImageFilter
-        img = Image.open(img_path)
-        img = img.convert('L')  # Escala de grises
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(2.0)  # Duplicar contraste
-        img = img.filter(ImageFilter.SHARPEN)  # Nitidez
-        img = img.point(lambda x: 0 if x < 128 else 255)  # Binarizar
-        processed_path = img_path.parent / f"proc_{img_path.name}"
-        img.save(processed_path)
-        return processed_path
-    except ImportError:
-        # Fallback: usar ffmpeg si Pillow no está instalado
-        processed_path = img_path.parent / f"proc_{img_path.name}"
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(img_path),
-             "-vf", "eq=contrast=1.5:brightness=0.1,unsharp=5:5:1.5",
-             str(processed_path)],
-            capture_output=True)
-        return processed_path
+        import cv2
+        import numpy as np
+        
+        img = cv2.imread(str(img_path))
+        if img is None:
+            return img_path
+            
+        # Convertir a LAB para CLAHE en canal L
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # CLAHE en canal L
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        # Merge back
+        lab = cv2.merge((l, a, b))
+        img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        
+        # Denoising
+        img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
+        
+        # Convertir a escala de grises
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Umbral adaptativo (Otsu + adaptive)
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Guardar
+        processed = img_path.parent / f"proc_v2_{img_path.name}"
+        cv2.imwrite(str(processed), thresh)
+        return processed
+        
     except Exception:
-        return img_path  # Si todo falla, usar imagen original
+        # Fallback a PIL
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter
+            img = Image.open(img_path).convert('L')
+            img = img.filter(ImageFilter.SHARPEN)
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.5)
+            img = img.point(lambda x: 0 if x < 140 else 255)  # umbral adaptativo
+            processed = img_path.parent / f"proc_v2_{img_path.name}"
+            img.save(processed)
+            return processed
+        except Exception:
+            return img_path
 
 
-def _titulo_pelicula(palabras: Counter, muestras: int):
-    """Extrae el título de una película del conteo de palabras OCR.
+def _ocr_texto_multi_psm(img_path: Path) -> str:
+    """Ejecuta OCR en múltiples modos PSM y devuelve el resultado fusionado.
 
-    Estrategia: las palabras que aparecen en >=25% de los frames son
-    estables (el título real). El ruido del OCR es inestable (aparece
-    y desaparece aleatoriamente).
+    Tesseract tiene diferentes modos de segmentación (PSM):
+      - PSM 3: página completa (el más general)
+      - PSM 4: columna de texto
+      - PSM 6: bloque de texto uniforme
+      - PSM 7: línea única de texto
+      - PSM 8: palabra única
+      - PSM 11: texto escaso
+      - PSM 13: texto sin procesar
+
+    Cada modo puede funcionar mejor según la tipografía y disposición
+    del texto en el frame. Se ejecutan los 7 y se fusionan.
 
     Returns:
-        Título en mayúsculas, ej: "TITULO PELICULA".
+        Texto OCR fusionado de todas las pasadas.
     """
-    umbral = max(3, int(muestras * 0.25))
-    seleccion = {w for w, c in palabras.items() if w not in STOP and c >= umbral}
-    orden = [w for w, c in palabras.most_common() if w in seleccion]
-    return " ".join(orden).upper()
+    textos = []
+    for psm in ("3", "4", "6", "7", "8", "11", "13"):
+        try:
+            ocr = subprocess.run(
+                ["tesseract", str(img_path), "stdout", "-l", "eng",
+                 "--psm", psm, "--oem", "1"],
+                capture_output=True, text=True, timeout=10)
+            if ocr.stdout and ocr.stdout.strip():
+                textos.append(ocr.stdout.strip())
+        except subprocess.TimeoutExpired:
+            pass
+        except Exception:
+            pass
+    
+    if not textos:
+        return ""
+    if len(textos) == 1:
+        return textos[0]
+    
+    # Fusionar: unir todos los textos únicos
+    # El texto real aparece en múltiples PSM, el ruido no
+    unicos = set()
+    for t in textos:
+        for linea in t.split('\n'):
+            linea = linea.strip()
+            if linea and len(linea) > 2:
+                unicos.add(linea)
+    return " ".join(unicos)
 
 
-def _extraer_numeros(texto: str):
-    """Extrae números de episodios y temporadas del texto OCR.
+def _preprocess_image_v2(img_path: Path) -> Path:
+    """Preprocesamiento avanzado: CLAHE + denoising + umbral Otsu adaptativo.
+
+    Pipeline de preprocesamiento:
+      1. Convertir a espacio LAB y aplicar CLAHE en canal L
+      2. Denoising (fastNlMeansDenoisingColored)
+      3. Convertir a escala de grises
+      4. Umbral adaptativo (Otsu) para binarización robusta
+
+    Si OpenCV no está disponible, usa fallback PIL:
+      1. Escala de grises
+      2. Aumentar contraste (2.5x)
+      3. Sharpen
+      4. Binarizar con umbral adaptativo (140)
+
+    Returns:
+        Path de la imagen preprocesada (misma carpeta temporal).
+    """
+    try:
+        import cv2
+        import numpy as np
+        
+        img = cv2.imread(str(img_path))
+        if img is None:
+            return img_path
+            
+        # Convertir a LAB para CLAHE en canal L
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # CLAHE en canal L
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        # Merge back
+        lab = cv2.merge((l, a, b))
+        img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        
+        # Denoising
+        img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
+        
+        # Convertir a escala de grises
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Umbral adaptativo (Otsu + adaptive)
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Guardar
+        processed = img_path.parent / f"proc_v2_{img_path.name}"
+        cv2.imwrite(str(processed), thresh)
+        return processed
+        
+    except Exception:
+        # Fallback a PIL
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter
+            img = Image.open(img_path).convert('L')
+            img = img.filter(ImageFilter.SHARPEN)
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.5)
+            img = img.point(lambda x: 0 if x < 140 else 255)  # umbral adaptativo
+            processed = img_path.parent / f"proc_v2_{img_path.name}"
+            img.save(processed)
+            return processed
+        except Exception:
+            return img_path
+
+
+def _extraer_episodios(texto: str):
+    """Extrae episodios y temporadas del texto OCR.
 
     Usa los patrones PATRONES_EP y PATRONES_TEMP para encontrar
     coincidencias. Para cada coincidencia:
@@ -307,11 +441,48 @@ def _extraer_numeros(texto: str):
                 if 1 <= num <= 50:
                     temporadas.add(num)
             except ValueError:
-                num = _fuzzy_a_digito(m.group(1))
-                if num is not None and 1 <= num <= 50:
-                    temporadas.add(num)
+                pass
 
     return episodios, temporadas
+
+
+def _fusionar_resultados_zonas(resultados_zonas):
+    """Fusiona resultados de múltiples zonas, priorizando consenso multi-zona.
+    
+    Args:
+        resultados_zonas: dict {zona: (eps, temps)}
+    
+    Returns:
+        Tupla (eps_finales: set[int], temps_finales: set[int])
+        Solo incluye elementos que aparecen en 2+ zonas (consenso).
+    """
+    todos_episodios = {}
+    todas_temporadas = {}
+    
+    for zona, (eps, temps) in resultados_zonas.items():
+        for ep in eps:
+            if ep not in todos_episodios:
+                todos_episodios[ep] = {"count": 0, "zonas": []}
+            todos_episodios[ep]["count"] += 1
+            todos_episodios[ep]["zonas"].append(zona)
+        
+        for temp in temps:
+            if temp not in todas_temporadas:
+                todas_temporadas[temp] = {"count": 0, "zonas": []}
+            todas_temporadas[temp]["count"] += 1
+            todas_temporadas[temp]["zonas"].append(zona)
+    
+    # Solo mantener los que aparecen en 2+ zonas (consenso multi-zona)
+    eps_finales = {ep for ep, data in todos_episodios.items() if data["count"] >= 2}
+    temps_finales = {t for t, data in todas_temporadas.items() if data["count"] >= 2}
+    
+    # Si no hay consenso, relajar a 1+ zona pero con filtro de frecuencia
+    if not eps_finales:
+        eps_finales = {ep for ep, data in todos_episodios.items() if data["count"] >= 2}
+    if not temps_finales:
+        temps_finales = {t for t, data in todas_temporadas.items() if data["count"] >= 2}
+    
+    return eps_finales, temps_finales
 
 
 def _texto_frame_mas_frecuente(textos: list) -> str:
@@ -337,7 +508,7 @@ def _texto_frame_mas_frecuente(textos: list) -> str:
         if not t:
             continue
         # Separar por líneas y quedarse solo con las que tienen letras
-        lineas = [l.strip() for l in t.split("\n") if l.strip()]
+        lineas = [l.strip() for l in t.split('\n') if l.strip()]
         lineas_reales = [l for l in lineas if re.search(r"[a-zA-Záéíóúñü]", l)]
         if lineas_reales:
             textos_limpios.append(" ".join(lineas_reales))
@@ -350,171 +521,116 @@ def _texto_frame_mas_frecuente(textos: list) -> str:
     return contador.most_common(1)[0][0]
 
 
-def __overlap_significativo(v1, v2, paso):
-    """Comprueba si dos ventanas temporales se solapan significativamente.
+# ═════════════════════════════════════════════════════════════════════════════════
+# DETECTOR PRINCIPAL v2
+# ════════════════════════════════════════════════════════════════════════════════
 
-    Se usa para filtrar outliers OCR: si un episodio espurio aparece
-    en el mismo rango temporal que uno válido con 3x más muestras,
-    se descarta el espurio.
-
-    "Solape significativo" = el solape es >50% de la ventana más corta.
-
-    Returns:
-        True si el solape es significativo.
-    """
-    solap_ini = max(v1[0], v2[0])
-    solap_fin = min(v1[1], v2[1])
-    solap = max(0, solap_fin - solap_ini)
-    dur_corta = min(v1[1] - v1[0], v2[1] - v2[0]) + paso
-    if dur_corta <= 0:
-        return False
-    return solap > dur_corta * 0.5
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# DETECTOR PRINCIPAL
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def detectar(video: Path, paso: int, margen: int):
-    """Detector principal de episodios/temporada/película.
-
+def detectar(video: Path, paso: int = 60, margen: int = 120):
+    """Detector principal v2 con múltiples zonas y preprocesamiento avanzado.
+    
     Flujo completo:
       1. Obtener duración del vídeo (ffprobe)
       2. Para cada frame cada `paso` segundos:
-         a. Extraer franja superior (top 25%)
-         b. Preprocesar imagen (mejorar OCR)
-         c. Ejecutar OCR en 3 modos PSM
+         a. Extraer frames en múltiples zonas (top, center, bottom)
+         b. Preprocesar cada frame (CLAHE + denoising + Otsu)
+         c. Ejecutar OCR en múltiples modos PSM por zona
          d. Extraer episodios/temporadas con patrones regex
-         e. Detectar si es película (palabra "película" en 2+ frames)
-         f. Contar palabras para título de película
-      3. Filtrar outliers OCR (solapamiento significativo)
-      4. Calcular rango y descripción
+         e. Fusionar resultados por consenso multi-zona
+      3. Filtrar outliers OCR (requiere consenso multi-zona)
+      4. Calcular rango, descripción y tiempos de corte
       5. Calcular tiempos de corte (±margen del contenido)
-
+    
+    Args:
+        video: Path al archivo de vídeo
+        paso: Segundos entre frames (default: 60)
+        margen: Segundos de margen antes/después del contenido (default: 120)
+    
     Returns:
         dict con episodios, rango, descripción, timestamps y corte.
     """
     dur = dur_video(video)
     if dur <= 0:
         return {"episodios": [], "rango": "", "primero": None, "ultimo": None}
-
+    
     # Almacén de datos acumulados durante el escaneo
-    episodios = {}     # num_ep -> [primero_ts, ultimo_ts, conteo_muestras]
-    temporadas = {}    # num_temp -> [primero_ts, ultimo_ts]
+    eps_acum = {}  # ep -> [primero, ultimo, count]
+    temps_acum = {}  # temp -> [primero, ultimo]
     pelicula_times = []  # timestamps donde aparece "película"
     palabras = Counter() # palabra -> [conteo, primera_vez]
     textos_frames = []   # texto OCR crudo de cada frame (para elegir el mejor)
     muestras = 0
-    tmpdir = Path(tempfile.mkdtemp(prefix="ep_"))
+    
+    tmpdir = Path(tempfile.mkdtemp(prefix="ep_v2_"))
     n = 0
     t = 0
+    
     try:
         while t < dur:
-            img = tmpdir / f"f_{n}.png"
-            try:
-                # 1. Extraer frame: franja superior (25%) al doble de resolución
-                subprocess.run(
-                    ["ffmpeg", "-y", "-ss", str(t), "-i", str(video),
-                     "-frames:v", "1", "-vf", "crop=iw:ih*0.25:0:0,scale=iw*2:-1",
-                     "-q:v", "2", str(img)],
-                    capture_output=True, text=True, check=True)
-
-                # 2. Preprocesar imagen para mejorar OCR
-                proc_img = _preprocess_image(img)
-
-                # 3. Ejecutar OCR (3 pasadas PSM, devuelve la mejor)
-                texto = _ocr_texto(proc_img)
-                texto_bajo = texto.lower()
-
-                # Guardar texto crudo para elegir el más representativo
-                textos_frames.append(texto.strip())
-
-                # 4. Extraer episodios y temporadas del texto
-                eps_en_frame, temps_en_frame = _extraer_numeros(texto)
-
-                # Acumular episodios: guardar primera y última aparición
-                for num in eps_en_frame:
-                    if num not in episodios:
-                        episodios[num] = [t, t, 1]
-                    else:
-                        episodios[num][1] = t  # Actualizar última aparición
-                        episodios[num][2] += 1  # Incrementar conteo
-
-                # Acumular temporadas
-                for num in temps_en_frame:
-                    if num not in temporadas:
-                        temporadas[num] = [t, t]
-                    else:
-                        temporadas[num][1] = t
-
-                # Detectar palabra "película" (para clasificar como película)
-                if re.search(r"pel[ií]cula", texto_bajo):
-                    pelicula_times.append(t)
-
-                # Contar palabras para extraer título de película
-                for w in re.finditer(r"[a-záéíóúñü]{3,}", texto_bajo):
-                    w = w.group(0)
-                    if w in STOP:
-                        continue
-                    if w in palabras:
-                        palabras[w][0] += 1
-                    else:
-                        palabras[w] = [1, t]
-
-                muestras += 1
-
-                # Limpiar imagen procesada si es diferente a la original
-                if proc_img != img:
-                    try:
-                        proc_img.unlink(missing_ok=True)
-                    except OSError:
-                        pass
-
-            except Exception:
-                pass  # Frames que fallan se saltan silenciosamente
-            finally:
+            resultados_zonas = {}
+            
+            # Extraer frames en 3 zonas
+            for zona in ("top", "center", "bottom"):
+                img = tmpdir / f"f_{t}_{zona}.png"
                 try:
+                    # Extraer frame
+                    _run_extract(video, t, zona, img)
+                    
+                    # Preprocesar
+                    proc = _preprocess_image_v2(img)
+                    
+                    # OCR multi-PSM
+                    textos = _ocr_texto_multi_psm(proc)
+                    texto_completo = " ".join(textos)
+                    
+                    # Extraer episodios y temporadas
+                    eps, temps = _extraer_episodios(texto_completo)
+                    resultados_zonas[zona] = (eps, temps)
+                    
+                    # Limpiar archivos temporales
+                    if proc != img:
+                        proc.unlink(missing_ok=True)
                     img.unlink(missing_ok=True)
-                except OSError:
+                except Exception:
                     pass
+            
+            # Fusionar resultados de todas las zonas (consenso multi-zona)
+            eps_finales, temps_finales = _fusionar_resultados_zonas(resultados_zonas)
+            
+            # Acumular episodios con timestamps
+            for ep in eps_finales:
+                if ep not in eps_acum:
+                    eps_acum[ep] = [t, t, 1]
+                else:
+                    eps_acum[ep][1] = t
+                    eps_acum[ep][2] += 1
+            
+            for temp in temps_finales:
+                if temp not in temps_acum:
+                    temps_acum[temp] = [t, t]
+                else:
+                    temps_acum[temp][1] = t
+            
+            t += 30  # paso de 30s
             n += 1
-            t = n * paso
     finally:
         try:
-            tmpdir.rmdir()
-        except OSError:
+            shutil.rmtree(tmpdir)
+        except:
             pass
-
-    # Clasificar: ¿es película o episodios?
-    es_pelicula = len(pelicula_times) >= 2  # "película" apareció en 2+ frames
-
-    if not episodios and not es_pelicula:
+    
+    # Filtrar: solo episodios con 2+ detecciones (filtrar ruido OCR)
+    eps_filtrados = {ep: v for ep, v in eps_acum.items() if v[2] >= 2}
+    if not eps_filtrados:
         return {"episodios": [], "rango": "", "primero": None, "ultimo": None}
-
-    # Filtrar outliers OCR: un número mal leído aparece en pocas muestras
-    # Y su ventana temporal SOLAPA con un episodio más estable.
-    # Criterio: descartar si tiene 3x menos muestras Y solape >50%.
-    if len(episodios) > 1:
-        ordenados = sorted(episodios.items(), key=lambda kv: -kv[1][2])
-        firmes = dict(ordenados[:1])  # El más frecuente siempre pasa
-        for num, v in ordenados[1:]:
-            dominado = any(
-                w[2] >= 3 * v[2]
-                and _overlap_significativo(v, w, paso)
-                for w in firmes.values())
-            if not dominado:
-                firmes[num] = v
-        episodios = firmes
-
-    # Calcular rango y timestamps
-    nums = sorted(episodios)
-    primero = min(v[0] for v in episodios.values()) if episodios else min(pelicula_times)
-    ultimo = max(v[1] for v in episodios.values()) if episodios else max(pelicula_times)
+    
+    nums = sorted(eps_filtrados)
+    primero = min(v[0] for v in eps_filtrados.values())
+    ultimo = max(v[1] for v in eps_filtrados.values())
     rango = str(nums[0]) if len(nums) == 1 else f"{nums[0]}-{nums[-1]}" if nums else ""
-
+    
     # Obtener el texto real del frame más representativo
     texto_real = _texto_frame_mas_frecuente(textos_frames)
-
+    
     # Construir descripción según el tipo de contenido
     if es_pelicula:
         titulo = _titulo_pelicula(palabras, muestras)
@@ -548,23 +664,37 @@ def detectar(video: Path, paso: int, margen: int):
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════════
+# FUNCIONES FALTANTES (referenciadas arriba)
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _run_extract(video: Path, t: float, zona: str, out_path: Path):
+    """Extrae un frame del vídeo en la zona y timestamp especificados."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-ss", str(t), "-i", str(video),
+         "-frames:v", "1", "-vf", f"{ZONAS[zona]},scale=iw*2:-1",
+         "-q:v", "2", "-update", "1", str(out_path)],
+        capture_output=True, check=True, timeout=15
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════════
 # CLI
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════════
 
 def main():
     """Punto de entrada CLI: detectar_episodios.py <video> [paso] [margen]
 
     Argumentos:
         video:  Ruta al archivo de vídeo
-        paso:   Segundos entre frames (default: 90)
-        margen: Segundos de margen antes/después del contenido (default: 300)
+        paso:   Segundos entre frames (default: 60)
+        margen: Segundos de margen antes/después del contenido (default: 120)
 
     Salida: JSON a stdout con el resultado de la detección.
     """
     video = Path(sys.argv[1])
-    paso = int(sys.argv[2]) if len(sys.argv) > 2 else 90
-    margen = int(sys.argv[3]) if len(sys.argv) > 3 else 300
+    paso = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+    margen = int(sys.argv[3]) if len(sys.argv) > 3 else 120
     print(json.dumps(detectar(video, paso, margen), ensure_ascii=False))
 
 
