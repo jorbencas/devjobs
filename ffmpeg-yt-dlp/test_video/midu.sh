@@ -96,6 +96,8 @@ MODO DESCARGA:
   --dl-subs-only         Solo descargar subtítulos (sin vídeo)
   --web-extract URL      Descarga web genérica (yt-dlp → HLS → Selenium)
   --web-extract-login URL Descarga web con login (HLS + login/Cloudflare)
+  --web-extract URL      Descarga web genérica (yt-dlp → HLS → Selenium)
+  --web-extract-login URL Descarga web con login (HLS + login/Cloudflare)
 
 MODO CORTE (lossless, sin re-encoding):
   --cut                  Cortar vídeo por tiempo
