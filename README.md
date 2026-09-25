@@ -11,9 +11,11 @@
 
 [![Scraper](https://img.shields.io/badge/Pipeline-Twitch%20→%20Telegram-9146FF?style=flat-square&logo=twitch&logoColor=white)](#pipeline-directos-de-twitch--telegram)
 [![YouTube](https://img.shields.io/badge/Pipeline-YouTube%20→%20Telegram-FF0000?style=flat-square&logo=youtube&logoColor=white)](#pipeline-youtube--telegram)
+[![Bot](https://img.shields.io/badge/Bot-Telegram%20AI-0088CC?style=flat-square&logo=telegram&logoColor=white)](#-bot-telegram)
+[![Project Gen](https://img.shields.io/badge/Project%20Generator-AI-8B5CF6?style=flat-square&logo=github-actions&logoColor=white)](#project-generator)
 [![Blog](https://img.shields.io/badge/Blog-jorbencas-orange?style=flat-square&logo=vercel&logoColor=white)](https://blog-jorbencas.vercel.app)
 
-Suite auto-hospedada de **automatización con Docker**: grabación de directos, conversión de vídeo, subida a Telegram, descarga de cursos y gestión de PDFs — listas para desplegar y olvidar.
+Suite auto-hospedada de **automatización con Docker**: grabación de directos, conversión de vídeo, subida a Telegram, descarga de cursos, gestión de PDFs, **generador de proyectos con IA** — listas para desplegar y olvidar.
 
 **[📖 Blog: Devjobs Suite](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite)** · **[🔧 Instalación](https://blog-jorbencas.vercel.app/posts/instalacion-devjobs)** · **[💬 docker_help.txt](docker_help.txt)**
 
@@ -31,6 +33,7 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 | 📺 **YouTube → Telegram** | Descargar canales → convertir → subir con topics | Cron 01:00→18:00 | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) |
 | 🤖 **Bot Telegram** | Descargas por URL + contenido IA (tips, tools) | En tiempo real | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) |
 | 📄 **PDF Manager** | Desbloquear, unir, dividir, comprimir PDFs | Bajo demanda | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) |
+| 💡 **Project Generator** | Ideas de proyectos con IA (Gemini) | Cada 4 horas | [📖](#project-generator) |
 
 ---
 
@@ -40,13 +43,14 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 |---|-------------|-------------|------|--------|
 | 1 | `TwitchRecorder/` | Grabador automático de directos (Twitch/YouTube/Kick) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](TwitchRecorder/README.md) |
 | 2 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo (33 modos) | [📖](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | [README](ffmpeg-yt-dlp/README.md) |
-| 3 | `downloader_telegram/` | Descargador masivo + bot API interactivo | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | [README](downloader_telegram/README.md) |
+| 3 | `downloader_telegram/` | Descargador masivo + bot API interactivo + CLI consolidada | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | [README](downloader_telegram/README.md) |
 | 4 | `yt-to-telegram/` | Pipeline YouTube → Telegram (160 canales) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](yt-to-telegram/README.md) |
 | 5 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | [README](pdfmanager/README.md) |
-| 6 | `hdfull-downloader/` | Descargador de películas HDFull con noVNC | — | [README](hdfull-downloader/README.md) |
-| 7 | `aula-downloader/` | Descargador de vídeos Moodle/Vimeo | — | [README](aula-downloader/README.md) |
-| 8 | `scripts/kick_download.py` | Descargador de vídeos Kick.com (API + ffmpeg) | — | [docker_help.txt](docker_help.txt#3i) |
-| 9 | `scripts/discord_monitor.py` | Bot Discord: graba streams automáticamente con OBS | — | [docker_help.txt](docker_help.txt#3j) |
+| 5 | `hdfull-downloader/` | Descargador de películas HDFull con noVNC | — | [README](hdfull-downloader/README.md) |
+| 6 | `aula-downloader/` | Descargador de vídeos Moodle/Vimeo | — | [README](aula-downloader/README.md) |
+| 7 | `scripts/kick_download.py` | Descargador de vídeos Kick.com (API + ffmpeg) | — | [docker_help.txt](docker_help.txt#3i) |
+| 8 | `scripts/discord_monitor.py` | Bot Discord: graba streams automáticamente con OBS | — | [docker_help.txt](docker_help.txt#3j) |
+| 9 | `project_generator/` | **Generador de ideas de proyectos con IA (Gemini)** | [📖](#project-generator) | [README](project_generator/README.md) |
 
 ---
 
@@ -93,23 +97,32 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
 4. **Filtrado**: descarta outliers con solapamiento significativo (>50% + 3x muestras)
 5. **Clasificación**: episodios, temporada, o película (por frecuencia de "película")
 
-### Configuración
+### Configuración (schedule por platform)
 
-`TwitchRecorder/config.json` controla todo el comportamiento del grabador.
+`TwitchRecorder/config.json` controla todo el comportamiento del grabador. **Novedad:** cada platform tiene su propio `schedule` (días/horas).
 
 ```json
 {
     "channels": {
         "sendosama": {
             "platform": [
-                { "platform": "web", "url": "https://watch.sendosama.net/", "detectar": true, "corte": false },
-                { "platform": "twitch", "detectar": false, "corte": false },
-                { "platform": "kick", "detectar": false, "corte": false }
-            ],
-            "start_time": { "Sunday": "19:00", "*": "21:30" },
-            "dias_plataforma": {
-                "*": ["web", "twitch", "kick"]
-            }
+                {
+                    "platform": "web",
+                    "url": "https://watch.sendosama.net/",
+                    "detectar": true,
+                    "corte": false,
+                    "schedule": [
+                        {"days": ["Sunday"], "time": "19:00"},
+                        {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], "time": "21:30"}
+                    ]
+                },
+                {
+                    "platform": "twitch",
+                    "detectar": false,
+                    "corte": false,
+                    "schedule": []
+                }
+            ]
         }
     },
     "record_path": "/recordings",
@@ -129,18 +142,15 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
 | `check_every` | Segundos entre comprobaciones | `30` |
 | `max_duration` | Duración máxima (`HH:MM:SS`) | `24:00:00` |
 | `retry_interval` | Segundos antes de reconectar | `1` |
-| `copy_to_test` | Copiar a `test_path` como `*_completed.mp4` al terminar | `false` |
+| `copy_to_test` | Copiar a `test_path` como `*_completed.mp4` al terminar | `true` |
 | `test_path` | Carpeta que vigila el monitor | `/recordings/test` |
 
 **Campos por canal:**
 
 | Campo | Qué hace | Default |
 |-------|----------|---------|
-| `enabled` | Si `false`, el canal se salta completamente (útil para desactivar sin borrar la config) | `true` |
+| `enabled` | Si `false`, el canal se salta completamente | `true` |
 | `platform` | Lista de fuentes en orden de prioridad | Requerido |
-| `days` | Días de comprobación (`["Monday", "Thursday"]`) | Todos |
-| `start_time` | Hora mínima (`"18:00"` o `{"Sunday": "19:00", "*": "21:30"}`) | `19:55` |
-| `dias_plataforma` | Reordena fuentes por día | Respeta `platform` |
 
 **Campos por plataforma:**
 
@@ -150,16 +160,9 @@ El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 seg
 | `url` | URL directa (solo `web`) | — |
 | `detectar` | OCR de episodios en el monitor | `true` |
 | `corte` | Recortar intro/outro según episodios | `true` |
+| `schedule` | **NUEVO:** Días/horas de vigilancia | `[]` = ignorado |
 
-`detectar` y `corte` son **independientes**: puedes detectar sin cortar pero no cortar sin detectar.
-
-**`dias_plataforma` en detalle:** Controla qué plataformas se usan y en qué orden según el día. La web va primera por defecto (máxima prioridad). Si un día no está listado, se usa `"*"`:
-
-```json
-"dias_plataforma": {
-    "*": ["web", "twitch", "kick"]
-}
-```
+**`schedule` en detalle:** Controla cuándo y qué vigilar por plataforma. Si `schedule: []` → **se ignora** (no se vigila). Formato: `[{"days": ["Monday"], "time": "18:00"}, ...]`.
 
 ---
 
@@ -171,6 +174,7 @@ Pipeline independiente que descarga vídeos de **160 canales de YouTube**, los c
 |-------|----------|--------|
 | MoureDev | 28 | ✅ Habilitado |
 | Midudev | 30 | ✅ Habilitado |
+| Carlos Azaustre | 32 | ✅ Habilitado |
 | Carlos Azaustre | 32 | ✅ Habilitado |
 | Linkfydev | 45 | ✅ Habilitado |
 | Jorexdev | 644 | ✅ Habilitado |
@@ -197,116 +201,90 @@ yt_ps        # Ver estado
 
 ---
 
-## 🎙️ DISCORD: Grabación Automática de Streams y Llamadas
+## 🤖 Bot Telegram (@jorbencas_bot)
 
-Bot de Discord que monitorea canales de voz, detecta streams/llamadas y graba automáticamente con OBS. La grabación se mueve al pipeline para compresión y subida a Telegram.
+Bot interactivo con **comandos**, **botones inline** y **contenido IA (Gemini)**. Descarga vídeos de cualquier plataforma via yt-dlp.
 
-### Modos de grabación
+### Comandos
 
-| Modo | Descripción | Cuándo graba |
-|------|-------------|--------------|
-| `stream` | Solo streams (compartir pantalla) | Alguien hace "Go Live" en el canal |
-| `call` | Solo llamadas (unión al canal) | Usuarios se unen al canal de voz |
-| `both` | Ambos | Stream O llamada |
+| Comando | Qué hace | Botones |
+|---|---|---|
+| `/tip` | Tip de programación (Gemini + DB) | 🔄 Otro tip, 💡 Concepto, 🛠 Tool |
+| `/concepto` | Concepto con código de ejemplo | 🔄 Otro, 💡 Tip, 🛠 Tool |
+| `/tool` | Herramienta IA (Gemini + DB) | 🔄 Otro, 💡 Tip, 📖 Concepto |
+| `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
+| `/descarga URL` | Descarga vídeo de cualquier plataforma | — |
 
-### Configuración
+**IA:** Solo **Gemini** (Gemini 1.5-flash por defecto). Sin OPENAI/ANTHROPIC keys.
 
-```json
-// scripts/discord_config.json
-{
-  "discord_token": "TU_TOKEN_DE_DISCORD",
-  "monitor_channels": ["ID_DEL_CANAL_O_NOMBRE"],
-  "obs_host": "localhost",
-  "obs_port": 4455,
-  "output_dir": "/home/jorge/dev/devjobs/data/discord-recordings",
-  "record_mode": "stream",
-  "min_users_for_call": 1
-}
+---
+
+## 💡 Project Generator
+
+**Generador automático de ideas de proyectos** que se ejecuta vía GitHub Actions y te manda los resultados a un canal privado de Telegram.
+
+### Qué hace
+
+- **Niveles:** Junior / Semisenior / Senior
+- **Scopes:** Miniproyecto (1-2 sem) / Proyecto (3-6 sem) / Multiproyecto (6+ sem)
+- **Lenguajes:** Python, JavaScript, TypeScript, C#, Go, Rust
+- **Tipos:** Web, API, CLI, Mobile, Desktop, Fullstack, Microservicio, Bot, IA/ML, Datos, DevOps, Testing, Seguridad
+- **Tech stack detallado:** Frameworks, libs, BD, infra, IA/ML, testing con justificación `por_que` por herramienta
+- **IA integrada:** Especifica cuándo y por qué usar IA (OpenAI, Anthropic, Gemini, local)
+- **Anti-duplicados:** Hash MD5 para no repetir proyectos
+- **Fuentes inspiración:** Tips de Telegram, tuweb.dev (scraper), plantillas determinísticas
+- **Mobile:** ✅ Flutter, React Native, MAUI — ❌ NO solo iOS nativo
+
+### Arquitectura (workflow_call nativo — sin PAT)
+
+```
+test_githubActions (cron cada 4h / manual)
+    │
+    ▼ workflow_call (github.token nativo)
+generate-projects-internal.yml
+    │
+    ├── checkout test_githubActions (github.token)
+    ├── pip install
+    ├── python -m src.main generate --send-telegram
+    │       └── secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID, GEMINI_API_KEY
+    ├── Sends to Telegram
+    ├── Commits history a test_githubActions (github.token)
+    ▼
 ```
 
-| Campo | Descripción | Por defecto |
-|-------|-------------|-------------|
-| `discord_token` | Token del bot de Discord | Requerido |
-| `monitor_channels` | IDs o nombres de canales a monitorear | Requerido |
-| `obs_host` | Host de OBS (obs-websocket) | `localhost` |
-| `obs_port` | Puerto de OBS (obs-websocket) | `4455` |
-| `output_dir` | Carpeta donde OBS guarda grabaciones | `data/discord-recordings` |
-| `record_scene` | Escena de OBS para grabar (null = actual) | `null` |
-| `record_mode` | `stream`, `call` o `both` | `stream` |
-| `min_users_for_call` | Mínimo de usuarios para grabar llamada | `1` |
+**Ventaja clave:** **Cero GH_PAT**. Usa `github.token` nativo porque el workflow reutilizable está en el mismo repo.
 
-### Pasos para configurar
+### Secrets en test_githubActions
 
-**1. Crear bot de Discord:**
-```
-1. Ir a https://discord.com/developers/applications
-2. "New Application" → nombre (ej: "Grabador")
-3. pestaña "Bot" → "Add Bot"
-4. Copiar TOKEN → pegar en discord_config.json
-5. "Privileged Gateway Intents" → activar "Server Members Intent"
-```
+| Secret | Uso |
+|--------|-----|
+| `TELEGRAM_BOT_TOKEN` | Envío a Telegram |
+| `TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID` | Canal destino |
+| `GEMINI_API_KEY` | IA (Gemini 1.5-flash default) |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Opcional (si cambias AI_PROVIDER) |
 
-**2. Invitar bot al servidor:**
-```
-1. pestaña "OAuth2" → "URL Generator"
-2. Scopes: "bot"
-3. Bot Permissions: "Connect", "Speak", "Use Voice Activity"
-4. Copiar URL → abrir en navegador → seleccionar servidor → Authorize
-```
-
-**3. Obtener IDs de canales:**
-```
-1. En Discord → Ajustes del servidor → Avanzado → activar "Modo Desarrollador"
-2. Click derecho en el canal de voz → "Copiar ID del canal"
-3. Pegar en discord_config.json → "monitor_channels": ["1234567890"]
-```
-
-**4. Configurar OBS:**
-```
-1. Abrir OBS Studio
-2. Herramientas → Configuración del servicio WebSocket
-3. Activar "Habilitar servidor WebSocket"
-4. Puerto: 4455 (o el que configures)
-5. (Opcional) Añadir contraseña por seguridad
-```
-
-**5. Configurar discord_config.json:**
-```bash
-# Editar config
-nano scripts/discord_config.json
-
-# Pegar token y IDs de canales
-```
-
-**6. Ejecutar:**
-```bash
-discord_monitor   # Iniciar bot
-```
-
-### Comandos del bot en Discord
-
-| Comando | Descripción |
-|---------|-------------|
-| `!discord_status` | Estado actual (grabando/esperando) |
-| `!discord_stop` | Parar grabación manualmente |
-| `!discord_help` | Ayuda |
-
-### Aliases
+### Ejecución automática
 
 ```bash
-discord_monitor          # Iniciar bot de Discord
-discord_obs start [escena]  # Iniciar grabación OBS manual
-discord_obs stop         # Parar grabación OBS
-discord_obs status       # Estado de OBS
-discord_obs scenes       # Listar escenas OBS
+# Cada 4 horas (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
+# En GitHub Actions: Actions → "Generate & Send Projects" → Run workflow
 ```
 
-### Flujo completo
+### Variables configurables (GitHub Variables)
 
-```
-Discord stream/call detectado → OBS graba → stream termina →
-OBS guarda archivo → se mueve a data/pipeline/grabaciones/discord/ →
-ffmpeg_monitor comprime → se sube a Telegram
+| Variable | Default | Qué controla |
+|----------|---------|--------------|
+| `AI_PROVIDER` | `gemini` | `gemini`/`openai`/`anthropic`/`deterministic` |
+| `AI_MODEL` | `gemini-1.5-flash` | Modelo específico |
+| `PROJECTS_PER_RUN` | `3` | Proyectos por ejecución |
+| `SCRAPE_TUWEB_DEV` | `true` | Scraper opcional |
+
+### Probar localmente
+
+```bash
+cd project_generator
+pip install -r requirements.txt
+python -m src.main generate --count 2 --send-telegram
 ```
 
 ---
@@ -329,6 +307,9 @@ yt_up
 
 # Bot Telegram
 tg_bot
+
+# CLI Toolbox
+tg_menu
 ```
 
 > **[📖 Guía completa de instalación](https://blog-jorbencas.vercel.app/posts/instalacion-devjobs)**
@@ -352,6 +333,7 @@ tg_bot
 | `tg_bot` | Arrancar bot Telegram |
 | `tg_bot_logs` | Logs del bot |
 | `docker_help` | Ver todos los comandos |
+| `tg_menu` | CLI toolbox interactiva |
 
 ### Scripts del pipeline (`servicios/`)
 
@@ -378,7 +360,7 @@ Artículos relacionados en [blog-jorbencas.vercel.app](https://blog-jorbencas.ve
 | [FFmpeg + yt-dlp Pipeline](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | 33 modos de conversión de vídeo |
 | [Telegram Ultimate Toolbox](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | Bot, uploader y descargador masivo |
 | [PDF Ninja Master](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | Gestor de PDFs con Docker |
-| [Docker: ffmpeg y yt-dlp](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls) | Guía de instalación en WSL |
+| [Docker: ffmpeg y yt-dlp](https://blog-jorbencas.vercel.app/posts/docker-to-yt-ffmpeg_in-wls) | Guía de instalación en WLS |
 
 ---
 
