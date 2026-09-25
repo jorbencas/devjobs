@@ -12,6 +12,73 @@
         3C. hdfull-downloader      3G. yt-to-telegram
         3D. aula-downloader        3H. kick_download (Kick.com)
   4. PIPELINE: directo sendo sama → Telegram (plogs, pipe_*)  [une 3 proyectos]
+
+==============================================================================
+  4.1 MEJORAS EN DETECCIÓN DE EPISODIOS (detectar_episodios.py v2)
+==============================================================================
+
+El script `detectar_episodios.py` (usado por `monitor_folder.sh` en el monitor)
+se ha reescrito completamente con mejoras significativas:
+
+--- Mejoras principales ---
+
+| Mejora | Antes | Ahora |
+|--------|-------|-------|
+| Zonas OCR | Solo top 25% | **Top, Center, Bottom** (3 zonas) |
+| Preprocesamiento | Solo PIL básico | **CLAHE + denoising + Otsu adaptativo** |
+| Modos PSM | 3 (3, 6, 7) | **7 modos** (3,4,6,7,8,11,13) con fusión |
+| Patrones regex | 5 básicos | **10+ extendidos** (S01E02, 1x02, EP. 5, #3, fuzzy) |
+| Consenso | Ninguno | **2+ zonas** (requiere acuerdo multi-zona) |
+| Fuzzy matching | 6 mapeos | **10+ mapeos** (o/O→0, l/I→1, s/S→5, &=8, g/q→9) |
+| Paso temporal | 90s | **30s** (3x más precisión) |
+| Filtrado ruido | Básico | **Consenso 2+ zonas + 2+ detecciones** |
+
+--- Flujo v2 ---
+1. Cada 30s extrae 3 zonas (top/center/bottom) del frame
+2. Preprocesa cada zona: CLAHE (LAB) + denoising + Otsu binarizado
+3. OCR multi-PSM (3,4,6,7,8,11,13) + fusión de resultados
+4. Extrae episodios/temporadas con 10+ patrones regex + fuzzy
+4. Consenso multi-zona: requiere 2+ zonas de acuerdo
+5. Filtrado: solo episodios con 2+ detecciones temporales
+
+--- Configuración en monitor_folder.sh ---
+```bash
+OCR_STEP=30          # paso en segundos (antes 90)
+CORTE_MARGEN=120     # margen de corte en segundos
+```
+
+--- Testing manual ---
+```bash
+# Test rápido con un vídeo
+python3 detectar_episodios.py video.mp4 30 60
+
+# Test con video específico y paso 30s
+docker exec ffmpeg_monitor-sendo python /app/ffmpeg-yt-dlp/scripts/detectar_episodios.py \
+  /watch/video.mp4 30 60
+```
+
+--- Logs de depuración ---
+```bash
+# Ver logs del monitor en tiempo real
+plogs | grep -E "(Episodio|Episodios|rango|OCR|zona)"
+
+# Ver detecciones en tiempo real
+docker logs -f ffmpeg_monitor-sendo | grep -E "(Episodio|rango|zona)"
+```
+
+--- Archivos clave ---
+| Archivo | Qué hace |
+|---------|----------|
+| `ffmpeg-yt-dlp/scripts/detectar_episodios.py` | Detector principal v2 |
+| `ffmpeg-yt-dlp/scripts/monitor_folder.sh` | Orquesta el monitor (llama a detectar) |
+| `TwitchRecorder/config.json` | Config canales (schedule, detectar, corte) |
+| `monitor_folder.sh` | Variables: OCR_STEP, CORTE_MARGEN |
+
+--- No se requiere rebuild ---
+El script está montado via `..:/app` en docker-compose.yml → **reinicia el monitor**:
+```bash
+cd ffmpeg-yt-dlp && docker compose restart monitor
+```
   5. PIPELINE vía SYSTEMD (auto-arranque al BOOT)
   6. MONTAR en otra máquina (Windows + WSL2)
   7. Utilidades (estado / disco)
@@ -397,33 +464,9 @@ data/backups/            Grabaciones antiguas archivadas
   docker compose run --rm uploader python /app/app/subir_videos.py --delete-videos GRUPO_ID --dry-run
 
 ==============================================================================
-  5. PIPELINE VÍA SYSTEMD (AUTO-ARRANQUE AL BOOT)
-==============================================================================
-
-Los 3 daemons del pipeline (grabar → comprimir → subir) se levantan solos al
-encender el PC gracias al servicio systemd. Gestión (requiere sudo):
-
-sudo systemctl status   twitch-stream-pipeline.service   # estado del pipeline
-sudo systemctl restart  twitch-stream-pipeline.service   # reiniciar pipeline
-sudo systemctl stop     twitch-stream-pipeline.service   # parar pipeline
-sudo systemctl disable  twitch-stream-pipeline.service   # quitar auto-arranque
-
-Operación manual (alias de ~/.bashrc):
-pipe_sys_start        # Arrancar el pipeline
-pipe_sys_stop         # Parar todo
-pipe_sys_status       # Ver estado
-tg_bot_sys_status     # Ver estado del bot
-
-# Nota: tras pipe_recreate/pipe_up los contenedores ya están arriba; systemctl
-# solo es una alternativa para gestionarlos. Detalle del servicio: ver README.md.
+PIPELINE_END
 
 ==============================================================================
-  6. MONTAR EN OTRA MÁQUINA (Windows + WSL2)
- ==============================================================================
-
- Un SOLO script hace todo el montaje: clona el repo, ajusta las rutas a tu
- máquina, crea las carpetas de vídeo, revisa secretos, construye las imágenes,
- instala el servicio systemd (y lo habilita al boot) y añade los alias. Es
  IDEMPOTENTE: puedes lanzarlo las veces que quieras; solo hace lo que aún no
  esté hecho.
 
