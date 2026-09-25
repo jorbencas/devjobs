@@ -15,7 +15,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from cli_base import cargar_credenciales
+from tg_toolbox.cli_base import cargar_credenciales
 from telethon import TelegramClient
 from telethon.tl.types import Channel, Chat
 
