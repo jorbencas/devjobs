@@ -96,8 +96,6 @@ MODO DESCARGA:
   --dl-subs-only         Solo descargar subtítulos (sin vídeo)
   --web-extract URL      Descarga web genérica (yt-dlp → HLS → Selenium)
   --web-extract-login URL Descarga web con login (HLS + login/Cloudflare)
-  --web-extract URL      Descarga web genérica (yt-dlp → HLS → Selenium)
-  --web-extract-login URL Descarga web con login (HLS + login/Cloudflare)
 
 MODO CORTE (lossless, sin re-encoding):
   --cut                  Cortar vídeo por tiempo
@@ -345,6 +343,45 @@ SUBS_LANGS="es,en"             # Idiomas de subtítulos a descargar
 
 
 
+# ── Validar URL ─────────────────────────────────────────────────────
+validate_url() {
+    local url="$1"
+    [[ -z "$url" ]] && { echo -e "${RED}✗${NC} URL vacía" >&2; return 1; }
+    # Acepta http/https, ftp, file, y URLs con esquemas válidos
+    if [[ "$url" =~ ^(https?|ftp|file)://[^[:space:]]+$ ]]; then
+        return 0
+    fi
+    echo -e "${RED}✗${NC} URL inválida: $url" >&2
+    return 1
+}
+
+# ── Validar URL ─────────────────────────────────────────────────────
+validate_url() {
+    local url="$1"
+    [[ -z "$url" ]] && { echo -e "${RED}✗${NC} URL vacía" >&2; return 1; }
+    # Acepta http/https, ftp, file, y URLs con esquemas válidos
+    if [[ "$url" =~ ^(https?|ftp|file)://[^[:space:]]+$ ]]; then
+        return 0
+    fi
+    # Permitir URLs con puertos, paths, query strings, etc.
+    if [[ "$url" =~ ^(https?|ftp|file)://[a-zA-Z0-9._~-]+([:][0-9]+)?(/[^[:space:]]*)?$ ]]; then
+        return 0
+    fi
+    echo -e "${RED}✗${NC} URL inválida: $url" >&2
+    return 1
+}
+
+# ── Validar archivo existente ────────────────────────────────────────
+validate_file() {
+    local file="$1"
+    [[ -z "$file" ]] && { echo -e "${RED}✗${NC} Archivo vacío" >&2; return 1; }
+    if [[ ! -f "$file" ]]; then
+        echo -e "${RED}✗${NC} Archivo no encontrado: $file" >&2
+        return 1
+    fi
+    return 0
+}
+
 # Convierte entrada de desfase audio a milisegundos enteros.
 # Acepta: "500" (ms), "1500ms", "1.5s", "0.75" (s), "-0.5s", "+2" (ms). Devuelve "" si no reconoce.
 parse_time_to_ms() {
@@ -395,18 +432,20 @@ while [[ $# -gt 0 ]]; do
         -g|--max-gb)     MAX_SIZE="$2"; shift 2 ;;
         -ss|--start)     START_TIME="$2"; shift 2 ;;
         -e|--end)        END_TIME="$2"; shift 2 ;;
-        -d|--download)   MODE="download"; URL="$2"; shift 2 ;;
+-d|--download)   validate_url "$2" || exit 1; MODE="download"; URL="$2"; shift 2 ;;
         -ds|--dl-start)  DOWNLOAD_START="$2"; shift 2 ;;
         -de|--dl-end)    DOWNLOAD_END="$2"; shift 2 ;;
         -dq|--dl-quality) DOWNLOAD_QUALITY="$2"; shift 2 ;;
         -df|--dl-format)  DOWNLOAD_FORMAT="$2"; shift 2 ;;
         --playlist)       DOWNLOAD_PLAYLIST=true; shift ;;
         --dl-subs-only)   DOWNLOAD_SUBS_ONLY=true; shift ;;
-        -ao|--audio-out) MODE="audio-only"; URL="${2:-}"; shift 2 2>/dev/null || shift ;;
-        -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 2>/dev/null || shift ;;
-        -ma|--merge-audio) MODE="merge-audio"; AUDIO_INPUT="$2"; shift 2 ;;
-        -sl|--sub-soft)    SUBTITLE_SOFT="$2"; shift 2 ;;
-        -sh|--sub-hard)    SUBTITLE_HARD="$2"; shift 2 ;;
+        --web-extract)    validate_url "$2" || exit 1; MODE="web-extract"; URL="$2"; shift 2 ;;
+        --web-extract-login) MODE="web-extract-login"; validate_url "$2" || exit 1; URL="$2"; shift 2 ;;
+        -ao|--audio-out) validate_url "${2:-}" || exit 1; MODE="audio-only"; URL="${2:-}"; shift 2 2>/dev/null || shift ;;
+        -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 ;;
+        -ma|--merge-audio) validate_file "$2" || exit 1; MODE="merge-audio"; AUDIO_INPUT="$2"; shift 2 ;;
+        -sl|--sub-soft)    validate_file "$2" || exit 1; SUBTITLE_SOFT="$2"; shift 2 ;;
+        -sh|--sub-hard)    validate_file "$2" || exit 1; SUBTITLE_HARD="$2"; shift 2 ;;
         --speed)           SPEED="$2"; shift 2 ;;
         --sync-av)         AV_OFFSET=$(parse_time_to_ms "$2"); shift 2 ;;
         --concat)          MODE="concat"; shift; CONCAT_FILES=(); while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do CONCAT_FILES+=("$1"); shift; done ;;
