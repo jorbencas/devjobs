@@ -118,7 +118,7 @@ class Recorder:
     entre fuentes ordenadas, arranque de streamlink/yt-dlp, corte en partes
     por cambio de plataforma, reparación de mp4 truncados y concatenación."""
 
-    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None, schedule: list = None):
+    def __init__(self, channel: str, platform_name: str, url: str = "", record_path: str = "", max_duration_hours: int = 12, max_duration_str: str = "24:00:00", retry_interval: int = 60, copy_to_test: bool = False, test_path: str = "", dias_plataforma: dict = None, schedule: list = None, platform_configs: list = None):
         """Prepara el grabador: normaliza fuentes, guarda config de rutas,
         duración máxima, prioridad por día (schedule unificado) y flags."""
         self.channel = channel
@@ -126,6 +126,7 @@ class Recorder:
         self.platform_name = self.sources[0]["platform"]
         self.dias_plataforma = dias_plataforma or {}
         self.schedule = schedule
+        self._platform_configs = platform_configs or []
         self._active = None
         self._probed_sources = set()
         self.record_path = Path(record_path)
@@ -187,20 +188,49 @@ class Recorder:
             log.warning(f"[{self.channel}] web.probe falló: {e}")
 
     def _reordenar_por_dia(self) -> None:
-        """Fija las plataformas a usar según el día usando schedule unificado.
+        """Fija las plataformas a usar según el día.
         
-        Si existe `self.schedule` (formato unificado), lo usa.
-        Sino, cae al legacy `dias_plataforma`.
+        Prioridad:
+        1. Si cada platform tiene su 'schedule' -> usa el schedule de cada platform
+        2. Si hay `self.schedule` (legacy channel-level) -> usa ese
+        3. Legacy `dias_plataforma` dict
         """
         now = datetime.now()
         day = now.strftime("%A")
         current_minutes = now.hour * 60 + now.minute
         
         # Determinar plataformas ordenadas para hoy
-        order = None
+        order = []
         
-        if self.schedule:
-            # Formato unificado: lista de reglas con days, time, platforms
+        # 1. Schedule por platform (nuevo formato)
+        platform_order = []
+        for src in self.sources:
+            platform_name = src["platform"]
+            # Buscar schedule en la config original del platform
+            platform_config = None
+            for p in self._platform_configs:
+                if p.get("platform") == src.get("platform"):
+                    platform_config = p
+                    break
+            if platform_config:
+                for rule in platform_config.get("schedule", []):
+                    rule_days = rule.get("days", [])
+                    rule_time = rule.get("time", "00:00")
+                    if day in rule_days:
+                        try:
+                            rule_h, rule_m = map(int, rule["time"].split(":"))
+                            rule_minutes = rule_h * 60 + rule_m
+                        except Exception:
+                            continue
+                        if current_minutes >= rule_minutes:
+                            if src["platform"] not in platform_order:
+                                platform_order.append(src["platform"])
+                            break  # primera regla que coincida para esta platform
+        
+        if platform_order:
+            order = platform_order
+        elif self.schedule:
+            # 2. Legacy channel-level schedule
             for rule in self.schedule:
                 rule_days = rule.get("days", [])
                 rule_time = rule.get("time", "00:00")
@@ -216,7 +246,7 @@ class Recorder:
                         order = rule_platforms
                         break
         else:
-            # Legacy: dias_plataforma dict
+            # 3. Legacy: dias_plataforma dict
             if not self.dias_plataforma:
                 return
             order = self.dias_plataforma.get(day) or self.dias_plataforma.get("*")
