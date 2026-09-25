@@ -7,19 +7,17 @@
                     "platform": "web",
                     "url": "https://watch.sendosama.net/",
                     "detectar": true,
-                    "corte": false
-                }
-            ],
-            "schedule": [
-                {
-                    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-                    "time": "21:30",
-                    "platforms": ["web", "kick"]
-                },
-                {
-                    "days": ["Sunday"],
-                    "time": "19:00",
-                    "platforms": ["web", "kick"]
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                            "time": "21:30"
+                        },
+                        {
+                            "days": ["Sunday"],
+                            "time": "19:00"
+                        }
+                    ]
                 }
             ]
         },
@@ -29,29 +27,29 @@
                     "platform": "web",
                     "url": "https://watch.sendosama.net/",
                     "detectar": true,
-                    "corte": false
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Sunday"],
+                            "time": "19:00"
+                        },
+                        {
+                            "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                            "time": "21:30"
+                        }
+                    ]
                 },
                 {
                     "platform": "twitch",
                     "detectar": false,
-                    "corte": false
+                    "corte": false,
+                    "schedule": []
                 },
                 {
                     "platform": "kick",
                     "detectar": false,
-                    "corte": false
-                }
-            ],
-            "schedule": [
-                {
-                    "days": ["Sunday"],
-                    "time": "19:00",
-                    "platforms": ["web"]
-                },
-                {
-                    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-                    "time": "21:30",
-                    "platforms": ["web"]
+                    "corte": false,
+                    "schedule": []
                 }
             ]
         },
@@ -61,14 +59,13 @@
                 {
                     "platform": "youtube",
                     "detectar": false,
-                    "corte": false
-                }
-            ],
-            "schedule": [
-                {
-                    "days": ["Sunday"],
-                    "time": "19:00",
-                    "platforms": ["youtube"]
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Sunday"],
+                            "time": "19:00"
+                        }
+                    ]
                 }
             ]
         },
@@ -77,14 +74,13 @@
                 {
                     "platform": "twitch",
                     "detectar": false,
-                    "corte": false
-                }
-            ],
-            "schedule": [
-                {
-                    "days": ["Monday"],
-                    "time": "18:00",
-                    "platforms": ["twitch"]
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Monday"],
+                            "time": "18:00"
+                        }
+                    ]
                 }
             ]
         },
@@ -93,19 +89,24 @@
                 {
                     "platform": "youtube",
                     "detectar": false,
-                    "corte": false
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Thursday"],
+                            "time": "18:00"
+                        }
+                    ]
                 },
                 {
                     "platform": "twitch",
                     "detectar": false,
-                    "corte": false
-                }
-            ],
-            "schedule": [
-                {
-                    "days": ["Thursday"],
-                    "time": "18:00",
-                    "platforms": ["youtube", "twitch"]
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": ["Thursday"],
+                            "time": "18:00"
+                        }
+                    ]
                 }
             ]
         }
