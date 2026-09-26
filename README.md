@@ -33,7 +33,6 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 | 📺 **YouTube → Telegram** | Descargar canales → convertir → subir con topics | Cron 01:00→18:00 | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) |
 | 🤖 **Bot Telegram** | Descargas por URL + contenido IA (tips, tools) | En tiempo real | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) |
 | 📄 **PDF Manager** | Desbloquear, unir, dividir, comprimir PDFs | Bajo demanda | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) |
-| 💡 **Project Generator** | Ideas de proyectos con IA (Gemini) | Cada 4 horas | [📖](#project-generator) |
 
 ---
 
@@ -42,7 +41,7 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 | # | Herramienta | Descripción | Blog | README |
 |---|-------------|-------------|------|--------|
 | 1 | `TwitchRecorder/` | Grabador automático de directos (Twitch/YouTube/Kick) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](TwitchRecorder/README.md) |
-| 2 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo (33 modos) | [📖](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | [README](ffmpeg-yt-dlp/README.md) |
+| 2 | `ffmpeg-yt-dlp/` | Conversor y optimizador de vídeo (37 modos) | [📖](https://blog-jorbencas.vercel.app/proyectos/ffmpeg-yt-dlp) | [README](ffmpeg-yt-dlp/README.md) |
 | 3 | `downloader_telegram/` | Descargador masivo + bot API interactivo + CLI consolidada | [📖](https://blog-jorbencas.vercel.app/proyectos/telegram-ultimate-toolbox) | [README](downloader_telegram/README.md) |
 | 4 | `yt-to-telegram/` | Pipeline YouTube → Telegram (160 canales) | [📖](https://blog-jorbencas.vercel.app/proyectos/devjobs-automation-suite) | [README](yt-to-telegram/README.md) |
 | 5 | `pdfmanager/` | Gestor de PDFs: desbloquear, unir, dividir | [📖](https://blog-jorbencas.vercel.app/proyectos/pdf-ninja-master) | [README](pdfmanager/README.md) |
@@ -50,7 +49,6 @@ Suite auto-hospedada de **automatización con Docker**: grabación de directos, 
 | 6 | `aula-downloader/` | Descargador de vídeos Moodle/Vimeo | — | [README](aula-downloader/README.md) |
 | 7 | `scripts/kick_download.py` | Descargador de vídeos Kick.com (API + ffmpeg) | — | [docker_help.txt](docker_help.txt#3i) |
 | 8 | `scripts/discord_monitor.py` | Bot Discord: graba streams automáticamente con OBS | — | [docker_help.txt](docker_help.txt#3j) |
-| 9 | `project_generator/` | **Generador de ideas de proyectos con IA (Gemini)** | [📖](#project-generator) | [README](project_generator/README.md) |
 
 ---
 
@@ -215,77 +213,25 @@ Bot interactivo con **comandos**, **botones inline** y **contenido IA (Gemini)**
 | `/noticias` | Últimas noticias scrapeadas | 📰 Más noticias, 💡 Tip |
 | `/descarga URL` | Descarga vídeo de cualquier plataforma | — |
 
-**IA:** Solo **Gemini** (Gemini 1.5-flash por defecto). Sin OPENAI/ANTHROPIC keys.
+**IA:** Solo **Gemini** (Gemini 2.5-flash por defecto). Sin OPENAI/ANTHROPIC keys.
 
 ---
 
-## 💡 Project Generator
+## 💡 Project Generator — movido a `test_githubActions`
 
-**Generador automático de ideas de proyectos** que se ejecuta vía GitHub Actions y te manda los resultados a un canal privado de Telegram.
+El **generador de ideas de proyectos con IA (Gemini)** ya no vive en este repositorio.
+Migrado a [`jorbencas/test_githubActions`](https://github.com/jorbencas/test_githubActions/tree/master/project_generator),
+donde se ejecuta con su propio cron (cada 4 h) y envía los resultados a un canal de Telegram.
 
-### Qué hace
+Motivo: solo usa IA + Telegram + scraping de ideas; no tiene ninguna dependencia de los
+pipelines de vídeo de este repo. Así `devjobs` queda sin claves de IA ni workflows de Actions.
 
-- **Niveles:** Junior / Semisenior / Senior
-- **Scopes:** Miniproyecto (1-2 sem) / Proyecto (3-6 sem) / Multiproyecto (6+ sem)
-- **Lenguajes:** Python, JavaScript, TypeScript, C#, Go, Rust
-- **Tipos:** Web, API, CLI, Mobile, Desktop, Fullstack, Microservicio, Bot, IA/ML, Datos, DevOps, Testing, Seguridad
-- **Tech stack detallado:** Frameworks, libs, BD, infra, IA/ML, testing con justificación `por_que` por herramienta
-- **IA integrada:** Especifica cuándo y por qué usar IA (OpenAI, Anthropic, Gemini, local)
-- **Anti-duplicados:** Hash MD5 para no repetir proyectos
-- **Fuentes inspiración:** Tips de Telegram, tuweb.dev (scraper), plantillas determinísticas
-- **Mobile:** ✅ Flutter, React Native, MAUI — ❌ NO solo iOS nativo
-
-### Arquitectura (workflow_call nativo — sin PAT)
-
-```
-test_githubActions (cron cada 4h / manual)
-    │
-    ▼ workflow_call (github.token nativo)
-generate-projects-internal.yml
-    │
-    ├── checkout test_githubActions (github.token)
-    ├── pip install
-    ├── python -m src.main generate --send-telegram
-    │       └── secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID, GEMINI_API_KEY
-    ├── Sends to Telegram
-    ├── Commits history a test_githubActions (github.token)
-    ▼
-```
-
-**Ventaja clave:** **Cero GH_PAT**. Usa `github.token` nativo porque el workflow reutilizable está en el mismo repo.
-
-### Secrets en test_githubActions
-
-| Secret | Uso |
-|--------|-----|
-| `TELEGRAM_BOT_TOKEN` | Envío a Telegram |
-| `TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID` | Canal destino |
-| `GEMINI_API_KEY` | IA (Gemini 1.5-flash default) |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Opcional (si cambias AI_PROVIDER) |
-
-### Ejecución automática
-
-```bash
-# Cada 4 horas (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
-# En GitHub Actions: Actions → "Generate & Send Projects" → Run workflow
-```
-
-### Variables configurables (GitHub Variables)
-
-| Variable | Default | Qué controla |
-|----------|---------|--------------|
-| `AI_PROVIDER` | `gemini` | `gemini`/`openai`/`anthropic`/`deterministic` |
-| `AI_MODEL` | `gemini-1.5-flash` | Modelo específico |
-| `PROJECTS_PER_RUN` | `3` | Proyectos por ejecución |
-| `SCRAPE_TUWEB_DEV` | `true` | Scraper opcional |
-
-### Probar localmente
-
-```bash
-cd project_generator
-pip install -r requirements.txt
-python -m src.main generate --count 2 --send-telegram
-```
+| | |
+|---|---|
+| **Ubicación** | `test_githubActions/project_generator/` |
+| **Workflow** | `.github/workflows/generate-projects.yml` (cron `0 */4 * * *` + manual) |
+| **Secrets** | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_REPORTS_PROYECTOS_CHANNEL_ID`, `GEMINI_API_KEY` |
+| **Docs** | [`project_generator/README.md`](https://github.com/jorbencas/test_githubActions/blob/master/project_generator/README.md) · [`SECRETS.md`](https://github.com/jorbencas/test_githubActions/blob/master/project_generator/SECRETS.md) |
 
 ---
 
