@@ -4,9 +4,18 @@ from streamlink import Streamlink
 def get_streams(channel: str) -> dict:
     """Devuelve el dict de calidades disponibles del canal ({} si no emite)."""
     try:
-        return Streamlink().streams(f"https://www.twitch.tv/{channel}")
+        session = Streamlink()
+        streams = session.streams(f"https://www.twitch.tv/{channel}")
+        return streams
     except Exception:
-        return {}
+        # Handle Streamlink internal errors (e.g., PluginError with Urllib3UtilUrlPercentReOverride)
+        # Retry with fresh session
+        try:
+            session = Streamlink()
+            streams = session.streams(f"https://www.twitch.tv/{channel}")
+            return streams
+        except Exception:
+            return {}
 
 
 def is_live(channel: str) -> bool:

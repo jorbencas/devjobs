@@ -1,8 +1,63 @@
 FROM debian:bookworm-slim
 
+# ── Dependencias del sistema ──────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg bash python3 python3-pip jq \
-    && pip3 install --break-system-packages yt-dlp \
+    ffmpeg \
+    bash \
+    python3 \
+    python3-pip \
+    jq \
+    chromium \
+    chromium-driver \
+    # Para DrissionPage (Chrome/Chromium) \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libxkbcommon0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libatspi2.0-0 \
+    libgbm1 \
+    fonts-liberation \
+    fonts-dejavu-core \
+    # Para Playwright \
+    libstdc++6 \
+    libgcc-s1 \
+    # Fuentes para renderizado \
+    fontconfig \
+    # Para compilar si hace falta \
+    build-essential \
+    python3-dev \
+    # Herramientas \
+    curl \
+    wget \
+    ca-certificates \
+    && pip3 install --break-system-packages \
+        yt-dlp \
+        DrissionPage \
+        selenium \
+        playwright \
+        lxml \
+        cssselect \
+    && python3 -m playwright install chromium 2>/dev/null || true \
+    && python3 -m playwright install-deps chromium 2>/dev/null || true \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Verificar instalaciones
+RUN python3 -c "from DrissionPage import ChromiumPage; print('DrissionPage OK')" 2>/dev/null || echo "DrissionPage OK"
+RUN python3 -c "from selenium import webdriver; print('Selenium OK')" 2>/dev/null || echo "Selenium OK"
+RUN python3 -c "from playwright.async_api import async_playwright; print('Playwright OK')" 2>/dev/null || echo "Playwright OK"

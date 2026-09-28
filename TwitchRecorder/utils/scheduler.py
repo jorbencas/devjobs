@@ -10,29 +10,23 @@ from utils.recorder import Recorder
 
 running = True
 
+# English weekday names for consistent matching regardless of locale
+WEEKDAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 def signal_handler(sig, frame):
-    """Handler de SIGTERM/SIGINT: pone `running=False` para que el bucle
-    principal detenga todos los grabadores y salga limpio."""
     global running
     log.info("=== Señal SIGTERM recibida, apagando scheduler ===")
     running = False
 
-
 def _parse_minutes(t: str) -> int:
-    """Convierte 'HH:MM' a minutos totales."""
     h, m = map(int, t.split(":"))
     return h * 60 + m
 
-
 def is_after_time(t: str) -> bool:
-    """¿Ya pasó la hora 'HH:MM' de hoy? (comparando minutos desde medianoche)."""
     now = datetime.now()
     return now.hour * 60 + now.minute >= _parse_minutes(t)
 
-
 def _seconds_until_time(t: str) -> int:
-    """Segundos que faltan hasta la hora 'HH:MM' de hoy (0 si ya pasó)."""
     now = datetime.now()
     now_minutes = now.hour * 60 + now.minute
     diff = _parse_minutes(t) - now_minutes
@@ -40,51 +34,38 @@ def _seconds_until_time(t: str) -> int:
         return 0
     return diff * 60
 
+ALL_DAYS = WEEKDAYS_EN
 
-ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+def _get_weekday_en(now: datetime = None) -> str:
+    """Get English weekday name regardless of locale."""
+    if now is None:
+        now = datetime.now()
+    return WEEKDAYS_EN[now.weekday()]
 
 
 def _build_schedule_from_legacy(extra: dict, config: dict) -> list:
-    """Convierte config legacy (days, start_time, dias_plataforma) a schedule unificado.
-    
-    Formato legacy:
-      - days: ["Monday", ...] o "Monday" o global config.days
-      - start_time: "HH:MM" o {"Monday": "19:00", "*": "21:30"} o global
-      - dias_plataforma: {"*": ["web"], "Sunday": ["youtube", "web"]} o global
-    
-    Devuelve lista de reglas: [{"days": [...], "time": "HH:MM", "platforms": [...]}]
-    """
     schedule = []
-    
-    # Helper para obtener dias_plataforma de forma segura
     def _get_dias_plataforma():
         dp = extra.get("dias_plataforma")
         if dp is None:
             dp = config.get("dias_plataforma")
         return dp if isinstance(dp, dict) else {}
-    
     dias_plataforma = _get_dias_plataforma()
-    
-    # 1. Obtener días (canal > global > todos)
     dias = extra.get("days") or config.get("days") or ALL_DAYS
     if isinstance(dias, str):
         dias = [dias]
     dias = [d.capitalize() for d in dias]
-    
-    # 2. Obtener start_time (canal > global)
     st = extra.get("start_time") or config.get("start_time", "19:55")
     if isinstance(st, dict):
-        # start_time por día: convertir cada entrada a regla
         for day, time_str in st.items():
             if day == "*":
-                continue  # lo manejamos al final como fallback
+                continue
             if day.capitalize() in ALL_DAYS:
                 schedule.append({
                     "days": [day.capitalize()],
                     "time": time_str,
                     "platforms": dias_plataforma.get(day.capitalize(), dias_plataforma.get("*", ["web"]))
                 })
-        # Fallback "*"
         if "*" in st:
             schedule.append({
                 "days": ALL_DAYS,
@@ -92,67 +73,38 @@ def _build_schedule_from_legacy(extra: dict, config: dict) -> list:
                 "platforms": dias_plataforma.get("*", ["web"])
             })
     else:
-        # start_time único para todos los días
         schedule.append({
             "days": dias,
             "time": st,
             "platforms": dias_plataforma.get("*", ["web"])
         })
-    
-    # Si no hay schedule (sin start_time), crear uno por defecto
     if not schedule:
-        schedule.append({
-            "days": dias,
-            "time": "19:55",
-            "platforms": dias_plataforma.get("*", ["web"])
-        })
-    
+        schedule.append({"days": dias, "time": "19:55", "platforms": dias_plataforma.get("*", ["web"])})
     return schedule
 
 
 def _get_channel_schedule(extra: dict, config: dict) -> list:
-    """Obtiene el schedule del canal.
-    
-    Prioridad:
-    1. Si hay 'schedule' a nivel canal (legacy) -> usa ese
-    2. Si hay 'schedule' en cada platform -> construye schedule combinado
-    3. Si hay legacy (days/start_time/dias_plataforma) -> construye desde legacy
-    4. Default
-    """
-    # 1. Schedule legacy a nivel canal
     if "schedule" in extra:
         return extra["schedule"]
-    
-    # 2. Schedule por platform (nuevo formato)
     platforms = extra.get("platform", [])
     if isinstance(platforms, list):
         combined = []
         for p in platforms:
             if isinstance(p, dict) and "schedule" in p:
                 for rule in p.get("schedule", []):
-                    # Añadir platform a la regla si no está
                     rule_with_platform = dict(rule)
                     rule_with_platform["platforms"] = [p.get("platform", "web")]
                     combined.append(rule_with_platform)
         if combined:
             return combined
-    
-    # 3. Legacy (days/start_time/dias_plataforma)
     return _build_schedule_from_legacy(extra, config)
 
 
 def _get_platforms_for_now(extra: dict, config: dict, now: datetime = None) -> list:
-    """Devuelve lista de plataformas a probar ahora mismo, en orden de prioridad.
-    
-    Para cada platform, verifica su schedule. Si coincide (día + hora),
-    se añade a la lista. Orden = orden en config.platform.
-    """
     if now is None:
         now = datetime.now()
-    today = now.strftime("%A")
+    today = _get_weekday_en(now)
     current_minutes = now.hour * 60 + now.minute
-    
-    # Primero intentar schedule por platform
     platforms = extra.get("platform", [])
     if isinstance(platforms, list):
         matched = []
@@ -165,7 +117,6 @@ def _get_platforms_for_now(extra: dict, config: dict, now: datetime = None) -> l
             for rule in p.get("schedule", []):
                 rule_days = rule.get("days", [])
                 rule_time = rule.get("time", "00:00")
-                
                 if today in rule_days:
                     try:
                         rule_h, rule_m = map(int, rule["time"].split(":"))
@@ -174,20 +125,16 @@ def _get_platforms_for_now(extra: dict, config: dict, now: datetime = None) -> l
                         continue
                     if current_minutes >= rule_minutes:
                         matched.append(platform_name)
-                        break  # una regla que coincida por platform es suficiente
+                        break
         if matched:
             return matched
-    
-    # Fallback: schedule legacy a nivel canal
-    schedule = _get_channel_schedule(extra, {})
+    schedule = _get_channel_schedule(extra, config)
     current_minutes = now.hour * 60 + now.minute
-    today = now.strftime("%A")
-    
+    today = _get_weekday_en(now)
     for rule in schedule:
         rule_days = rule.get("days", [])
         rule_time = rule.get("time", "00:00")
         rule_platforms = rule.get("platforms", ["web"])
-        
         if today in rule_days:
             try:
                 rule_h, rule_m = map(int, rule["time"].split(":"))
@@ -200,8 +147,6 @@ def _get_platforms_for_now(extra: dict, config: dict, now: datetime = None) -> l
 
 
 def _dias_para(extra: dict, config: dict) -> list:
-    """Días de emisión de un canal: unión de todos los días de todos los schedules."""
-    # Primero platform-level
     platforms = extra.get("platform", [])
     if isinstance(platforms, list):
         days_set = set()
@@ -211,31 +156,25 @@ def _dias_para(extra: dict, config: dict) -> list:
                     days_set.update(rule.get("days", []))
         if days_set:
             return list(days_set)
-    
-    # Fallback legacy
-    schedule = _get_channel_schedule(extra, {})
+    schedule = _get_channel_schedule(extra, config)
     days_set = set()
     for rule in schedule:
         days_set.update(rule.get("days", []))
     if days_set:
         return list(days_set)
-    
-    # Fallback legacy
     dias = extra.get("days") or config.get("days")
     if isinstance(dias, str):
         dias = [dias]
     if not dias:
-        return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        return ALL_DAYS
     return [d.capitalize() for d in dias]
 
 
 def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:
-    """Hora de inicio del canal ese día: la primera regla que coincida con ese día."""
     schedule = _get_channel_schedule(extra, config)
     for rule in schedule:
         if day in rule.get("days", []):
             return rule.get("time", "19:55")
-    # Fallback legacy
     st = extra.get("start_time") or config.get("start_time", "19:55")
     if isinstance(st, dict):
         return st.get(day) or st.get("*") or "19:55"
@@ -243,16 +182,13 @@ def _hora_inicio_para(extra: dict, config: dict, day: str) -> str:
 
 
 def _programados_hoy(config: dict, channels: list) -> dict:
-    """Devuelve {canal: {start_time, extra}} de los canales con emisión hoy."""
     now = datetime.now()
-    today = now.strftime("%A")
+    today = _get_weekday_en(now)
     out = {}
     for channel, platform_name, url, extra in channels:
-        # Verificar si el canal tiene emisión hoy usando schedule unificado
         platforms = _get_platforms_for_now(extra, config, now)
         if not platforms:
             continue
-        # Obtener la hora de inicio más temprana hoy
         schedule = _get_channel_schedule(extra, config)
         earliest = None
         for rule in schedule:
@@ -261,44 +197,36 @@ def _programados_hoy(config: dict, channels: list) -> dict:
                 if t and (earliest is None or t < earliest):
                     earliest = t
         if earliest:
-            out[channel] = {
-                "start_time": earliest,
-                "extra": extra,
-            }
+            out[channel] = {"start_time": earliest, "extra": extra}
     return out
 
 
 def _get_today() -> str:
-    """Fecha de hoy en formato AAAA-MM-DD."""
     return datetime.now().strftime("%Y-%m-%d")
 
 
 def _canales_colisionan(config: dict, channels: list) -> list:
-    """Devuelve [(canal_a, canal_b, dia, hora)] de canales distintos que emiten a la vez.
-
-    La grabación en paralelo es posible, pero avisar ayuda a decidir si conviene
-    ajustar schedule si no es deseado."""
+    """Detecta colisiones entre CANALES DISTINTOS que emiten a la misma hora.
+    No considera colisión que el mismo canal tenga múltiples plataformas."""
     programados = {}
     for channel, platform_name, url, extra in channels:
         schedule = _get_channel_schedule(extra, config)
         for rule in schedule:
             for day in rule.get("days", []):
                 hora = rule.get("time", "19:55")
-                programados.setdefault((day, hora), []).append(channel)
+                # Usar set para evitar duplicados del mismo canal en múltiples plataformas
+                if (day, hora) not in programados:
+                    programados[(day, hora)] = set()
+                programados[(day, hora)].add(channel)
     return [
-        (lista[0], ch, day, hora)
-        for (day, hora), lista in programados.items()
-        for ch in lista[1:]
+        (sorted(channels_set)[0], ch, day, hora)
+        for (day, hora), channels_set in programados.items()
+        if len(channels_set) > 1
+        for ch in sorted(channels_set)[1:]
     ]
 
 
 def run_scheduler(dry_run: bool = False):
-    """Bucle principal del grabador:
-    1. Carga config y crea un Recorder por canal.
-    2. Espera a la primera hora de inicio del día.
-    3. Cada `check_every` segundos, por canal programado: si está en directo,
-       lo inicia y lanza su `monitor` en un hilo daemon.
-    4. Detecta canales nuevos/día nuevo (reinicia 'finished') y paradas limpias."""
     config = load_config()
     channels_with_platform = get_channels_with_platform(config)
     check_interval = config.get("check_every", 30)
@@ -313,7 +241,7 @@ def run_scheduler(dry_run: bool = False):
     log.info(f"Canales: {[ch for ch, _, _, _ in channels_with_platform]}")
     log.info(f"Comprobando cada {check_interval}s")
     for a, b, day, hora in _canales_colisionan(config, channels_with_platform):
-        log.warning(f"COLISIÓN: {a} y {b} coinciden {day} a las {hora} → se grabarán en paralelo (doble carga CPU/disco). Ajusta 'days'/'start_time' si no es deseado.")
+        log.warning(f"COLISIÓN: {a} y {b} coinciden {day} a las {hora} -> se grabarán en paralelo (doble carga CPU/disco). Ajusta 'days'/'start_time' si no es deseado.")
     if dry_run:
         log.info("Modo DRY-RUN activo")
 
@@ -323,7 +251,6 @@ def run_scheduler(dry_run: bool = False):
         platform_configs = extra.get("platform", []) if isinstance(extra.get("platform"), list) else []
         recorders[channel] = Recorder(channel, platform_name, url, record_path, max_duration, max_duration_str, retry_interval, copy_to_test, test_path, extra.get("dias_plataforma"), schedule, platform_configs)
 
-    # Esperar a la hora de inicio más temprana de los canales de hoy
     progs = _programados_hoy(config, channels_with_platform)
     if not progs:
         log.info("Hoy no hay canales programados. Saliendo.")
@@ -378,10 +305,10 @@ def run_scheduler(dry_run: bool = False):
 
             prog = progs.get(channel)
             if not prog:
-                continue  # no programado hoy
+                continue
 
             if not is_after_time(prog["start_time"]):
-                continue  # aún no es su hora de inicio
+                continue
 
             if recorder.is_live():
                 all_offline = False

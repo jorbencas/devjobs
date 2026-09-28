@@ -6,6 +6,8 @@ services:
     user: "1000:1000"
     volumes:
       - ./config.json:/app/config.json:ro
+      - ./entrypoint.sh:/app/entrypoint.sh:ro
       - ../data/pipeline/grabaciones:/recordings
     environment:
       - TZ=Europe/Madrid
+    entrypoint: ["/app/entrypoint.sh"]

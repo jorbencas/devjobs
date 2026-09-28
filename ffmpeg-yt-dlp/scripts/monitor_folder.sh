@@ -18,7 +18,8 @@ set -e
 # ── Configuración ────────────────────────────────────────────────────
 WATCH_DIR="${WATCH_DIR:-$HOME/data/pipeline/grabaciones/test}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
-LOG_FILE="$OUTPUT_DIR/log_$(date +%Y-%m-%d).txt"
+# Disable log file by default. Set LOG_FILE to a path to enable file logging.
+LOG_FILE="${LOG_FILE:-/dev/null}"
 PROCESSED_DIR="$OUTPUT_DIR/.processed"
 CRF="${CRF:-28}"
 PRESET="${PRESET:-fast}"

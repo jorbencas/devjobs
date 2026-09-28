@@ -1,0 +1,58 @@
+[
+  {
+    "title": "Capa 00: Fundamentos de Programación",
+    "summary": "Base sólida en algoritmos, estructuras de datos, patrones de diseño, testing, debugging y arquitectura de software. Python/TypeScript modernos, Git, CI/CD, contenedores.",
+    "explanation": "Sin fundamentos sólidos, la IA solo amplifica el caos. Domina: estructuras de datos (arrays, hash maps, árboles, grafos), algoritmos (ordenamiento, búsqueda, DP, grafos), patrones (SOLID, DRY, KISS, YAGNI), testing (unit, integration, property-based), debugging sistemático, Git workflows, CI/CD pipelines, Docker/K8s básicos.",
+    "code_example": "// Ejemplo: Estructura de datos óptima para búsqueda\n// Mal: Array O(n)\nconst users = [{id: 1, name: 'Ana'}, {id: 2, name: 'Juan'}];\nconst found = users.find(u => u.id === 2); // O(n)\n\n// Bien: Hash Map O(1)\nconst userMap = new Map(users.map(u => [u.id, u]));\nconst found = userMap.get(2); // O(1)",
+    "category": "fundamentos",
+    "tags": ["programacion", "algoritmos", "estructuras-datos", "testing"]
+  },
+  {
+    "title": "Capa 01: Fundamentos de IA",
+    "summary": "Entender cómo funcionan LLMs, embeddings, RAG, fine-tuning, evaluación, límites y seguridad. No magia: estadística y arquitectura.",
+    "explanation": "IA no es magia. Entender: arquitectura Transformer (attention, residual streams), tokenización (BPE, WordPiece), embeddings (espacio semántico), RAG (retrieval + generation), fine-tuning vs prompting, evaluación (benchmarks, evals custom), hallucination mitigation, guardrails, latency/cost tradeoffs, prompt engineering patterns (CoT, few-shot, ReAct, self-consistency).",
+    "code_example": "// RAG básico: retrieve -> augment -> generate\nasync function ragQuery(query, vectorStore, llm) {\n  // 1. Retrieve: embeddings similarity search\n  const docs = await vectorStore.similaritySearch(query, k=5);\n  \n  // 2. Augment: context + query\n  const context = docs.map(d => d.content).join('\\n---\\n');\n  const prompt = `Context: ${context}\\n\\nQuestion: ${query}\\nAnswer:`;\n  \n  // 3. Generate\n  return await llm.generate(prompt, { temperature: 0.1 });\n}",
+    "category": "ia-fundamentos",
+    "tags": ["llm", "rag", "embeddings", "transformers", "prompt-engineering"]
+  },
+  {
+    "title": "Capa 02: Harness Engineering",
+    "summary": "Construir sistemas que orquestan IA: agentes, contexto, guardarraíles, planificación. El harness es el cerebro que guía al modelo.",
+    "explanation": "El modelo solo predice tokens. El harness proporciona: arquitectura de agente (plan -> act -> observe -> reflect), gestión de contexto (window management, summarization, RAG), guardarraíles (validación, type safety, schema enforcement, fallback), planning (task decomposition, dependency graph, parallel execution), memory (short/long term, episodic, semantic), tool calling (schemas, execution, retries, timeouts), observability (logging, tracing, evals).",
+    "code_example": "// Harness básico: Plan -> Act -> Observe -> Reflect\nclass AgentHarness {\n  constructor(llm, tools, memory) {\n    this.llm = llm;\n    this.tools = new Map(tools.map(t => [t.name, t]));\n    this.memory = memory;\n  }\n\n  async run(task) {\n    const plan = await this.plan(task);\n    for (const step of plan.steps) {\n      const result = await this.executeStep(step);\n      await this.observe(step, result);\n      if (this.shouldReflect()) await this.reflect();\n    }\n    return this.synthesize();\n  }\n\n  async executeStep(step) {\n    const tool = this.tools.get(step.tool);\n    const result = await tool.execute(step.args, { timeout: 30000 });\n    return this.validate(result, step.expectedSchema);\n  }\n}",
+    "category": "harness-engineering",
+    "tags": ["agents", "orchestration", "guardrails", "planning", "context-management"]
+  },
+  {
+    "title": "Capa 03: Harness Avanzado",
+    "summary": "Comandos, skills, MCP (Model Context Protocol). Extender el harness con capacidades reutilizables y estándar.",
+    "explanation": "Estandariza y escala: comandos (CLI, slash commands, hotkeys), skills (capabilities empaquetadas: 'code-review', 'sql-query', 'api-design'), MCP servers (estándar para conectar LLMs a herramientas/datos externos: filesystem, GitHub, PostgreSQL, browser, etc.), composabilidad (skills compuestas, herencia, versionado), registry (descubrimiento, instalación, dependencias), sandboxing (aislamiento, permisos, resource limits).",
+    "code_example": "// MCP Server ejemplo: filesystem access\n// server.ts\nconst server = new Server({\n  name: 'filesystem',\n  version: '1.0.0',\n  capabilities: { resources: {}, tools: {} }\n);\n\nserver.setRequestHandler(ListResourcesRequestSchema, async () => {\n  return { resources: [{ uri: 'file:///workspace', name: 'Workspace' }] };\n});\n\nserver.setRequestHandler(CallToolRequestSchema, async (request) => {\n  if (request.params.name === 'read_file') {\n    const content = await fs.readFile(request.params.arguments.path, 'utf-8');\n    return { content: [{ type: 'text', text: content }] };\n  }\n});",
+    "category": "harness-avanzado",
+    "tags": ["mcp", "skills", "commands", "tools", "composability"]
+  },
+  {
+    "title": "Capa 04: Spec-Driven Development",
+    "summary": "Especificación primero, código después. La especificación es el contrato; la IA la implementa; tú validas.",
+    "explanation": "Invierte el flujo tradicional: 1) Escribe spec (Markdown/OpenAPI/TypeScript types), 2) IA genera tests desde spec, 3) IA implementa código que pase tests, 4) Tú revisas/ajustas spec, 5) Iteras. Beneficios: especificación = documentación viva, tests = verificación automática, IA = implementador, tú = arquitecto/validador. Herramientas: OpenAPI/Swagger, TypeScript types, JSON Schema, Cucumber/Gherkin, ADR (Architecture Decision Records).",
+    "code_example": "// Spec: OpenAPI fragment\npaths:\n  /users/{id}:\n    get:\n      summary: Get user by ID\n      parameters:\n        - name: id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      responses:\n        '200':\n          description: User found\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/User'\n        '404':\n          description: Not found\n\n// Tests generados desde spec\ntest('GET /users/{id} returns 200 for existing user', async () => {\n  const user = await createTestUser();\n  const res = await request(app).get(`/users/${user.id}`);\n  expect(res.status).toBe(200);\n  expect(res.body).toMatchObject({ id: user.id, name: user.name });\n});",
+    "category": "spec-driven",
+    "tags": ["spec-driven", "openapi", "testing", "contract-first", "documentation"]
+  },
+  {
+    "title": "Capa 05: Multiagentes y Subagentes",
+    "summary": "Equipos de agentes especializados que colaboran: planner, researcher, coder, reviewer, tester. Paralelismo y especialización.",
+    "explanation": "Un agente no escala. Equipos de agentes: planner (descompone, prioriza, coordina), researcher (busca, sintetiza, cita fuentes), coder (implementa, refactoriza, optimiza), reviewer (critica, sugiere, aprueba), tester (genera tests, edge cases, property-based), debugger (reproduce, aísla, fixea), documenter (actualiza docs, changelog, ADRs). Coordinación: message passing, shared memory, consensus, conflict resolution, human-in-the-loop checkpoints. Patrón: supervisor + workers, jerárquico o peer-to-peer.",
+    "code_example": "// Orquestador multiagente\nclass Supervisor {\n  constructor(agents) {\n    this.agents = new Map(agents.map(a => [a.role, a]));\n    this.messageBus = new MessageBus();\n  }\n\n  async delegate(task) {\n    const plan = await this.planner.decompose(task);\n    \n    // Paralelismo: tareas independientes en paralelo\n    const independent = plan.steps.filter(s => !s.dependsOn?.length);\n    const results = await Promise.all(\n      independent.map(step => this.agents.get(step.agent).execute(step))\n    );\n    \n    // Secuencial: tareas con dependencias\n    for (const step of plan.steps.filter(s => s.dependsOn?.length)) {\n      await this.waitForDependencies(step.dependsOn);\n      await this.agents.get(step.agent).execute(step);\n    }\n    \n    return this.aggregator.synthesize(results);\n  }\n}",
+    "category": "multiagentes",
+    "tags": ["multiagent", "subagents", "orchestration", "parallelism", "coordination"]
+  },
+  {
+    "title": "El Criterio: La Capa Meta",
+    "summary": "La IA propone. Tú decides qué se aprueba y qué llega a producción. El criterio es la capa que envuelve todo.",
+    "explanation": "La IA genera opciones, código, ideas. Tu trabajo no es escribir código, es ejercer criterio: ¿Es correcto? ¿Es seguro? ¿Es mantenible? ¿Resuelve el problema real? ¿El coste/beneficio tiene sentido? La IA acelera, tú diriges. Sin criterio, la IA solo produce deuda técnica más rápido. Desarrolla criterio: code review estricto, threat modeling, performance budgets, UX real, métricas de negocio, tradeoffs explícitos, decision logs (ADRs).",
+    "code_example": "// Checklist de criterio antes de merge\nconst CRITERIO_CHECKLIST = [\n  '✅ Tests pasan (unit + integration + e2e)',\n  '✅ Types strict (no any, no @ts-ignore)',\n  '✅ Security: no secrets, input validation, authZ',\n  '✅ Performance: budgets cumplidos (LCP, TTI, bundle size)',\n  '✅ Accessibility: WCAG AA, keyboard nav, screen readers',\n  '✅ Observability: logs, metrics, traces, alerts',\n  '✅ Rollback plan: feature flags, backward compat, runbook',\n  '✅ ADR escrito: decisión, alternativas, tradeoffs, consecuencias'\n];\n\n// En CI: falla si algún check falta\n// En PR: reviewer humano valida criterio, no solo sintaxis",
+    "category": "criterio",
+    "tags": ["criterio", "code-review", "architecture", "decision-making", "seniority"]
+  }
+]

@@ -143,6 +143,8 @@ class Recorder:
         self._stop_event = threading.Event()
         self._consecutive_fails = 0
         self._last_start_time = 0
+        self._live_cache = None
+        self._live_cache_time = 0
 
     @property
     def _active_source(self) -> dict:
@@ -265,27 +267,30 @@ class Recorder:
             self.sources = ordered
 
     def is_live(self) -> bool:
-        """¿Hay alguna fuente en directo? Se comprueban en el ORDEN definido
-        (config + dias_plataforma) y la PRIMERA en directo gana.
-        Devuelve True y deja en self._active / self.platform_name la fuente ganadora."""
-        # Las fuentes se comprueban en el ORDEN definido (config + dias_plataforma):
-        # la primera plataforma en directo manda. Por ejemplo, en domingo la config
-        # de sendosama pone YouTube ANTES que la web, así que se graba YouTube; el
-        # resto de días la web va la primera y tiene prioridad absoluta igualmente.
+        """¿Hay alguna fuente en directo? Con cache de 10s para evitar
+        llamadas repetidas a APIs en la misma iteración."""
+        import time
+        now = time.time()
+        if self._live_cache is not None and now - self._live_cache_time < 10:
+            return self._live_cache
+
         self._reordenar_por_dia()
 
         for src in self.sources:
             key = src.get("url", "") or self.channel
             if not self._is_source_live(src):
-                # Plataforma caída (p. ej. web): permitir re-probar su autotest en
-                # el siguiente ciclo.
                 self._probed_sources.discard(key)
                 continue
             self._active = src
             self.platform_name = src["platform"]
             if src["platform"] == "web":
                 self._autoprobar_web(src)
+            self._live_cache = True
+            self._live_cache_time = now
             return True
+        
+        self._live_cache = False
+        self._live_cache_time = now
         return False
 
     def is_platform_live(self, platform: str) -> bool:
@@ -462,18 +467,12 @@ class Recorder:
 
     def _start_streamlink(self, output_path: Path, popen_kwargs: dict) -> None:
         """Lanza streamlink para grabar Twitch en la mejor calidad disponible."""
-        from utils.twitch import get_best_quality
-        quality = get_best_quality(self.channel)
-        if not quality:
-            log.warning(f"[{self.channel}] No se pudo obtener calidad")
-            raise Exception("No quality available")
-
-        log.info(f"[{self.channel}] Calidad: {quality}")
+        log.info(f"[{self.channel}] Usando calidad 'best' (streamlink la selecciona automáticamente)")
 
         sl_exe, sl_prefix = _find_executable("streamlink", "streamlink")
         cmd = sl_prefix + [
             f"https://www.twitch.tv/{self.channel}",
-            quality,
+            "best",
             "-o", str(output_path),
             "--force"
         ]

@@ -96,6 +96,22 @@
                             "time": "18:00"
                         }
                     ]
+                },
+                {
+                    "platform": "youtube",
+                    "detectar": false,
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": [
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday"
+                            ],
+                            "time": "18:00"
+                        }
+                    ]
                 }
             ]
         },

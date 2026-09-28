@@ -307,13 +307,7 @@ def probe(url: str, out_dir: str = "") -> dict:
         report.append(f"  {type(e).__name__}: {e}")
         ok = False
 
-    if out_dir:
-        try:
-            Path(out_dir).mkdir(parents=True, exist_ok=True)
-            with open(Path(out_dir) / "web_probe.log", "a", encoding="utf-8") as f:
-                f.write("\n".join(report) + "\n")
-        except OSError as e:
-            log.warning(f"web.probe: no se pudo escribir web_probe.log: {e}")
-
-    log.info("\n".join(report))
+    # Mostrar por terminal en lugar de escribir archivo
+    for line in report:
+        log.info(line)
     return {"ok": ok, "formats": formats}
