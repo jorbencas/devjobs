@@ -1,6 +1,49 @@
 {
     "channels": {
         "sendobabyface": {
+            "platform": [
+                {
+                    "platform": "kick",
+                    "detectar": false,
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": [
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday",
+                                "Friday",
+                                "Saturday",
+                                "Sunday"
+                            ],
+                            "time": "21:30"
+                        }
+                    ]
+                },
+                {
+                    "platform": "web",
+                    "url": "https://watch.sendosama.net/",
+                    "detectar": true,
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": [
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday",
+                                "Friday",
+                                "Saturday",
+                                "Sunday"
+                            ],
+                            "time": "22:00"
+                        }
+                    ]
+                }
+            ]
+        },
+        "sendosama": {
             "enabled": false,
             "platform": [
                 {
@@ -19,31 +62,7 @@
                                 "Saturday",
                                 "Sunday"
                             ],
-                            "time": "21:30"
-                        }
-                    ]
-                }
-            ]
-        },
-        "sendosama": {
-            "platform": [
-                {
-                    "platform": "web",
-                    "url": "https://watch.sendosama.net/",
-                    "detectar": true,
-                    "corte": false,
-                    "schedule": [
-                        {
-                            "days": [
-                                "Monday",
-                                "Tuesday",
-                                "Wednesday",
-                                "Thursday",
-                                "Friday",
-                                "Saturday",
-                                "Sunday"
-                            ],
-                            "time": "21:30"
+                            "time": "22:00"
                         }
                     ]
                 },
@@ -124,6 +143,23 @@
                     "schedule": [
                         {
                             "days": [
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday"
+                            ],
+                            "time": "18:00"
+                        }
+                    ]
+                },
+                {
+                    "platform": "youtube",
+                    "detectar": false,
+                    "corte": false,
+                    "schedule": [
+                        {
+                            "days": [
+                                "Tuesday",
+                                "Wednesday",
                                 "Thursday"
                             ],
                             "time": "18:00"

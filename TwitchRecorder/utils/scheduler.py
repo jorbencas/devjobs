@@ -186,9 +186,6 @@ def _programados_hoy(config: dict, channels: list) -> dict:
     today = _get_weekday_en(now)
     out = {}
     for channel, platform_name, url, extra in channels:
-        platforms = _get_platforms_for_now(extra, config, now)
-        if not platforms:
-            continue
         schedule = _get_channel_schedule(extra, config)
         earliest = None
         for rule in schedule:
