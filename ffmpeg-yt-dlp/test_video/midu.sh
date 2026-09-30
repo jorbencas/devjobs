@@ -439,8 +439,8 @@ while [[ $# -gt 0 ]]; do
         -df|--dl-format)  DOWNLOAD_FORMAT="$2"; shift 2 ;;
         --playlist)       DOWNLOAD_PLAYLIST=true; shift ;;
         --dl-subs-only)   DOWNLOAD_SUBS_ONLY=true; shift ;;
-        --web-extract)    validate_url "$2" || exit 1; MODE="web-extract"; URL="$2"; shift 2 ;;
-        --web-extract-login) MODE="web-extract-login"; validate_url "$2" || exit 1; URL="$2"; shift 2 ;;
+        --web-extract)    MODE="web-extract"; URL="$2"; shift 2 ;;
+        --web-extract-login) MODE="web-extract-login"; URL="$2"; shift 2 ;;
         -ao|--audio-out) validate_url "${2:-}" || exit 1; MODE="audio-only"; URL="${2:-}"; shift 2 2>/dev/null || shift ;;
         -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 ;;
         -ma|--merge-audio) validate_file "$2" || exit 1; MODE="merge-audio"; AUDIO_INPUT="$2"; shift 2 ;;
@@ -4901,44 +4901,15 @@ case "$MODE" in
         exit $?
         ;;
     web-extract)
-        if [[ -z "$URL" ]]; then
-            echo -e "${RED}✗${NC} Se requiere URL para descargar"
-            echo "  Uso: ./midu.sh --web-extract <URL>"
-            exit 1
-        fi
-        # Validar que la URL esté soportada
-        echo -e "${BOLD}► Comprobando URL...${NC}"
-        if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-            echo -e "${RED}✗${NC} URL no soportada o no válida"
-            echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
-            echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}✓${NC} URL válida"
-        download_video "$URL" "$OUTPUT_DIR"
-        exit $?
-        ;;
+        # Call the interactive web-extract handler (with all fallbacks)
+        MODE="web-extract-interactive"
+        # Fall through to handle it
+        ;;&
     web-extract-login)
-        if [[ -z "$URL" ]]; then
-            echo -e "${RED}✗${NC} Se requiere URL para descargar"
-            echo "  Uso: ./midu.sh --web-extract-login <URL>"
-            exit 1
-        fi
-        # Validar que la URL esté soportada
-        echo -e "${BOLD}► Comprobando URL...${NC}"
-        if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-            echo -e "${RED}✗${NC} URL no soportada o no válida"
-            echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
-            echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}✓${NC} URL válida"
-        # Para login, usar la lógica de web-extract-login que ya existe
-        echo -e "${BOLD}► Iniciando extracción con login...${NC}"
-        download_video "$URL" "$OUTPUT_DIR"
-        exit $?
-        ;;
-    audio-only)
+        # Call the interactive web-extract-login handler
+        MODE="web-extract-login-interactive"
+        # Fall through to handle it
+        ;;&    audio-only)
         if [[ -z "$URL" ]]; then
             # Si no hay URL, extraer audio de archivos locales
             buscar_archivos

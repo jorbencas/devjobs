@@ -12,8 +12,7 @@ def is_live(channel: str) -> bool:
             "no_warnings": True,
             "skip_download": True,
             "extract_flat": False,
-            "js_runtimes": ["deno"],
-            "remote_components": ["ejs:github"],
+            "js_runtimes": {"deno": {}},
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)

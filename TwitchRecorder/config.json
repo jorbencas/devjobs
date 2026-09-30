@@ -44,7 +44,7 @@
             ]
         },
         "sendosama": {
-            "enabled": false,
+            "enabled": true,
             "platform": [
                 {
                     "platform": "web",
@@ -81,7 +81,7 @@
             ]
         },
         "sendosenpai": {
-            "enabled": false,
+            "enabled": true,
             "platform": [
                 {
                     "platform": "youtube",
@@ -153,7 +153,7 @@
                 },
                 {
                     "platform": "youtube",
-                    "detectar": false,
+                    "detectar": true,
                     "corte": false,
                     "schedule": [
                         {
