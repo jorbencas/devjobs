@@ -3,8 +3,9 @@
         "sendobabyface": {
             "platform": [
                 {
-                    "platform": "kick",
-                    "detectar": false,
+                    "platform": "web",
+                    "url": "https://watch.sendosama.net/",
+                    "detectar": true,
                     "corte": false,
                     "schedule": [
                         {
@@ -22,9 +23,8 @@
                     ]
                 },
                 {
-                    "platform": "web",
-                    "url": "https://watch.sendosama.net/",
-                    "detectar": true,
+                    "platform": "kick",
+                    "detectar": false,
                     "corte": false,
                     "schedule": [
                         {
@@ -44,7 +44,7 @@
             ]
         },
         "sendosama": {
-            "enabled": true,
+            "enabled": false,
             "platform": [
                 {
                     "platform": "web",
@@ -68,9 +68,22 @@
                 },
                 {
                     "platform": "kick",
-                    "detectar": false,
+                    "detectar": true,
                     "corte": false,
-                    "schedule": []
+                    "schedule": [
+                        {
+                            "days": [
+                                "Monday",
+                                "Tuesday",
+                                "Wednesday",
+                                "Thursday",
+                                "Friday",
+                                "Saturday",
+                                "Sunday"
+                            ],
+                            "time": "22:00"
+                        }
+                    ]
                 },
                 {
                     "platform": "twitch",

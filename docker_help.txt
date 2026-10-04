@@ -256,6 +256,11 @@ graba el directo y lo deja como `*_completed.mp4` en data/grabaciones/test/.
     tw_down       Parar todo
 
 Notas: config en `config.json` (channels, start_time). Salida → data/grabaciones/test/.
+  Nota: los aliases `tw_logs`/`tw_stop`/`tw_restart` usan el nombre de contenedor `twitchrecorder-sendo`, mientras que `tw_run`/`tw_dry`/`pipe_up` usan el servicio `twitchrecorder` en los comandos `docker compose`.
+  **Cambio en `recorder.py`: web wrappers (plataforma "web") usan SOLO Kick API
+  (`https://kick.com/api/v2/channels/{canal}`) para obtener el título del directo.
+  No hay fallbacks a yt-dlp ni HTML scraper; si Kick API falla, el título queda vacío.
+  Otras plataformas (Twitch, YouTube, Kick directo) usan yt-dlp como siempre.**
 
 ------------------------------------------------------------------------------
 3F. FFMPEG-YT-DLP  (2 modos)           — forma parte del pipeline (paso 2)

@@ -75,3 +75,6 @@ data/
 hdfull-downloader/.env
 scripts/
 escenas-de-matrimonio/
+
+### Media Stack (qBittorrent + Jackett + Radarr + Prowlarr) - temporal
+media-stack/

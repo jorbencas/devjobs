@@ -73,7 +73,6 @@ from telethon.tl.types import (
 )
 
 # pipeline_bridge eliminado: no se usa. Los estados/logs van a stdout (docker logs).
-update_status = remove_status = append_log = None
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_DIR = SCRIPT_DIR.parent
@@ -260,6 +259,9 @@ def keyword_from_filename(filename: str) -> str:
         for suffix in ("_compressed", "_completed"):
             if kw.endswith(suffix):
                 kw = kw[: -len(suffix)]
+        # Quitar sufijo __parteN si existe (partes de cambio de plataforma)
+        import re
+        kw = re.sub(r"__parte\d+$", "", kw)
         return kw.lower()
     return ""
 

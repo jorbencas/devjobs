@@ -108,9 +108,9 @@ def parse_sources(platform, url: str = "") -> list:
     return [{"platform": platform, "url": url or ""}]
 
 
-def _sidecar_path(video_path: Path) -> Path:
-    """Ruta del sidecar _descripcion.json para un vídeo."""
-    return video_path.with_name(video_path.stem + "_descripcion.json")
+# def _sidecar_path(video_path: Path) -> Path:
+#     """Ruta del sidecar _descripcion.json para un vídeo (INACTIU: no s'escriu)."""
+#     return video_path.with_name(video_path.stem + "_descripcion.json")
 
 
 class Recorder:
@@ -317,10 +317,11 @@ class Recorder:
         return ""
 
     def get_live_title(self) -> str:
-        """Obtiene el título del directo usando yt-dlp (sin guardar nada).
-        Algunos canales de Twitch dejan el título genérico ("<canal> (live)") en
-        el campo title, pero ponen el título real en la descripción. Si detectamos
-        un título genérico, usamos la descripción como fuente del título."""
+        """Obtiene el título real del directo.
+        - Web wrappers: SOLO Kick API (https://kick.com/api/v2/channels/{canal}).
+          Sin fallbacks a yt-dlp/HTML; si falla, devuelve vacío.
+        - Otras plataformas (Twitch, YouTube, Kick directo): yt-dlp.
+        Si el título es genérico ("<canal> (live)"), usa la descripción."""
         src = self._active_source
         platform = src["platform"]
         s_url = src.get("url", "")
@@ -330,16 +331,9 @@ class Recorder:
         # API real de la plataforma (Kick sin OAuth, Twitch vía yt-dlp sin OAuth).
         # El HTML queda como ÚLTIMO recurso, no como primero.
         if platform == "web":
-            src_w = self._active_source
-            s_url_w = src_w.get("url", "") or s_url or ""
-            kick_ch = src_w.get("kick_channel") or self.channel
-            twitch_ch = src_w.get("twitch_channel") or self.channel
+            kick_ch = self._active_source.get("kick_channel") or self.channel
 
-            url_l = s_url_w.lower()
-            is_kick_url = "kick.com" in url_l
-            is_twitch_url = "twitch.tv" in url_l
-
-            # 1) Kick SIEMPRE primero (no requiere OAuth; cubre kick.com y wrappers Kick)
+            # FORZAR SOLO Kick API: si falla, no hay título (no caemos a yt-dlp/HTML)
             try:
                 import requests
                 resp = requests.get(
@@ -351,27 +345,13 @@ class Recorder:
                 if session and session.get("is_live"):
                     t = (session.get("session_title") or "").strip()
                     if t:
+                        log.info(f"[{self.channel}] Título directo (Kick API): {t}")
                         return t
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"[{self.channel}] Kick API falló al obtener título: {e}")
 
-            # 2) Si la URL es de Twitch (o el source mapea twitch_channel) → yt-dlp
-            #    resuelve el título real SIN OAuth
-            if is_twitch_url or twitch_ch:
-                info_web = self._fetch_live_info()
-                if info_web:
-                    t = (info_web.get("title") or "").strip()
-                    if t and not _is_generic_live_title(t, kick_ch or self.channel, info_web.get("uploader", "")):
-                        return t
-                    desc = (info_web.get("description") or "").strip()
-                    if desc:
-                        return desc
-
-            # 3) Último recurso: HTML
-            from utils.web import get_title as web_get_title
-            title = web_get_title(s_url_w or self.channel)
-            if title:
-                return title
+            # Si Kick API no devuelve título, NO caemos a yt-dlp/HTML → devolvemos vacío
+            log.warning(f"[{self.channel}] Kick API no devolvió título válido para web wrapper")
             return ""
 
         info = self._fetch_live_info()
@@ -383,7 +363,9 @@ class Recorder:
 
         generic = _is_generic_live_title(title, self.channel, info.get("uploader", ""))
         if generic and desc:
+            log.info(f"[{self.channel}] Título directo (descripción): {desc[:80]}")
             return desc
+        log.info(f"[{self.channel}] Título directo (yt-dlp): {title[:80]}")
         return title
 
     def _fetch_live_info(self) -> dict:
@@ -411,8 +393,16 @@ class Recorder:
         return (self._fetch_live_info().get("description") or "").strip()
 
     def get_live_keyword(self) -> str:
-        """Keyword (para el nombre del archivo) derivada del título del directo."""
-        return _normalize_keyword(self.get_live_title())
+        """Keyword (para el nombre del archivo) derivada del título del directo.
+        Si el título está vacío (API falla), usa el nombre del canal como fallback."""
+        title = self.get_live_title()
+        if not title:
+            kw = _normalize_keyword(self.channel)
+            log.info(f"[{self.channel}] Keyword (fallback canal): {kw}")
+            return kw
+        kw = _normalize_keyword(title)
+        log.info(f"[{self.channel}] Keyword (título): {kw}")
+        return kw
 
     def start(self, keyword: str = "") -> bool:
         """Arranca la grabación de la fuente activa. Devuelve True si empezó.
@@ -492,8 +482,8 @@ class Recorder:
             "-o", output_template,
             "--no-part",
             "--no-overwrites",
-            "--write-thumbnail",
-            "--convert-thumbnails", "jpg",
+#            "--write-thumbnail",
+#            "--convert-thumbnails", "jpg",
             "--no-warnings",
             "--js-runtimes", "deno",
             "--remote-components", "ejs:github",
@@ -634,15 +624,15 @@ class Recorder:
         except Exception as e:
             log.error(f"[{self.channel}] Error moviendo concat a su nombre final: {e}")
             return
-        # Sidecar de descripción de la primera parte (si existe) → archivo final
-        for p in partes:
-            sc = _sidecar_path(p)
-            if sc.exists():
-                try:
-                    shutil.copy(sc, _sidecar_path(final))
-                except Exception:
-                    pass
-                break
+        # Sidecar de descripción (INACTIU: _descripcion.json no s'escriu)
+        # for p in partes:
+        #     sc = _sidecar_path(p)
+        #     if sc.exists():
+        #         try:
+        #             shutil.copy(sc, _sidecar_path(final))
+        #         except Exception:
+        #             pass
+        #         break
         # Asegurar que el concat final sea legible (moov presente)
         self._reparar_video(final)
         self._partes = []
@@ -692,15 +682,15 @@ class Recorder:
             return False
 
     def _copiar_a_test(self, orig: Path) -> Path:
-        """Copia un archivo de grabación a test_path como '<stem>_completed.mp4'
-        junto con su sidecar de descripción. Devuelve el destino."""
+        """Copia un archivo de grabación a test_path como '<stem>_completed.mp4'.
+        Devuelve el destino. (Sidecar INACTIU)"""
         self.test_path.mkdir(parents=True, exist_ok=True)
         dest = self.test_path / f"{orig.stem}_completed.mp4"
         shutil.copy2(str(orig), str(dest))
-        sidecar = _sidecar_path(orig)
-        if sidecar.exists():
-            shutil.copy2(str(sidecar), str(_sidecar_path(dest)))
-            log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
+        # sidecar = _sidecar_path(orig)
+        # if sidecar.exists():
+        #     shutil.copy2(str(sidecar), str(_sidecar_path(dest)))
+        #     log.info(f"[{self.channel}] Sidecar de descripción copiado junto al completado")
         return dest
 
     def _move_to_completed(self) -> None:
@@ -750,6 +740,8 @@ class Recorder:
             f"[{self.channel}] Cambio de plataforma {prev_platform} → {new_platform}: "
             f"cerrando parte actual y esperando a que {new_platform} esté listo"
         )
+        # Preservar la keyword original para que todas las partes tengan la misma
+        keyword_original = self.get_live_keyword()
         self._add_parte_actual()
 
         wait_start = time.time()
@@ -757,7 +749,7 @@ class Recorder:
         while not self._stop_event.is_set() and (time.time() - wait_start) < max_wait:
             if self.is_platform_live(new_platform):
                 log.info(f"[{self.channel}] {new_platform} listo, empezando grabación")
-                return self.start()
+                return self.start(keyword_original)
             remaining = int(max_wait - (time.time() - wait_start))
             log.info(f"[{self.channel}] Esperando a que {new_platform} esté listo ({remaining}s restantes)...")
             time.sleep(10)
@@ -821,8 +813,9 @@ class Recorder:
                     # Misma plataforma de vuelta: se perdió la conexión.
                     # Cerrar parte actual y abrir nueva (evita desync A/V).
                     log.warning(f"[{self.channel}] Conexión perdida, reconectando (nueva parte)...")
+                    keyword_original = self.get_live_keyword()
                     self._add_parte_actual()
-                    if not self.start():
+                    if not self.start(keyword_original):
                         log.warning(f"[{self.channel}] No se pudo reconectar, terminando grabación")
                         self.stop()
                         return

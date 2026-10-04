@@ -2161,6 +2161,7 @@ confirmar_eliminacion_originales() {
         echo -e "  ${DIM}  • 'all' o 'a' = borrar todos${NC}"
         echo -e "  ${DIM}  • Enter = no borrar nada${NC}"
         read -rp "  ¿Eliminar? [selección]: " sel </dev/tty
+        sel="${sel// /}"  # trim spaces
         if [[ -n "$sel" ]]; then
             local to_delete=()
             if [[ "${sel,,}" == "all" || "${sel,,}" == "a" ]]; then
