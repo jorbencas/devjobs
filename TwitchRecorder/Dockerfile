@@ -15,7 +15,8 @@ ENV PATH="/home/appuser/.deno/bin:/usr/local/bin:${PATH}"
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install 'urllib3<2.8' --break-system-packages
 
 COPY . .
 

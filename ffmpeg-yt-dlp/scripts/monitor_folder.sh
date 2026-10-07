@@ -16,6 +16,7 @@
 set -e
 
 # ── Configuración ────────────────────────────────────────────────────
+CONTAINER_NAME="ffmpeg_monitor-sendo"
 WATCH_DIR="${WATCH_DIR:-$HOME/data/pipeline/grabaciones/test}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
 # Disable log file by default. Set LOG_FILE to a path to enable file logging.
@@ -62,10 +63,10 @@ NC='\033[0m'
 
 # ── Funciones ────────────────────────────────────────────────────────
 log() {
-    # Escribe un mensaje con timestamp a pantalla y al LOG_FILE del día.
+    # Escribe un mensaje con timestamp + contenedor a pantalla y al LOG_FILE del día.
     local timestamp
-    timestamp=$(date '+%H:%M:%S')
-    echo -e "${timestamp} $1" | tee -a "$LOG_FILE"
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${timestamp} [$CONTAINER_NAME] $1" | tee -a "$LOG_FILE"
 }
 
 log_info() {
@@ -91,6 +92,31 @@ log_error() {
 log_step() {
     # Log de paso/progreso (magenta).
     log "${MAGENTA}→${NC} $1"
+}
+
+# Ejecuta un comando capturando stderr y logueando líneas ERROR/[requests con timestamp
+run_with_error_log() {
+    local cmd=("$@")
+    local tmp_err
+    tmp_err=$(mktemp)
+    if "${cmd[@]}" 2>"$tmp_err"; then
+        rm -f "$tmp_err"
+        return 0
+    fi
+    local rc=$?
+    while IFS= read -r line; do
+        local ts
+        ts=$(date '+%Y-%m-%d %H:%M:%S')
+        if [[ "$line" == *"ERROR:"* && "$line" == *"[requests]"* ]]; then
+            log_error "[$ts] [yt-dlp/ffmpeg] $line"
+        elif [[ "$line" == *"ERROR:"* ]]; then
+            log_error "[$ts] [yt-dlp/ffmpeg] $line"
+        elif [[ "$line" == *"WARNING:"* || "$line" == *"WARN:"* ]]; then
+            log_warn "[$ts] [yt-dlp/ffmpeg] $line"
+        fi
+    done < "$tmp_err"
+    rm -f "$tmp_err"
+    return $rc
 }
 
 compress_video() {
@@ -243,7 +269,7 @@ compress_video() {
     # para no fallar al elegir muxer por extensión.
     ffmpeg_args+=(-f mp4)
 
-    if ffmpeg "${ffmpeg_args[@]}" "$tmp_output" 2>/dev/null; then
+    if run_with_error_log ffmpeg "${ffmpeg_args[@]}" "$tmp_output"; then
         # ── Límite de tamaño (Telegram ~2 GB): si el CRF one-pass supera el tope,
         #    se re-codifica en 2 pasadas apuntando a ese tamaño (garantía < 2 GB).
         local size_bytes
@@ -260,16 +286,15 @@ compress_video() {
             local video_bytes=$(( max_bytes - audio_bytes ))
             local video_bps=$(( video_bytes * 8 / duration ))
             if [[ "$video_bps" -gt 0 ]]; then
-                ffmpeg "${slice_args[@]}" "${vf_args[@]}" -map 0:v:0 -c:v "$CODEC" -b:v "$video_bps" \
-                    -preset "$PRESET" -threads "$threads" -pass 1 -an -f null - \
-                    2>/dev/null
+                run_with_error_log ffmpeg "${slice_args[@]}" "${vf_args[@]}" -map 0:v:0 -c:v "$CODEC" -b:v "$video_bps" \
+                    -preset "$PRESET" -threads "$threads" -pass 1 -an -f null -
                 local pass2_map=(-map 0:v:0)
                 [[ -n "$has_audio" ]] && pass2_map+=(-map 0:a:0)
-                if ffmpeg "${slice_args[@]}" "${vf_args[@]}" "${pass2_map[@]}" -c:v "$CODEC" -b:v "$video_bps" \
+                if run_with_error_log ffmpeg "${slice_args[@]}" "${vf_args[@]}" "${pass2_map[@]}" -c:v "$CODEC" -b:v "$video_bps" \
                     -preset "$PRESET" -threads "$threads" -pass 2 \
                     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
                     -map_metadata 0 \
-                    -movflags +faststart -f mp4 "$tmp_output" 2>/dev/null; then
+                    -movflags +faststart -f mp4 "$tmp_output"; then
                     log_ok "  2 pasadas completadas → ${TAMANO_MAX_MB}MB"
                 else
                     log_error "  Falló la 2ª pasada; se mantiene el CRF one-pass."
@@ -364,6 +389,8 @@ while true; do
     if [[ "$new_files" -gt 0 ]]; then
         log_info "Detectados $new_files vídeos nuevos"
         process_pending
+    else
+        log_info "Monitoreo: 0 vídeos pendientes en $WATCH_DIR (polling cada ${POLL_INTERVAL}s)"
     fi
 
     sleep "$POLL_INTERVAL"

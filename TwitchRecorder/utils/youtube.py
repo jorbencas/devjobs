@@ -1,4 +1,7 @@
 import yt_dlp
+import sys
+import io
+from contextlib import redirect_stderr
 
 from utils.logger import log
 
@@ -14,8 +17,16 @@ def is_live(channel: str) -> bool:
             "extract_flat": False,
             "js_runtimes": {"deno": {}},
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return info and info.get("is_live", False)
+        # Capturar stderr de yt-dlp para loguear errores [requests]
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        # Log cualquier error [requests] capturado
+        stderr_output = stderr_capture.getvalue()
+        for line in stderr_output.splitlines():
+            if "ERROR:" in line and "[requests]" in line:
+                log.error(f"[twitchrecorder-sendo] {channel} yt-dlp: {line.strip()}")
+        return info and info.get("is_live", False)
     except Exception:
         return False

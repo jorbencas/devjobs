@@ -82,6 +82,29 @@ docker compose up
 
 Al ejecutar, `midu.sh` arranca un menú interactivo con 33 modos, la opción **`34) Ayuda`** (muestra la ayuda completa y vuelve al menú) y **`0`** para salir. En el selector también se aceptan `h`, `help` o `?` para ver la ayuda.
 
+### Soporte de cookies para vídeos privados (Vimeo, etc.)
+
+Para descargar vídeos privados (ej. Vimeo), usa cookies de tu navegador:
+
+```bash
+# Opción 1: extraer cookies del navegador (Firefox/Chrome)
+./midu.sh -d "https://vimeo.com/1232816270/..." --cookies-from-browser firefox
+
+# Opción 2: archivo cookies.txt (formato Netscape)
+./midu.sh -d "https://vimeo.com/1232816270/..." --cookies cookies.txt
+
+# Requisitos:
+# - Firefox/Chrome **cerrado** al extraer cookies
+# - Sesión activa en la web (haberse logueado antes)
+# - Fallback automático a gallery-dl si yt-dlp falla
+```
+
+> **Vimeo privado**: el vídeo `https://vimeo.com/1232816270/265ac5f270?share=copy&fl=sv&fe=ci` requiere cookies de usuario autenticado. Sin cookies válidas, **no se puede descargar**.
+
+### gallery-dl incluido
+
+Ambas imágenes Docker (`monitor` y `downloader`) incluyen **gallery-dl** como fallback automático cuando yt-dlp no puede descargar (ej. Vimeo con cookies, sitios con DRM ligero).
+
 ### Ejecutar midu.sh (CLI)
 
 ```bash
@@ -329,6 +352,13 @@ arranque están en el `README.md` de la raíz de `devjobs` (sección *PIPELINE*)
 | 31 | `chain` | Pipeline encadenado: varios pasos en un solo comando | `--chain "cut=00:01:00:00:05:00" "convert=720"` |
 | 32 | `compose` | Seleccionar vídeo + varias pistas de audio + subtítulos + codec por pista | `--compose` |
 | 33 | `hls` | Preparar vídeo para streaming HLS (m3u8) con múltiples calidades | `--hls` |
+
+### Opciones eliminadas (v2026)
+
+| Opción anterior | Motivo |
+|-----------------|--------|
+| `web-extract` (modo 37) | Fusionado en modo 1 `download` — yt-dlp/gallery-dl ya extraen de web |
+| `web-extract-login` | Eliminado — usa `--cookies-from-browser` o `--cookies` en modo download |
 
 ### Ayuda en el menú interactivo
 

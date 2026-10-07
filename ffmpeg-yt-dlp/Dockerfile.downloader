@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcups2 \
     libdrm2 \
     libgbm1 \
-    libgtk-3-0 \
+    libgtk-3.0 \
     libnspr4 \
     libnss3 \
     libxcomposite1 \
@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     fonts-liberation \
     fonts-dejavu-core \
-    # Para Playwright \
     libstdc++6 \
     libgcc-s1 \
     # Fuentes para renderizado \

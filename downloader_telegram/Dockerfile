@@ -14,7 +14,8 @@ RUN pip install --no-cache-dir \
     rich \
     inquirerpy \
     Pillow \
-    imagehash
+    imagehash && \
+    pip install 'urllib3<2.8' --break-system-packages
 
 COPY app/ /app/app/
 COPY config/config.bin config/secret.key config/grupos.json config/enviados.json /app/config/

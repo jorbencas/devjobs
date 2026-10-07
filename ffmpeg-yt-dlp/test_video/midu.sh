@@ -94,8 +94,8 @@ MODO DESCARGA:
   -df, --dl-format FMT   Formato de salida: mp4|mkv|webm|best (default: mp4)
   --playlist             Descargar la playlist/vídeo completo de la URL
   --dl-subs-only         Solo descargar subtítulos (sin vídeo)
-  --web-extract URL      Descarga web genérica (yt-dlp → HLS → Selenium)
-  --web-extract-login URL Descarga web con login (HLS + login/Cloudflare)
+  --cookies FILE        Archivo de cookies (Netscape) para sitios privados
+  --cookies-from-browser BROWSER[:PROFILE]  Cargar cookies del navegador (firefox, chrome, edge, safari, etc.)
 
 MODO CORTE (lossless, sin re-encoding):
   --cut                  Cortar vídeo por tiempo
@@ -294,6 +294,8 @@ MODE=""                         # download|audio-only|merge-audio|concat|watch|c
 URL=""                          # URL para descargar
 DOWNLOAD_START=""               # Inicio descarga parcial
 DOWNLOAD_END=""                 # Fin descarga parcial
+COOKIES_FILE=""                 # Archivo de cookies para sitios privados
+COOKIES_FROM_BROWSER=""         # Navegador para extraer cookies (firefox, chrome, edge, safari, etc.)
 AUDIO_INPUT=""                  # Archivo de audio para mezclar
 OUTPUT_FORMAT=""                # Formato de salida (mp3, m4a, wav, etc)
 SUBTITLE_SOFT=""                # Subtítulos soft (embed)
@@ -439,8 +441,8 @@ while [[ $# -gt 0 ]]; do
         -df|--dl-format)  DOWNLOAD_FORMAT="$2"; shift 2 ;;
         --playlist)       DOWNLOAD_PLAYLIST=true; shift ;;
         --dl-subs-only)   DOWNLOAD_SUBS_ONLY=true; shift ;;
-        --web-extract)    MODE="web-extract"; URL="$2"; shift 2 ;;
-        --web-extract-login) MODE="web-extract-login"; URL="$2"; shift 2 ;;
+        --cookies)       COOKIES_FILE="$2"; shift 2 ;;
+        --cookies-from-browser) COOKIES_FROM_BROWSER="$2"; shift 2 ;;
         -ao|--audio-out) validate_url "${2:-}" || exit 1; MODE="audio-only"; URL="${2:-}"; shift 2 2>/dev/null || shift ;;
         -of|--out-format) OUTPUT_FORMAT="$2"; shift 2 ;;
         -ma|--merge-audio) validate_file "$2" || exit 1; MODE="merge-audio"; AUDIO_INPUT="$2"; shift 2 ;;
@@ -2346,6 +2348,10 @@ download_video() {
     [[ "$DOWNLOAD_PLAYLIST" == true ]] && out_template="$output_dir/%(playlist_title)s/%(title)s [%(id)s].%(ext)s"
     ytdlp_args+=(-o "$out_template" "$url")
 
+    # ── Cookies para sitios privados ──
+    [[ -n "$COOKIES_FILE" && -f "$COOKIES_FILE" ]] && ytdlp_args+=(--cookies "$COOKIES_FILE")
+    [[ -n "$COOKIES_FROM_BROWSER" ]] && ytdlp_args+=(--cookies-from-browser "$COOKIES_FROM_BROWSER")
+
     # ── Ejecutar ──
     local ytdlp_exit=0
     if [[ "$VERBOSE" == true ]]; then
@@ -2357,8 +2363,23 @@ download_video() {
     if [[ $ytdlp_exit -eq 0 ]]; then
         echo -e "${GREEN}✓${NC} Descarga completada"
     else
-        echo -e "${RED}✗${NC} Error en la descarga (código: $ytdlp_exit)"
-        return 1
+        echo -e "${YELLOW}⚠${NC} yt-dlp falló (código: $ytdlp_exit). Intentando con gallery-dl..."
+        if command -v gallery-dl &>/dev/null; then
+            echo -e "  ${DIM}Intentando con gallery-dl...${NC}"
+            local gallery_dl_args=()
+            [[ -n "$COOKIES_FILE" && -f "$COOKIES_FILE" ]] && gallery_dl_args+=(--cookies "$COOKIES_FILE")
+            [[ -n "$COOKIES_FROM_BROWSER" ]] && gallery_dl_args+=(--cookies-from-browser "$COOKIES_FROM_BROWSER")
+            if gallery-dl "${gallery_dl_args[@]}" "$url" 2>&1 | tail -5; then
+                echo -e "${GREEN}✓${NC} Descarga completada con gallery-dl"
+            else
+                echo -e "${RED}✗${NC} Error en la descarga con gallery-dl"
+                return 1
+            fi
+        else
+            echo -e "${RED}✗${NC} Error en la descarga (código: $ytdlp_exit)"
+            echo -e "  ${DIM}Instala gallery-dl como fallback: pip install gallery-dl${NC}"
+            return 1
+        fi
     fi
 }
 
@@ -3390,16 +3411,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     echo -e "    ${GREEN}33)${NC} HLS                   ${DIM}— Preparar vídeo para streaming (m3u8)${NC}"
     echo -e "    ${GREEN}34)${NC} Ayuda                 ${DIM}— Ver todos los flags, modos y ejemplos${NC}"
     echo -e "    ${GREEN}35)${NC} Sincronizar audio     ${DIM}— Corregir desfase audio/vídeo${NC}"
-    echo -e "    ${GREEN}36)${NC} Descarga web genérica ${DIM}— Cualquier URL (yt-dlp → HLS → Selenium)${NC}"
-    echo -e "    ${GREEN}37)${NC} Descarga web con login ${DIM}— Sitios con login/Cloudflare (HLS + login)${NC}"
     echo ""
-    read -rp "  → Selecciona [1-37] (h = ayuda, 0 = salir): " mode_val
+    read -rp "  → Selecciona [1-35] (h = ayuda, 0 = salir): " mode_val
     echo ""
 
     case "$mode_val" in
         1)  MODE="download" ;;
-        36) MODE="web-extract" ;;
-        37) MODE="web-extract-login" ;;
         2)  MODE="cut" ;;
         3)  MODE="convert" ;;
         4)  MODE="gif" ;;
@@ -3468,12 +3485,11 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             # Validar que la URL esté soportada
             echo -e "  ${DIM}Comprobando URL...${NC}"
             if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-                echo -e "${RED}✗${NC} URL no soportada o no válida"
-                echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
-                echo -e "  ${DIM}Lista de sitios soportados: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
-                exit 1
+                echo -e "${YELLOW}⚠${NC} yt-dlp no soporta esta URL directamente"
+                echo -e "  ${DIM}Se intentará con gallery-dl como fallback...${NC}"
+            else
+                echo -e "  ${GREEN}✓${NC} URL válida"
             fi
-            echo -e "  ${GREEN}✓${NC} URL válida"
             echo ""
             echo -e "${BOLD}  ► Calidad de descarga${NC}"
             echo -e "  ${DIM}1) Mejor calidad  2) 1080p  3) 720p  4) 480p  5) Solo audio${NC}"
@@ -3584,62 +3600,6 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
                 *) echo -e "${RED}✗${NC} Opción inválida"; exit 1 ;;
             esac
 ;;
-        
-# -- Descarga web con login (HLS + login) --
-        web-extract-login)
-            echo -e "${BOLD}  ► URL de página web con login (HLS + login)${NC}"
-            echo -e "  ${DIM}Para sitios con login/Cloudflare que exponen HLS tras login${NC}"
-            read -rp "  → URL: " URL
-            [[ -z "$URL" ]] && { echo -e "${RED}✗${NC} Se requiere URL"; exit 1; }
-
-            # Credenciales (pueden venir de variables de entorno)
-            local WEB_USER="${WEB_LOGIN_USER:-}"
-            local WEB_PASS="${WEB_LOGIN_PASS:-}"
-            
-            if [[ -z "$WEB_USER" ]]; then
-                read -rp "  → Usuario: " WEB_USER
-            fi
-            if [[ -z "$WEB_PASS" ]]; then
-                read -rsp "  → Contraseña: " WEB_PASS
-                echo ""
-            fi
-            [[ -z "$WEB_USER" || -z "$WEB_PASS" ]] && { echo -e "${RED}✗${NC} Usuario y contraseña requeridos"; exit 1; }
-
-            echo -e "  ${DIM}Iniciando navegador con login...${NC}"
-
-            # Verificar dependencias
-            if ! command -v chromium &>/dev/null && ! command -v chromium-browser &>/dev/null && ! command -v google-chrome &>/dev/null; then
-                echo -e "${RED}✗${NC} Chromium/Chrome no instalado"
-                exit 1
-            fi
-
-            if ! python3 -c "import DrissionPage" 2>/dev/null; then
-                echo -e "${YELLOW}!${NC} DrissionPage no instalado. Instalando..."
-                pip install --break-system-packages DrissionPage 2>/dev/null || pip3 install DrissionPage
-            fi
-
-            # Usar script Python externo para extracción con login
-            local extractor_script="/home/jorge/dev/devjobs/ffmpeg-yt-dlp/test_video/web_extract_login/extract_m3u8.py"
-            if [[ ! -f "$extractor_script" ]]; then
-                echo -e "${RED}✗${NC} Script extractor no encontrado: $extractor_script"
-                exit 1
-            fi
-
-            echo -e "  ${DIM}Iniciando navegador y login...${NC}"
-            local hls_url
-            hls_url=$(python3 "$extractor_script" "$URL" "$WEB_USER" "$WEB_PASS" 2>/dev/null | grep "M3U8_FOUND:" | cut -d: -f2-)
-
-            # Leer resultado
-            if [[ -n "$hls_url" ]]; then
-                echo -e "  ${GREEN}✓${NC} Stream HLS encontrado: $hls_url"
-                URL="$hls_url"
-                MODE="download"
-                continue
-            else
-                echo -e "${RED}✗${NC} No se pudo extraer stream HLS tras login"
-                exit 1
-            fi
-            ;;
 
         # -- Concat smart: pide archivos + crossfade --
         concat-smart)
@@ -4889,15 +4849,14 @@ case "$MODE" in
             echo "  Uso: ./midu.sh -d <URL>"
             exit 1
         fi
-        # Validar que la URL esté soportada
+        # Validar que la URL esté soportada (solo warning, no salir)
         echo -e "${BOLD}► Comprobando URL...${NC}"
         if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
-            echo -e "${RED}✗${NC} URL no soportada o no válida"
-            echo -e "  ${DIM}yt-dlp no puede descargar de este sitio${NC}"
-            echo -e "  ${DIM}Lista: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md${NC}"
-            exit 1
+            echo -e "${YELLOW}⚠${NC} yt-dlp no soporta esta URL directamente"
+            echo -e "  ${DIM}Se intentará con gallery-dl como fallback...${NC}"
+        else
+            echo -e "${GREEN}✓${NC} URL válida para yt-dlp"
         fi
-        echo -e "${GREEN}✓${NC} URL válida"
         download_video "$URL" "$OUTPUT_DIR"
         exit $?
         ;;
@@ -4906,11 +4865,7 @@ case "$MODE" in
         MODE="web-extract-interactive"
         # Fall through to handle it
         ;;&
-    web-extract-login)
-        # Call the interactive web-extract-login handler
-        MODE="web-extract-login-interactive"
-        # Fall through to handle it
-        ;;&    audio-only)
+    audio-only)
         if [[ -z "$URL" ]]; then
             # Si no hay URL, extraer audio de archivos locales
             buscar_archivos

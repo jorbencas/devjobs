@@ -128,10 +128,13 @@ def cargar_credenciales():
         )
 
 
+CONTAINER_NAME = "telegram-uploader-sendo"
+
+
 def log(tipo, mensaje):
-    """Imprime un log con timestamp e icono de color según el tipo
+    """Imprime un log con timestamp + contenedor e icono de color según el tipo
     (INFO/OK/WARN/ERR/SUBIR/PART/LIMP)."""
-    ts = datetime.now().strftime("%H:%M:%S")
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     iconos = {
         "INFO": "\033[36mℹ\033[0m",
         "OK": "\033[32m✓\033[0m",
@@ -142,7 +145,7 @@ def log(tipo, mensaje):
         "LIMP": "\033[32m♻\033[0m",
     }
     icono = iconos.get(tipo, "ℹ")
-    print(f"{ts} {icono} {mensaje}", flush=True)
+    print(f"{ts} [{CONTAINER_NAME}] {icono} {mensaje}", flush=True)
 
 
 def cargar_grupos():
@@ -494,7 +497,9 @@ def dividir_video(archivo):
                "-movflags", "+faststart", str(parte)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
-            log("ERR", f"Error dividiendo: {r.stderr[-400:]}")
+            for line in r.stderr.splitlines():
+                if "ERROR:" in line or "Error" in line:
+                    log("ERR", f"ffmpeg split: {line.strip()}")
             break
         if not parte.exists() or parte.stat().st_size <= 1024 * 1024:
             parte.unlink(missing_ok=True)
@@ -669,11 +674,16 @@ def detectar_episodios(archivo):
     while t < dur:
         img = str(tmp) + f"_{n}.png"
         try:
-            subprocess.run(
+            r = subprocess.run(
                 ["ffmpeg", "-y", "-ss", str(t), "-i", str(archivo),
                  "-frames:v", "1", "-vf", "crop=iw:ih*0.25:0:0,scale=iw*2:-1",
                  "-q:v", "2", img],
-                capture_output=True, text=True, check=True)
+                capture_output=True, text=True)
+            if r.returncode != 0:
+                for line in r.stderr.splitlines():
+                    if "ERROR:" in line or "Error" in line:
+                        log("ERR", f"ffmpeg OCR frame: {line.strip()}")
+                raise subprocess.CalledProcessError(r.returncode, r.args, r.stderr)
             proc_img = _preprocess_image(Path(img))
             texto = _ocr_texto(proc_img)
             texto_bajo = texto.lower()
@@ -791,6 +801,10 @@ def fotograma(archivo):
     cmd = ["ffmpeg", "-y", "-ss", "2", "-i", str(archivo),
            "-frames:v", "1", "-vf", "scale=320:-1", str(thumb)]
     r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        for line in r.stderr.splitlines():
+            if "ERROR:" in line or "Error" in line:
+                log("ERR", f"ffmpeg thumbnail: {line.strip()}")
     return str(thumb) if r.returncode == 0 and thumb.exists() else None
 
 
@@ -808,6 +822,10 @@ def atributos_video(archivo):
          "-show_entries", "stream=width,height,duration:format=duration",
          "-of", "json", str(archivo)],
         capture_output=True, text=True)
+    if r.returncode != 0:
+        for line in r.stderr.splitlines():
+            if "ERROR:" in line or "Error" in line:
+                log("ERR", f"ffprobe: {line.strip()}")
     w = h = 1
     duracion = 0.0
     try:

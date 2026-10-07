@@ -85,6 +85,8 @@ Automatización que graba directos de **Twitch/YouTube/Kick/Web**, los comprime,
 | `ffmpeg_monitor-sendo` | Compresor + OCR (daemon) | — | `unless-stopped` |
 | `telegram-uploader-sendo` | Subidor (daemon) | — | `unless-stopped` |
 
+> **Solo estos 3 contenedores** forman el pipeline "sendo". Se eliminaron todos los contenedores auxiliares/obsoletos. Ver `TwitchRecorder/README.md` sección *Limpieza de contenedores*.
+
 ### Detección de episodios (OCR)
 
 El monitor ejecuta OCR en la franja superior (top 25%) de cada frame cada 90 segundos:
@@ -292,6 +294,57 @@ tg_menu
 | `pipe_logs.sh` | Logs en tiempo real de los 3 daemons |
 
 > **[📖 Referencia completa: docker_help.txt](docker_help.txt)**
+
+---
+
+## ⚠️ Issues conocidos y fixes aplicados
+
+### 1. urllib3 2.8.0 incompatible con yt-dlp
+**Síntoma**: `AttributeError: 'HTTPResponse' object has no attribute 'getheader'` al detectar/grabar directos.
+
+**Fix aplicado** en `twitchrecorder-sendo` y `ffmpeg_monitor-sendo`:
+```bash
+pip install 'urllib3<2.8' --break-system-packages
+docker compose build && docker compose up -d twitchrecorder-sendo ffmpeg_monitor-sendo
+```
+
+### 2. mouredev YouTube — grabaciones inestables
+**Síntoma**: El proceso muere a los ~18s, reintenta 5 veces (backoff 5→10→15→20→25s), luego `stop()` concatena y sube lo grabado.
+
+**Causa probable**: Formato/geo-bloqueo/SSL en el stream YouTube live. yt-dlp no encuentra formato estable.
+
+**Workaround**: Añadir `"formato": "best[height<=1080][ext=mp4]/best"` en `config.json` para el platform `youtube` de mouredev, o usar Twitch como fallback (ya configurado con `detectar: false, corte: false`).
+
+### 3. Vimeo privado — requiere cookies de usuario
+El vídeo `https://vimeo.com/1232816270/265ac5f270?share=copy&fl=sv&fe=ci` es **privado**. Para descargarlo:
+
+```bash
+# En host (Firefox cerrado, sesión Vimeo activa):
+./midu.sh -d "URL" --cookies-from-browser firefox
+# o
+./midu.sh -d "URL" --cookies cookies.txt
+```
+
+**Sin cookies autenticadas no se puede descargar**. El contenedor no tiene acceso a tu navegador.
+
+### 4. Scraper series España octubre 2026 — necesita TMDB_API_KEY
+El script `test_githubActions/scripts/scrape_tmdb_octubre_2026.py` usa TMDB API. Añade en `mecano_prueba_web/.env`:
+
+```bash
+TMDB_API_KEY=tu_key_de_themoviedb_org
+```
+
+Obtén la key en: https://www.themoviedb.org/settings/api
+
+### 5. Google Calendar — credenciales en mecano_prueba_web/.env
+Ya configuradas (ver `.env.example` para plantilla):
+```bash
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_CALLBACK_URL=http://localhost/api/auth/google/callback
+```
+
+OAuth consent screen configurado, Calendar API habilitada, redirect URI verificado. Documentación completa en `test_githubActions/README.md` sección *Integración Google Calendar*.
 
 ---
 

@@ -256,9 +256,10 @@ Muestra `ID / Tipo / Nombre / Carpeta / ¿Creado por ti? / ¿Foro?` de tus chats
 1. `TwitchRecorder` lee el **título del directo** con yt-dlp y lo incrusta en el nombre del archivo: `sendosama_2026-08-13_20-15-00_KW_prueba.mp4`.
 2. El monitor comprime y conserva el nombre → `..._KW_prueba_compressed.mp4`.
 3. El uploader extrae el **canal** (primer token del nombre) y la **keyword** (`prueba`).
+   - **Agrupación de partes**: si el nombre trae sufijos `__parteN` (p. ej. `sendosama_..._KW_prueba__parte2_compressed.mp4`), se **eliminan antes de extraer la keyword** (`keyword_from_filename` en `subir_videos.py`). Así todas las partes del mismo directo se rutearon al mismo grupo/tema.
 4. **Enrutado a foros:** se busca en todos los foros un **tema cuyo nombre coincida con el canal del archivo** (p. ej. `midudev` → tema `midu`). Si coincide, va a ese foro/tema. Si no, va al primer foro *catch-all* (sendo) y se busca un tema que coincida con la **keyword** (o episodios); si tampoco, al tema **`general`**.
 5. **Enrutado a `grupos`:** se sube a los `grupos` cuyo `nombre` coincida con la keyword. No hay grupo `default` (solo foros).
-4. Si no hay ningún destino → se omite.
+6. Si no hay ningún destino → se omite.
 
 ### Grupo con temas (series)
 

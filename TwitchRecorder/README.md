@@ -556,6 +556,26 @@ yt-dlp es un fork de youtube-dl, la herramienta más popular para descargar víd
 | PC pierde Internet | Espera y continúa |
 | Directo termina | Guarda el archivo y espera al siguiente |
 
+### Lógica de reintentos (5 fallos consecutivos)
+
+El recorder implementa un contador `_consecutive_fails` (máx 5) con **backoff exponencial**:
+
+| Fallo | Espera antes de reintentar |
+|-------|----------------------------|
+| 1 | 5s |
+| 2 | 10s |
+| 3 | 15s |
+| 4 | 20s |
+| 5 | 25s (cap 30s) |
+
+Si hay **5 fallos rápidos** (<30s cada uno), se llama a `stop()`:
+1. Cierra la grabación actual
+2. **Concatena todas las partes** (`__parte1`, `__parte2`, ...) en un único vídeo
+3. Copia a `test/` como `*_completed.mp4` (con keyword)
+4. El monitor lo recogerá para comprimir y subir
+
+> **La concatenación ocurre tanto en parada limpia como en fallo.** El método `stop()` (recorder.py:508-512) siempre une las partes antes de finalizar, así que aunque el directo falle 5 veces y se fuerce el stop, **siempre sale un solo vídeo concatenado**.
+
 ---
 
 ## Organización de archivos
@@ -587,6 +607,10 @@ sendosama_2026-08-13_20-15-00_KW_prueba.mp4
 > (p. ej. `"📗 LOS DIARIOS DE LA BOTICARIA..."`). Si se detecta un título genérico,
 > TwitchRecorder usa la **descripción** como fuente del título, para que el
 > keyword sea el correcto (ej. `diarios_boticaria` y no `sendosama_live`).
+>
+> **Fallback a nombre del canal**: si tanto el título como la descripción están vacíos o son genéricos, se usa el **nombre del canal** como keyword. Esto garantiza que siempre haya una keyword válida para el ruteo.
+
+**Persistencia de keyword entre cambios de plataforma y reconexiones**: cuando el directo cambia de plataforma (p. ej. Twitch → Kick) o se reconecta tras una caída, la **keyword original se preserva** y se propaga a las nuevas partes (`__parte2`, `__parte3`, etc.). Al concatenar al final, el archivo final conserva la keyword del inicio del directo.
 
 Esa keyword viaja intacta por todo el pipeline (`*_completed.mp4` → `*_compressed.mp4`). El servicio `uploader` la usa para decidir a qué grupo de Telegram subir el vídeo: **al grupo cuyo `nombre` coincida con la keyword**, o al `default` si no hay coincidencia. Ver `downloader_telegram/README.md` (sección *Uploader a Telegram*).
 
@@ -699,10 +723,40 @@ se queda colgada a la espera de que un plugin procese el JS; con `deno` no hay a
 
 ---
 
-## Lo que aprendimos
+## Fix urllib3 2.8.0 → 2.7.0
 
-1. **Streamlink es fantástico** para Twitch. Sin navegador, sin dependencias, sin complicaciones.
-2. **yt-dlp es la navaja suiza** para YouTube y Kick. La misma herramienta para detectar y grabar.
-3. **Los buffers de subprocess** son una fuente infinita de bugs. Siempre usar `DEVNULL`.
-4. **Docker facilita todo**. Una vez que funciona local, encapsularlo es trivial.
-5. **Un config.json bien pensado** ahorra mucho trabajo.
+**Problema**: urllib3 2.8.0 rompió compatibilidad con yt-dlp (error `AttributeError: 'HTTPResponse' object has no attribute 'getheader'`).
+
+**Solución aplicada** en ambos contenedores del pipeline:
+```bash
+pip install 'urllib3<2.8' --break-system-packages
+```
+
+| Contenedor | Acción requerida |
+|------------|------------------|
+| `ffmpeg_monitor-sendo` | Solo rebuild (el monitor recarga código al detectar cambios) |
+| `twitchrecorder-sendo` | Rebuild + **restart** (daemon persistente) |
+
+```bash
+cd devjobs && docker compose build && docker compose up -d twitchrecorder-sendo ffmpeg_monitor-sendo
+```
+
+> Verificado: tras el downgrade, yt-dlp detecta y graba directos de YouTube/Twitch/Kick sin errores.
+
+---
+
+## Limpieza de contenedores (solo pipeline "sendo")
+
+Se eliminaron todos los contenedores no esenciales. **Solo quedan 3 contenedores** del pipeline:
+
+| Contenedor | Servicio | Estado |
+|------------|----------|--------|
+| `twitchrecorder-sendo` | Grabador (daemon) | `unless-stopped` |
+| `ffmpeg_monitor-sendo` | Compresor + OCR (daemon) | `unless-stopped` |
+| `telegram-uploader-sendo` | Subidor (daemon) | `unless-stopped` |
+
+Para arrancar todo el pipeline:
+```bash
+docker compose up -d twitchrecorder-sendo ffmpeg_monitor-sendo telegram-uploader-sendo
+# o con alias: pipe_up
+```

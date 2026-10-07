@@ -6,8 +6,9 @@ import shutil
 import signal
 import subprocess
 import sys
-import time
 import threading
+import time
+import queue
 from pathlib import Path
 
 from utils.files import get_recording_path
@@ -15,10 +16,45 @@ from utils.logger import log
 
 
 IS_WINDOWS = platform.system() == "Windows"
+CONTAINER_NAME = "twitchrecorder-sendo"
 
 # Cache de rutas de ffmpeg/ffprobe (se resuelven una sola vez)
 _FFMPEG = shutil.which("ffmpeg")
 _FFPROBE = shutil.which("ffprobe")
+
+
+def _log_stderr(process: subprocess.Popen, channel: str, prefix: str = "yt-dlp") -> threading.Thread:
+    """Captura stderr del proceso en un hilo y loguea líneas con ERROR/[requests con timestamp + contenedor."""
+    q = queue.Queue()
+    
+    def reader():
+        try:
+            for line in iter(process.stderr.readline, b''):
+                q.put(line.decode('utf-8', errors='replace').rstrip())
+        except Exception:
+            pass
+        finally:
+            q.put(None)
+    
+    def logger():
+        while True:
+            line = q.get()
+            if line is None:
+                break
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if "ERROR:" in line and "[requests]" in line:
+                log.error(f"[{CONTAINER_NAME}] {ts} [{channel}] {prefix}: {line}")
+            elif "ERROR:" in line:
+                log.error(f"[{CONTAINER_NAME}] {ts} [{channel}] {prefix}: {line}")
+            elif "WARNING:" in line or "WARN:" in line:
+                log.warning(f"[{CONTAINER_NAME}] {ts} [{channel}] {prefix}: {line}")
+            # debug lines silently ignored
+    
+    t_reader = threading.Thread(target=reader, daemon=True)
+    t_logger = threading.Thread(target=logger, daemon=True)
+    t_reader.start()
+    t_logger.start()
+    return t_logger
 
 
 def _normalize_keyword(text: str, max_len: int = 40) -> str:
@@ -467,7 +503,10 @@ class Recorder:
             "--force"
         ]
 
-        self.process = subprocess.Popen([sl_exe] + cmd, **popen_kwargs)
+        pk = dict(popen_kwargs)
+        pk["stderr"] = subprocess.PIPE
+        self.process = subprocess.Popen([sl_exe] + cmd, **pk)
+        _log_stderr(self.process, self.channel, "streamlink")
 
     def _start_ytdlp(self, output_path: Path, popen_kwargs: dict) -> None:
         """Lanza yt-dlp para grabar YouTube/Kick/web en 'best' (con thumbnail jpg)."""
@@ -482,14 +521,17 @@ class Recorder:
             "-o", output_template,
             "--no-part",
             "--no-overwrites",
-#            "--write-thumbnail",
-#            "--convert-thumbnails", "jpg",
+    #            "--write-thumbnail",
+    #            "--convert-thumbnails", "jpg",
             "--no-warnings",
             "--js-runtimes", "deno",
             "--remote-components", "ejs:github",
         ]
 
-        self.process = subprocess.Popen([ytdlp_exe] + cmd, **popen_kwargs)
+        pk = dict(popen_kwargs)
+        pk["stderr"] = subprocess.PIPE
+        self.process = subprocess.Popen([ytdlp_exe] + cmd, **pk)
+        _log_stderr(self.process, self.channel, "yt-dlp")
 
     def stop(self) -> None:
         """Finaliza la grabación: detiene el proceso de forma limpia (moov),
@@ -504,15 +546,18 @@ class Recorder:
         if self._current_file and self._current_file.exists():
             size = _format_size(self._current_file.stat().st_size)
             duration = _get_duration_str(self._current_file)
-            log.info(f"[{self.channel}] Grabación finalizada ({size}, {duration})")
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log.info(f"[{CONTAINER_NAME}] {ts} [{self.channel}] Grabación finalizada ({size}, {duration})")
             self._concatenar_partes()
             self._move_to_completed()
         elif self._partes:
-            log.info(f"[{self.channel}] Grabación finalizada ({len(self._partes)} partes)")
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log.info(f"[{CONTAINER_NAME}] {ts} [{self.channel}] Grabación finalizada ({len(self._partes)} partes)")
             self._concatenar_partes()
             self._move_to_completed()
         else:
-            log.info(f"[{self.channel}] Grabación finalizada")
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log.info(f"[{CONTAINER_NAME}] {ts} [{self.channel}] Grabación finalizada")
 
     def _terminar_proceso(self, timeout: int = 30) -> None:
         """Detiene el proceso de grabación de forma controlada.

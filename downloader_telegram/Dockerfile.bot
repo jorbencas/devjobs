@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://deno.land/install.sh | sh && \
     ln -s /root/.deno/bin/deno /usr/local/bin/deno
 
-RUN pip install --no-cache-dir yt-dlp
+RUN pip install --no-cache-dir yt-dlp && \
+    pip install 'urllib3<2.8' --break-system-packages
 
 # Patch ok.ru extractor: metadata can be a dict instead of str
 RUN sed -i 's/metadata = self._parse_json(metadata, video_id)/if isinstance(metadata, str):\n                metadata = self._parse_json(metadata, video_id)/' \

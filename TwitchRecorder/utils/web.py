@@ -3,6 +3,9 @@ import time
 import urllib.parse
 import requests
 import yt_dlp
+import sys
+import io
+from contextlib import redirect_stderr
 
 from datetime import datetime
 from pathlib import Path
@@ -197,14 +200,21 @@ def is_live(url: str) -> bool:
             "socket_timeout": 6,
         }
         hls_url = _build_hls_url(domain)
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(hls_url, download=False)
-            if not info:
-                return False
-            if info.get("is_live"):
-                return True
-            formats = info.get("formats") or info.get("entries") or []
-            return bool(formats)
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(hls_url, download=False)
+        # Log cualquier error [requests] capturado
+        stderr_output = stderr_capture.getvalue()
+        for line in stderr_output.splitlines():
+            if "ERROR:" in line and "[requests]" in line:
+                log.error(f"[twitchrecorder-sendo] web yt-dlp: {line.strip()}")
+        if not info:
+            return False
+        if info.get("is_live"):
+            return True
+        formats = info.get("formats") or info.get("entries") or []
+        return bool(formats)
     except Exception:
         return False
 
@@ -278,8 +288,15 @@ def probe(url: str, out_dir: str = "") -> dict:
             "skip_download": True,
             "socket_timeout": 6,
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(hls_url, download=False)
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(hls_url, download=False)
+        # Log cualquier error [requests] capturado
+        stderr_output = stderr_capture.getvalue()
+        for line in stderr_output.splitlines():
+            if "ERROR:" in line and "[requests]" in line:
+                log.error(f"[twitchrecorder-sendo] web yt-dlp probe: {line.strip()}")
         info = info or {}
         is_live = bool(info.get("is_live"))
         for f in info.get("formats", []) or []:
