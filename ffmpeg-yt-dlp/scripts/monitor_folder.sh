@@ -261,6 +261,9 @@ compress_video() {
         done
         log "WARN" "$msg"
     fi
+    # has_audio para la 2ª pasada
+    local has_audio
+    has_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$input" 2>/dev/null | head -1)
     ffmpeg_args+=(-map 0:v:0)
     [[ "$num_tracks" -gt 0 ]] && ffmpeg_args+=(-map 0:a:${idx[$selected_track]})
     ffmpeg_args+=(-map_metadata 0)
