@@ -544,7 +544,7 @@ async def cmd_tool(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_noticias(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/noticias — Últimas noticias scrapeadas."""
+    """/noticias — Últimas noticias scrapeadas (formato diario en español)."""
     await update.message.reply_chat_action("typing")
     news_file = TEST_GH_DIR / "files" / "noticias_historico.json"
     if not news_file.exists():
@@ -556,15 +556,41 @@ async def cmd_noticias(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not items:
             await update.message.reply_text("📰 Sin noticias nuevas.", reply_markup=kb_noticias())
             return
-        recent = items[:5]
-        lines = ["📰 Últimas noticias\n"]
-        for i, item in enumerate(recent, 1):
-            title = item.get("title", item.get("titulo", "Sin título"))
-            source = item.get("source", item.get("fuente", ""))
-            lines.append(f"{i}. {title}")
-            if source:
-                lines.append(f"   _{source}_")
+
+        # Tomar hasta 10 noticias más recientes
+        recent = items[:10]
+
+        # Fecha en español
+        meses = [
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+        ]
+        hoy = datetime.now()
+        fecha_str = f"{hoy.day} de {meses[hoy.month - 1]} de {hoy.year}"
+
+        lines = [
+            f"📰 Noticias Tech del día: {fecha_str}",
+            "",
+            "¡Buenos días! Aquí está el resumen de hoy con las noticias más destacadas de programación, desarrollo web e IA. 👇",
+            ""
+        ]
+
+        for item in recent:
+            title = item.get("title", item.get("titulo", "Sin título")).strip()
+            desc = item.get("description", item.get("descripcion", item.get("summary", ""))).strip()
+            url = item.get("url", item.get("link", item.get("enlace", ""))).strip()
+            source = item.get("source", item.get("fuente", "")).strip()
+
+            lines.append(f"🔸 {title}")
+            if desc:
+                lines.append(desc)
+            if url:
+                lines.append(f"🔗 Leer artículo ({url})")
+            lines.append("")
+
+        lines.append("¡Que tengas un buen día! Nos vemos mañana con más noticias tech. 👋")
+
         text = "\n".join(lines)
-        await update.message.reply_text(text, reply_markup=kb_noticias())
+        await update.message.reply_text(text, reply_markup=kb_noticias(), disable_web_page_preview=True)
     except Exception as e:
         await update.message.reply_text(f"❌ Error leyendo noticias: {e}", reply_markup=kb_noticias())
