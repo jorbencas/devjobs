@@ -227,45 +227,12 @@ compress_video() {
     ffmpeg_args+=(-c:v "$CODEC" -crf "$CRF" -preset "$PRESET" -threads "$threads")
     ffmpeg_args+=(-c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE")
     ffmpeg_args+=("${vf_args[@]}")
-    # Mapeo explícito: solo vídeo + pista de audio elegida.
-    # Si hay varias pistas, ffprobe muestra sus códigos ISO de idioma.
-    # - AUDIO_TRACK=n : forzar pista n-ésima (0 = primera, 1 = segunda, etc.)
-    # - Si no está definida, usa la primera (comportamiento anterior).
-    # - Si hay varias y AUDIO_TRACK no está puesta, muestra un aviso con los idiomas
-    #   y usa la primera para no romper el flujo.
-    local audio_streams
-    audio_streams=$(ffprobe -v error -select_streams a -show_entries stream=index:lang -of "csv=p=0:l=$output" "$input" 2>/dev/null)
-    # Dividir en índices y lenguajes
-    local idx lang tracks_list
-    idx=()
-    lang=()
-    if [ -n "$audio_streams" ]; then
-        while IFS=':' read -r i l; do
-            idx+=("$i")
-            lang+=("$l")
-        done <<< "$audio_streams"
-    fi
-    local num_tracks=${#idx[@]}
-    local selected_track=0
-    if [ -n "${AUDIO_TRACK+x}" ]; then
-        selected_track=$((AUDIO_TRACK))
-        if [ "$selected_track" -ge "$num_tracks" ] 2>/dev/null; then
-            selected_track=0
-        fi
-    elif [ "$num_tracks" -gt 1 ]; then
-        # Mostrar idiomas disponibles y aviso
-        local msg="Pistas de audio disponibles: "
-        for i in "${!lang[@]}"; do
-            l=${lang[$i]:-desconocido}
-            msg+="[$i: ${l}] "
-        done
-        log "WARN" "$msg"
-    fi
-    # has_audio para la 2ª pasada
+    # Mapeo explícito (igual que midu.sh): solo vídeo + 1er audio, descartando
+    # pistas extra (subs/datos) que hacen que Telegram no reproduzca en línea.
     local has_audio
     has_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$input" 2>/dev/null | head -1)
     ffmpeg_args+=(-map 0:v:0)
-    [[ "$num_tracks" -gt 0 ]] && ffmpeg_args+=(-map 0:a:${idx[$selected_track]})
+    [[ -n "$has_audio" ]] && ffmpeg_args+=(-map 0:a:0)
     ffmpeg_args+=(-map_metadata 0)
     ffmpeg_args+=(-movflags +faststart)
     # -f mp4 explícito: el temporal acaba en .tmp y ffmpeg necesita el formato
