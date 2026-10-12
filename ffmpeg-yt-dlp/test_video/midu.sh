@@ -2266,31 +2266,56 @@ download_video() {
     local url="$1"
     local output_dir="$2"
 
+    # ── Vimeo: normalizar a la URL del reproductor ──
+    # Los vídeos "ocultos" (no listados) usan https://vimeo.com/<id>/<hash>.
+    # yt-dlp sólo puede extraerlos sin login vía el reproductor embebido:
+    #   https://player.vimeo.com/video/<id>?h=<hash>
+    local is_vimeo=false
+    if [[ "$url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+)/([0-9a-fA-F]+) ]]; then
+        url="https://player.vimeo.com/video/${BASH_REMATCH[2]}?h=${BASH_REMATCH[3]}"
+        is_vimeo=true
+    elif [[ "$url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+) ]]; then
+        url="https://player.vimeo.com/video/${BASH_REMATCH[2]}"
+        is_vimeo=true
+    elif [[ "$url" =~ ^https?://player\.vimeo\.com/video/[0-9]+ ]]; then
+        is_vimeo=true
+    fi
+
     echo -e "${BOLD}► Descargando:${NC} $url"
     mkdir -p "$output_dir"
 
     local ytdlp_args=()
 
+    # ── Impersonación TLS (Vimeo bloquea por huella TLS) ──
+    # Requiere curl_cffi instalado; si no está, se descarga sin él.
+    if [[ "$is_vimeo" == true && -z "$COOKIES_FILE" && -z "$COOKIES_FROM_BROWSER" ]]; then
+        if python3 -c "import curl_cffi" &>/dev/null; then
+            ytdlp_args+=(--impersonate chrome)
+        else
+            echo -e "  ${DIM}curl_cffi no instalado: Vimeo puede requerir cookies o login${NC}"
+        fi
+    fi
+
     # ── Calidad ──
     local merge_fmt="${DOWNLOAD_FORMAT:-mp4}"
     case "${DOWNLOAD_QUALITY:-best}" in
         4k|2160)
-            ytdlp_args+=(-f "bestvideo[height<=2160][ext=${merge_fmt}]+bestaudio[ext=m4a]/best[height<=2160]")
+            ytdlp_args+=(-f "bestvideo[height<=2160][ext=${merge_fmt}]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best[height<=2160]/bestvideo+bestaudio/best")
             ;;
         1080)
-            ytdlp_args+=(-f "bestvideo[height<=1080][ext=${merge_fmt}]+bestaudio[ext=m4a]/best[height<=1080]")
+            ytdlp_args+=(-f "bestvideo[height<=1080][ext=${merge_fmt}]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best")
             ;;
         720)
-            ytdlp_args+=(-f "bestvideo[height<=720][ext=${merge_fmt}]+bestaudio[ext=m4a]/best[height<=720]")
+            ytdlp_args+=(-f "bestvideo[height<=720][ext=${merge_fmt}]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best")
             ;;
         480)
-            ytdlp_args+=(-f "bestvideo[height<=480][ext=${merge_fmt}]+bestaudio[ext=m4a]/best[height<=480]")
+            ytdlp_args+=(-f "bestvideo[height<=480][ext=${merge_fmt}]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/bestvideo+bestaudio/best")
             ;;
         audio-only|audio)
             ytdlp_args+=(-f "bestaudio/best" -x --audio-format "${OUTPUT_FORMAT:-mp3}")
             ;;
         best|*)
-            ytdlp_args+=(-f "bestvideo[ext=${merge_fmt}]+bestaudio[ext=m4a]/best[ext=${merge_fmt}]/best")
+            ytdlp_args+=(-f "bestvideo[ext=${merge_fmt}]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=${merge_fmt}]/best")
             ;;
     esac
 
@@ -3298,9 +3323,12 @@ select_video_files() {
         return 0
     fi
 
-    echo -e "  ${DIM}Ejemplo: 1,3,5, 1-5, o 'all'/'a' para seleccionar todos${NC}"
+    echo -e "  ${DIM}Ejemplo: 1,3,5, 1-5, 1 2 3, o 'all'/'a' para seleccionar todos${NC}"
     read -rp "  → Selecciona: " choice
     echo ""
+
+    # Aceptar también números separados por espacios: "1 2" -> "1,2"
+    choice="${choice// /,}"
 
     SELECTED_FILES=()
 
@@ -3319,10 +3347,11 @@ select_video_files() {
             return 1
         fi
     elif [[ "$choice" =~ ^[0-9,]+$ ]]; then
-        # Lista: 1,3,5
+        # Lista: 1,3,5  (también acepta espacios: "1 2" -> "1,2")
         IFS=',' read -ra indices <<< "$choice"
         for idx in "${indices[@]}"; do
             idx=$(echo "$idx" | xargs)
+            [[ -z "$idx" ]] && continue
             if [[ "$idx" -ge 1 && "$idx" -le ${#all_files[@]} ]]; then
                 SELECTED_FILES+=("${all_files[$((idx - 1))]}")
             else
@@ -3484,9 +3513,16 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
 
             # Validar que la URL esté soportada
             echo -e "  ${DIM}Comprobando URL...${NC}"
-            if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
+            check_url="$URL" check_args=()
+            if [[ "$check_url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+)/([0-9a-fA-F]+) ]]; then
+                check_url="https://player.vimeo.com/video/${BASH_REMATCH[2]}?h=${BASH_REMATCH[3]}"
+            elif [[ "$check_url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+) ]]; then
+                check_url="https://player.vimeo.com/video/${BASH_REMATCH[2]}"
+            fi
+            [[ "$check_url" =~ vimeo ]] && python3 -c "import curl_cffi" &>/dev/null && check_args+=(--impersonate chrome)
+            if ! yt-dlp --simulate --no-warnings "${check_args[@]}" "$check_url" >/dev/null 2>&1; then
                 echo -e "${YELLOW}⚠${NC} yt-dlp no soporta esta URL directamente"
-                echo -e "  ${DIM}Se intentará con gallery-dl como fallback...${NC}"
+                echo -e "  ${DIM}Se intentará igualmente (y gallery-dl como fallback)...${NC}"
             else
                 echo -e "  ${GREEN}✓${NC} URL válida"
             fi
@@ -3601,26 +3637,12 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
             esac
 ;;
 
-        # -- Concat smart: pide archivos + crossfade --
+# -- Concat smart: pide crossfade + archivos --
         concat-smart)
-            echo -e "${BOLD}  ► Pipeline encadenado${NC}"
-            echo -e "  ${DIM}Encadena varios pasos en uno solo${NC}"
-            echo -e "  ${DIM}Operaciones disponibles:${NC}"
-            echo -e "  ${DIM}  cut=START:END       Cortar vídeo${NC}"
-            echo -e "  ${DIM}  convert=RES        Convertir (720, 1080, 4k)${NC}"
-            echo -e "  ${DIM}  rotate=GRADOS      Rotar (90, 180, 270)${NC}"
-            echo -e "  ${DIM}  fade=SEGUNDOS      Fade in/out${NC}"
-            echo -e "  ${DIM}  reverse            Invertir${NC}"
-            echo -e "  ${DIM}  denoise=FUERZA     Reducir ruido (1-100)${NC}"
-            echo -e "  ${DIM}  sharpen=FUERZA     Enfocar (1-10)${NC}"
-            echo -e "  ${DIM}  normalize          Normalizar audio${NC}"
-            echo -e "  ${DIM}Ejemplo: cut=00:01:00:00:05:00 convert=720 fade=2${NC}"
-            read -rp "  → Operaciones: " -a CHAIN_OPS_RAW
-            CHAIN_OPS=()
-            for op in "${CHAIN_OPS_RAW[@]}"; do
-                CHAIN_OPS+=("$op")
-            done
-            [[ ${#CHAIN_OPS[@]} -eq 0 ]] && { echo -e "${RED}✗${NC} Se requiere al menos una operación"; exit 1; }
+            echo -e "${BOLD}  ► Unión normalizada con crossfade${NC}"
+            echo -e "  ${DIM}Re-encode automático para que la unión sea fluida${NC}"
+            read -rp "  → Duración del fundido en segundos [1] (0 = sin fundido): " CROSSFADE_DURATION
+            [[ -z "$CROSSFADE_DURATION" ]] && CROSSFADE_DURATION="1"
             echo ""
             ;;
 
@@ -3766,7 +3788,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
 
             # Seleccionar archivo(s) - multi-selección para modos batch
             case "$MODE" in
-                cut|convert|gif|thumbnail|rotate|crop|fade|normalize|watermark|deinterlace|fps|speed|syncav|subtitles|audio-only|remux|tracks)
+                cut|convert|gif|thumbnail|rotate|crop|fade|normalize|watermark|deinterlace|fps|speed|syncav|subtitles|audio-only|remux|tracks|concat|concat-smart)
                     echo -e "${BOLD}  ► Selecciona los vídeos${NC}"
                     if ! select_video_files "$INPUT_DIR"; then
                         exit 1
@@ -3787,7 +3809,7 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
     # ══════════════════════════════════════════════════════════════════
 
     case "$MODE" in
-        info|concat|download)
+        info|concat|concat-smart|download)
             # Estos modos no necesitan configurar salida
             ;;
 
@@ -4602,7 +4624,14 @@ if [[ "$INTERACTIVE" == true && -t 0 ]]; then
         echo -e "  Archivo:   ${CYAN}$(basename "$SELECTED_FILE")${NC}"
     fi
     [[ -n "$OUTPUT_NAME" ]] && echo -e "  Salida:    ${CYAN}$OUTPUT_NAME${NC}"
-    [[ -n "$INPUT_DIR" && "$MODE" != "download" && "$MODE" != "concat" ]] && echo -e "  Entrada:   ${CYAN}$INPUT_DIR${NC}"
+    if [[ "$MODE" == "concat" || "$MODE" == "concat-smart" ]]; then
+        if [[ ${#CONCAT_FILES[@]} -ge 2 ]]; then
+            echo -e "  Archivos:  ${CYAN}${#CONCAT_FILES[@]} seleccionados${NC}"
+        elif [[ ${#SELECTED_FILES[@]} -ge 2 ]]; then
+            echo -e "  Archivos:  ${CYAN}${#SELECTED_FILES[@]} seleccionados${NC}"
+        fi
+    fi
+    [[ -n "$INPUT_DIR" && "$MODE" != "download" && "$MODE" != "concat" && "$MODE" != "concat-smart" ]] && echo -e "  Entrada:   ${CYAN}$INPUT_DIR${NC}"
     [[ -n "$OUTPUT_DIR" && "$MODE" != "info" ]] && echo -e "  Destino:   ${CYAN}$OUTPUT_DIR${NC}"
     if [[ "$MODE" == "cut" && ${#FILE_CUT[@]} -gt 1 ]]; then
         echo -e "  Corte:     ${CYAN}por vídeo (${#FILE_CUT[@]} configurados)${NC}"
@@ -4709,15 +4738,10 @@ case "$VIDEO_CODEC" in
         ;;
 esac
 
-# Fallback si ffmpeg no tiene el codificador (excepto GPU)
-if [[ "$GPU" == "none" ]] && ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -q "^.*$VIDEO_ENCODER"; then
-    echo -e "${YELLOW}⚠${NC} ffmpeg no tiene el codificador $VIDEO_ENCODER. Usando libx264"
-    VIDEO_CODEC="h264"
-    VIDEO_ENCODER="libx264"
-    ENC_CRF="$CRF"
-    ENC_FLAGS=(-preset "$ENCODE_SPEED")
-    ENC_CRF_EXTRA=()
-fi
+# For concat modes, when selecting in interactive flow, use SELECTED_FILES
+    if [[ ("$MODE" == "concat" || "$MODE" == "concat-smart") && ${#CONCAT_FILES[@]} -lt 2 && ${#SELECTED_FILES[@]} -ge 2 ]]; then
+        CONCAT_FILES=("${SELECTED_FILES[@]}")
+    fi
 
 # ── Resumen (modo non-interactive) ───────────────────────────────────
 
@@ -4851,9 +4875,16 @@ case "$MODE" in
         fi
         # Validar que la URL esté soportada (solo warning, no salir)
         echo -e "${BOLD}► Comprobando URL...${NC}"
-        if ! yt-dlp --simulate --no-warnings "$URL" >/dev/null 2>&1; then
+        check_url="$URL" check_args=()
+        if [[ "$check_url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+)/([0-9a-fA-F]+) ]]; then
+            check_url="https://player.vimeo.com/video/${BASH_REMATCH[2]}?h=${BASH_REMATCH[3]}"
+        elif [[ "$check_url" =~ ^https?://(www\.)?vimeo\.com/([0-9]+) ]]; then
+            check_url="https://player.vimeo.com/video/${BASH_REMATCH[2]}"
+        fi
+        [[ "$check_url" =~ vimeo ]] && python3 -c "import curl_cffi" &>/dev/null && check_args+=(--impersonate chrome)
+        if ! yt-dlp --simulate --no-warnings "${check_args[@]}" "$check_url" >/dev/null 2>&1; then
             echo -e "${YELLOW}⚠${NC} yt-dlp no soporta esta URL directamente"
-            echo -e "  ${DIM}Se intentará con gallery-dl como fallback...${NC}"
+            echo -e "  ${DIM}Se intentará igualmente (y gallery-dl como fallback)...${NC}"
         else
             echo -e "${GREEN}✓${NC} URL válida para yt-dlp"
         fi
@@ -4912,20 +4943,28 @@ case "$MODE" in
         ;;
     concat)
         if [[ ${#CONCAT_FILES[@]} -lt 2 ]]; then
-            echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
-            echo "  Uso: ./midu.sh --concat video1.mkv video2.mkv video3.mkv"
-            exit 1
+            if [[ ${#SELECTED_FILES[@]} -ge 2 ]]; then
+                CONCAT_FILES=("${SELECTED_FILES[@]}")
+            else
+                echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
+                echo "  Uso: ./midu.sh --concat video1.mkv video2.mkv video3.mkv"
+                exit 1
+            fi
         fi
         concat_videos "$OUTPUT_DIR" "${CONCAT_FILES[@]}"
         exit $?
         ;;
     concat-smart)
         if [[ ${#CONCAT_FILES[@]} -lt 2 ]]; then
-            echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
-            echo "  Uso: ./midu.sh --concat-smart video1.mkv video2.mkv"
-            exit 1
+            if [[ ${#SELECTED_FILES[@]} -ge 2 ]]; then
+                CONCAT_FILES=("${SELECTED_FILES[@]}")
+            else
+                echo -e "${RED}✗${NC} Se necesitan al menos 2 archivos"
+                echo "  Uso: ./midu.sh --concat-smart video1.mkv video2.mkv"
+                exit 1
+            fi
         fi
-        if [[ -n "$CROSSFADE_DURATION" ]]; then
+        if [[ -n "$CROSSFADE_DURATION" && "$CROSSFADE_DURATION" != "0" ]]; then
             crossfade_videos "$OUTPUT_DIR" "$CROSSFADE_DURATION" "${CONCAT_FILES[@]}"
         else
             concat_videos "$OUTPUT_DIR" "${CONCAT_FILES[@]}"
