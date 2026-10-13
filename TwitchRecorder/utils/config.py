@@ -1,4 +1,5 @@
 import json
+import os
 import platform
 from pathlib import Path
 
@@ -66,6 +67,15 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     for key, value in DEFAULT_CONFIG.items():
         if key not in config:
             config[key] = value
+
+    # Overrides por entorno (ejecución nativa sin Docker). En Docker no se
+    # definen, así que la config del archivo manda.
+    if os.environ.get("RECORD_PATH"):
+        config["record_path"] = os.environ["RECORD_PATH"]
+    if os.environ.get("TEST_PATH"):
+        config["test_path"] = os.environ["TEST_PATH"]
+    if os.environ.get("COPY_TO_TEST") is not None:
+        config["copy_to_test"] = os.environ["COPY_TO_TEST"].strip().lower() in ("1", "true", "yes", "on")
 
     return config
 

@@ -45,6 +45,18 @@ docker compose build
 docker compose up
 ```
 
+### 🐳 Arrancar el contenedor
+
+Contenedor: **`pdfmanager`** (servicio `pdfmanager`, interactivo con `stdin_open`/`tty`).
+
+```bash
+cd pdfmanager
+
+docker compose build
+docker compose run --rm pdfmanager    # menú interactivo
+docker compose stop pdfmanager        # o: docker compose down
+```
+
 ## Uso
 
 Coloca los PDFs a procesar en `./pdfs_protegidos/`; los resultados salen en

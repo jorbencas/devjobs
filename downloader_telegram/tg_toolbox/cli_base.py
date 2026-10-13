@@ -23,7 +23,7 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = Path(os.environ.get("TG_TOOLBOX_CONFIG", REPO_DIR / "config" / "config.bin"))
 KEY_FILE = Path(os.environ.get("TG_TOOLBOX_KEY", REPO_DIR / "config" / "secret.key"))
 GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", REPO_DIR / "config" / "grupos.json"))
-# Seguimiento y auditoría PROPIOS del CLI (no tocan enviados.json del daemon)
+# Seguimiento y auditoría PROPIOS del CLI (independientes del daemon uploader)
 LOGS_DIR = REPO_DIR / "data" / "logs"
 SYNC_FILE = LOGS_DIR / "sync_cli.json"
 AUDIT_FILE = LOGS_DIR / "tg_toolbox.log"
@@ -403,7 +403,7 @@ async def subir_archivo_cli(client, archivo, destinos, caption_base, keyword="",
 
     - usar_sync: si True, salta archivos ya registrados (dedup persistente).
     - borrar_origen: si True, borra el archivo local tras subir a todos.
-    NO toca enviados.json ni archivos del daemon.
+    NO toca archivos ni el estado del daemon uploader.
     """
     nombre = archivo.name
     if usar_sync and sync_ya_subido(archivo):

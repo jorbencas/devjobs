@@ -57,6 +57,50 @@ docker compose build
 docker compose up
 ```
 
+### 🐳 Arrancar cada contenedor
+
+Los servicios del `docker-compose.yml` son `telegram` (CLI), `uploader` (daemon) y `telegram_bot` (Bot API). Puedes arrancarlos por separado:
+
+```bash
+cd downloader_telegram
+
+# CLI interactivo (contenedor telegram-downloader)
+docker compose up -d telegram
+
+# Daemon uploader (contenedor telegram-uploader-sendo)
+docker compose up -d uploader
+
+# Bot API (contenedor telegram-bot)
+docker compose up -d telegram_bot
+
+# Todos a la vez
+docker compose up -d
+```
+
+Comandos útiles por contenedor:
+
+```bash
+# Estado
+docker ps --filter name=telegram-downloader
+docker ps --filter name=telegram-uploader-sendo
+docker ps --filter name=telegram-bot
+
+# Logs
+docker compose logs -f telegram
+docker compose logs -f uploader
+docker compose logs -f telegram_bot
+
+# Parar / reiniciar
+docker compose stop telegram
+docker compose restart uploader
+docker compose stop telegram_bot
+
+# Parar y eliminar todos los contenedores del compose
+docker compose down
+```
+
+> El servicio `telegram` se queda vivo (`tail -f /dev/null`) para poder entrar con `docker exec` (ver comando `tg_menu` más abajo). El `uploader` y el `telegram_bot` se levantan como daemons con `restart: unless-stopped`.
+
 ### Generar sesión portátil
 
 ```bash
@@ -180,17 +224,13 @@ docker compose logs -f telegram_bot
 1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
-4. Registra los enviados en `enviados.json` y elimina el archivo local (y todos sus restos: archivo auxiliar `*_episodios.json`, original de `.processed`, logs `log_*.txt` y partes divididas).
+4. Marca los enviados **en memoria** y elimina el archivo local (y todos sus restos: logs `log_*.txt` y partes divididas).
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 
-### `enviados.json` — registro de lo ya subido
+### Estado "ya subido" (sin ficheros)
 
-`config/enviados.json` es la **memoria de "ya subido"** del daemon uploader: una lista con las **rutas absolutas** de cada `*_compressed.mp4` que ya se subió a Telegram. Cada archivo se añade al terminar de subir (`marcar_enviado`) y se usa como guarda: antes de subir, el uploader comprueba `enviado(archivo)` — si ya está en la lista, lo **salta** (no re-subiría aunque el `.mp4` volviera a aparecer, por ej. tras reiniciar el contenedor).
-
-> **Limpieza:** el archivo se **poda automáticamente**: solo conserva las **últimas 15 subidas** (las entradas más antiguas se descartan al añadir una nueva). El límite es configurable con `UPLOADER_MAX_ENVIADOS` (default `15`; `0` = sin límite). Si además quieres limpiarlo a mano (p. ej. para forzar una re-subida), borra las entradas o haz `[]`. No ejecutes el daemon mientras lo editas. Cada proyecto se lleva su propio registro.
-
-> Es **exclusivo del daemon uploader**. El CLI (`tg_toolbox`) lleva su propio tracking en `data/logs/sync_cli.json` y **no toca** `enviados.json`.
+El uploader **no crea ningún fichero de estado**. Lleva en **memoria** (`enviado(archivo)` / `marcar_enviado`) la lista de lo subido en la ejecución actual y, al terminar de subir un vídeo, **borra el propio comprimido** (`*_compressed.mp4`). Así, la presencia del fichero en `../data/comprimidos` es la única fuente de verdad: si ya no está, ya se subió. No hay `enviados.json` que podar ni que limpiar.
 
 ### Configuración inicial (importante — hacer ANTES del viaje)
 
@@ -406,7 +446,7 @@ python app/tg_toolbox/tg_toolbox.py
 1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
-4. Registra los enviados en `enviados.json` y elimina el archivo local (y todos sus restos: archivo auxiliar `*_episodios.json`, original de `.processed`, logs `log_*.txt` y partes divididas).
+4. Marca los enviados **en memoria** y elimina el archivo local (y todos sus restos: logs `log_*.txt` y partes divididas).
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 
@@ -510,8 +550,7 @@ downloader_telegram/
 ├── config/                                   # (gitignored) credenciales + ruteo
 │   ├── config.bin                            # credenciales cifradas (AES)
 │   ├── secret.key                            # llave de cifrado
-│   ├── grupos.json                           # ruteo por keyword: grupos + foros (temas/general)
-│   └── enviados.json                         # registro de vídeos ya subidos (uploader)
+│   └── grupos.json                           # ruteo por keyword: grupos + foros (temas/general)
 ├── tg_toolbox/                               # CLI consolidada (nuevo directorio)
 │   ├── __init__.py
 │   ├── cli_base.py                           # utilidades autónomas (credenciales, ruteo, subida)

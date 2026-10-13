@@ -120,6 +120,22 @@ docker compose build --no-cache
 ./menu.sh
 ```
 
+### 🐳 Arrancar el contenedor
+
+Contenedor: **`hdfull-downloader`** (servicio `hdfull_downloader`, interactivo, `network_mode: host`).
+
+```bash
+cd hdfull-downloader
+
+docker compose build --no-cache      # primera vez o tras cambios
+./menu.sh                            # menú interactivo (recomendado)
+
+# Ejecución directa (--service-ports es obligatorio para el noVNC)
+docker compose run --rm --service-ports hdfull_downloader "https://hdfull.sbs/pelicula/..."
+
+docker compose stop hdfull_downloader   # o: docker compose down
+```
+
 ## Configuración
 
 1. Crea el archivo `.env` en la raíz del proyecto (ya está gitignoreado, nunca se commitea):

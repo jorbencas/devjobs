@@ -7,15 +7,13 @@ services:
     container_name: telegram-downloader
     volumes:
       - ./app:/app/app
-      - ./config/config.bin:/app/config/config.bin
-      - ./config/secret.key:/app/config/secret.key
-      - ./config/grupos.json:/app/config/grupos.json
-      - ./config/enviados.json:/app/config/enviados.json
-      - ./sessions/tg_menu.session:/app/sessions/tg_menu.session
+      - ./tg_toolbox:/app/tg_toolbox
+      - ./config:/app/config
+      - ./sessions:/app/sessions
       - ./Descargas_Telegram:/app/Descargas_Telegram
       - ../data/pipeline/comprimidos:/comprimidos
     environment:
-      - TG_TOOLBOX_SESION=/app/sessions/tg_menu.session
+      - TG_TOOLBOX_SESION=/app/sessions/tg_toolbox.session
     stdin_open: true
     tty: true
     command: tail -f /dev/null
@@ -28,18 +26,12 @@ services:
     container_name: telegram-uploader-sendo
     restart: unless-stopped
     volumes:
-      - ./config/config.bin:/app/config/config.bin
-      - ./config/secret.key:/app/config/secret.key
-      - ./config/grupos.json:/app/config/grupos.json
-      - ./config/enviados.json:/app/config/enviados.json
-      - ./sessions/tg_toolbox.session:/app/sessions/tg_toolbox.session
-      - ./sessions/uploader.session:/app/sessions/uploader.session
+      - ./config:/app/config
+      - ./sessions:/app/sessions
       - ../data/pipeline/partes:/app/partes
       - ../data/pipeline/comprimidos:/comprimidos
     environment:
       UPLOADER_INTERVALO: "60"
-      UPLOADER_FORWARD_CHANNEL: "-1004359591062"
-      UPLOADER_FORWARD_KEYWORD: "diarios_boticaria"
     command: python -u /app/app/subir_videos.py /comprimidos
 
   #          ============================================================

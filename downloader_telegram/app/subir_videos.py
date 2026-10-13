@@ -15,8 +15,7 @@ Flujo del autoupload (modo por defecto):
      d. Genera caption: "1-4", "Temporada 2 · 1-4", "🎬 Directo de canal"
      e. Si >2GB, divide en partes de 90 min (ffmpeg -c copy)
      f. Sube a cada destino (grupo + tema del foro)
-     g. Reenvía al canal de forward si la keyword coincide
-     h. Marca como enviado (enviados.json) y limpia restos
+     g. Marca como enviado (en memoria) y limpia restos (borra el comprimido)
 
 Credenciales:
   - config.bin: api_id + api_hash cifrados con Fernet
@@ -47,9 +46,6 @@ Config (grupos.json):
 
 Variables de entorno:
   UPLOADER_INTERVALO     Segundos entre pasadas (default: 60)
-  UPLOADER_FORWARD_CHANNEL Canal de reenvío automático
-  UPLOADER_FORWARD_KEYWORD Keyword que activa el reenvío
-  UPLOADER_MAX_ENVIADOS  Límite de enviados.json (default: 15)
   UPLOADER_OCR_STEP      Paso de escaneo OCR en segundos (default: 90)
   UPLOADER_CARPETAS      Carpetas a vigilar (separadas por :)
 """
@@ -80,14 +76,8 @@ CONFIG_FILE = Path(os.environ.get("UPLOADER_CONFIG", REPO_DIR / "config" / "conf
 KEY_FILE = Path(os.environ.get("UPLOADER_KEY", REPO_DIR / "config" / "secret.key"))
 SESION_UPLOADER = os.environ.get("UPLOADER_SESION", str(REPO_DIR / "sessions" / "uploader.session"))
 GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", REPO_DIR / "config" / "grupos.json"))
-ENVIADOS_FILE = Path(os.environ.get("UPLOADER_ENVIADOS", REPO_DIR / "config" / "enviados.json"))
 MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 PARTES_DIR = Path(os.environ.get("UPLOADER_PARTES", SCRIPT_DIR / "partes"))
-# Reenvío automático: cuando se sube un vídeo de la keyword indicada, además de
-# enviarlo a su(s) grupo(s), se REENVÍA (forward, no re-subida) al canal de solo
-# reenvío. Vacío ("") desactiva la función.
-FORWARD_CHANNEL = int(os.environ.get("UPLOADER_FORWARD_CHANNEL", "-1004359591062"))
-FORWARD_KEYWORD = os.environ.get("UPLOADER_FORWARD_KEYWORD", "diarios_boticaria")
 
 
 def cargar_o_generar_llave():
@@ -359,47 +349,20 @@ def foro_objetivo(foros, canal):
     return foros[0]
 
 
-def cargar_enviados():
-    """Lee enviados.json (lista de rutas ya subidas). [] si no existe o está mal."""
-    if not ENVIADOS_FILE.exists():
-        return []
-    try:
-        with open(ENVIADOS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
-def guardar_enviados(lista):
-    """Escribe la lista de subidos a enviados.json (sin romper si da error)."""
-    try:
-        with open(ENVIADOS_FILE, "w", encoding="utf-8") as f:
-            json.dump(lista, f, ensure_ascii=False, indent=2)
-    except OSError as e:
-        log("ERR", f"No se pudo guardar enviados.json: {e}")
+# Registro en memoria de lo ya subido en esta ejecución. No se persiste a
+# disco: la fuente de verdad es el propio fichero, que se borra tras subir.
+_ENVIADOS = set()
 
 
 def enviado(archivo):
-    """¿Este archivo ya se subió antes? (busca en enviados.json)."""
-    return str(archivo) in cargar_enviados()
+    """¿Este archivo ya se subió en esta ejecución? (registro en memoria)."""
+    return str(archivo) in _ENVIADOS
 
 
 def marcar_enviado(archivo):
-    """Marca un archivo como subido (enviados.json, podado a N últimos),
-    borra el comprimido ya subido y limpia todos sus restos del pipeline."""
-    lista = cargar_enviados()
-    if str(archivo) not in lista:
-        lista.append(str(archivo))
-    # Poda automática: mantener solo las N últimas subidas (default 15) para que
-    # enviados.json no crezca indefinidamente. El límite es configurable con
-    # UPLOADER_MAX_ENVIADOS (0 = sin límite).
-    max_enviados = int(os.environ.get("UPLOADER_MAX_ENVIADOS", "15"))
-    if max_enviados > 0 and len(lista) > max_enviados:
-        podados = lista[:len(lista) - max_enviados]
-        lista = lista[len(lista) - max_enviados:]
-        log("LIMP", f"enviados.json podado: {len(podados)} entrada(s) antigua(s) eliminadas")
-    guardar_enviados(lista)
+    """Marca un archivo como subido (en memoria), borra el comprimido ya subido
+    y limpia todos sus restos del pipeline. No deja ningún fichero de estado."""
+    _ENVIADOS.add(str(archivo))
     if archivo.exists():
         try:
             os.remove(archivo)
@@ -410,10 +373,9 @@ def marcar_enviado(archivo):
 
 def limpiar_restos(archivo):
     """Tras subir un archivo, elimina TODOS sus restos de /comprimidos:
-    1) el sidecar '<nombre>_episodios.json' generado por el monitor,
-    2) el original de .processed (ya subido a Telegram),
-    3) los logs completos (log_*.txt): residuos de procesamiento,
-    4) las partes divididas en PARTES_DIR (si el vídeo >2GB).
+    1) el sidecar '<nombre>_episodios.json' (si existiera),
+    2) los logs completos (log_*.txt): residuos de procesamiento,
+    3) las partes divididas en PARTES_DIR (si el vídeo >2GB).
     Objetivo: al terminar la subida no debe quedar nada residual.
     """
     base = archivo.stem.replace("_compressed", "")
@@ -427,22 +389,7 @@ def limpiar_restos(archivo):
         except OSError as e:
             log("WARN", f"No se pudo eliminar {nombre} {resto.name}: {e}")
 
-    # 3) Borrar el original de .processed (ya subido)
-    proc_dir = archivo.parent / ".processed"
-    try:
-        if proc_dir.exists():
-            candidatos = [p for p in proc_dir.glob("*")
-                          if p.is_file() and p.name.startswith(base)]
-            for p in candidatos:
-                try:
-                    p.unlink()
-                    log("LIMP", f"Eliminado .processed: {p.name}")
-                except OSError as e:
-                    log("WARN", f"No se pudo eliminar .processed {p.name}: {e}")
-    except OSError as e:
-        log("WARN", f"No se pudo acceder a {proc_dir}: {e}")
-
-    # 3) Borrar los logs completos (residuos del procesamiento)
+    # 2) Borrar los logs completos (residuos del procesamiento)
     for log_file in archivo.parent.glob("log_*.txt"):
         try:
             log_file.unlink()
@@ -450,7 +397,7 @@ def limpiar_restos(archivo):
         except OSError as e:
             log("WARN", f"No se pudo eliminar log {log_file.name}: {e}")
 
-    # 4) Borrar las partes divididas del vídeo (si >2GB)
+    # 3) Borrar las partes divididas del vídeo (si >2GB)
     try:
         if PARTES_DIR.exists():
             for p in PARTES_DIR.glob(f"{base}_part*"):
@@ -863,13 +810,6 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
     except Exception as e:
         log("WARN", f"Error al comprobar enviados: {e}")
 
-    # ¿Reenviar este vídeo al canal de solo-reenvío?
-    kw_norm = _normalizar_texto(keyword)
-    forward_kw = _normalizar_texto(FORWARD_KEYWORD)
-    reenviar = bool(FORWARD_CHANNEL) and bool(forward_kw) and forward_kw in kw_norm
-    if reenviar:
-        log("INFO", f"{nombre}: keyword '{keyword}' → se reenviará a {FORWARD_CHANNEL}")
-
     try:
         tamano_mb = archivo.stat().st_size / 1024**2
     except OSError as e:
@@ -905,11 +845,10 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
         cap = caption_base
         if total_partes > 1:
             cap = f"{caption_base} ({i}/{total_partes})"
-        enviado_msg = None
         for idx, (grupo, topico) in enumerate(destinos, start=1):
             ref = f" → tema {topico}" if topico else ""
             try:
-                msg = await client.send_file(
+                await client.send_file(
                     grupo, str(parte),
                     caption=cap,
                     video_note=False,
@@ -918,8 +857,6 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
                     reply_to=topico,
                     progress_callback=lambda c, t: None,
                 )
-                if enviado_msg is None:
-                    enviado_msg = msg
                 log("OK", f"  → {grupo}{ref} ({idx}/{len(destinos)}) : {parte.name}")
                 subidos += 1
             except Exception as e:
@@ -928,13 +865,6 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
                     log("ERR", f"  → {grupo}{ref}: sesión no autorizada — comprueba credenciales/sesión: {e}")
                 else:
                     log("ERR", f"  → {grupo}{ref} ({parte.name}) falló: {e}")
-        if reenviar and enviado_msg is not None:
-            try:
-                # Reenvío nativo: instantáneo (copia en servidor, no re-subir)
-                await client.forward_messages(FORWARD_CHANNEL, messages=enviado_msg)
-                log("OK", f"  ↪ reenviado al canal {FORWARD_CHANNEL}: {parte.name}")
-            except Exception as e:
-                log("ERR", f"  ↪ falló el reenvío a {FORWARD_CHANNEL} ({parte.name}): {e}")
 
     if thumb:
         try:
@@ -1288,7 +1218,7 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
       2. Rutea grupos por keyword (o default) y tema del foro por canal/keyword.
       3. Busca la metadata de episodios (JSON del monitor, o OCR si no existe).
       4. Decide el caption ('1-4', 'Temporada 2 · 1-4', nombre del canal o libre).
-      5. Llama a subir_archivo (parte en 2GB si hace falta, forward opcional).
+      5. Llama a subir_archivo (parte en 2GB si hace falta).
       6. Notifica al bot por IPC (status uploader) y espera el intervalo."""
     default, grupos, foros = cargar_grupos()
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)

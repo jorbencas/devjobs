@@ -106,6 +106,10 @@ Las descargas salen a `./descargas/`, organizadas por curso (`./descargas/CURSO/
 
 ## Uso con Docker (Recomendado)
 
+### 🐳 Arrancar el contenedor
+
+Contenedor: **`aula-downloader`** (servicio `aula_downloader`, interactivo con `stdin_open`/`tty`).
+
 ```bash
 cd aula-downloader
 
@@ -125,6 +129,9 @@ docker compose run --rm aula_downloader python3 /app/aula_downloader_funciona.py
 
 # Menú interactivo
 docker compose run --rm aula_downloader
+
+# Detener / limpiar
+docker compose stop    # o: docker compose down
 ```
 
 > 💡 **Siempre pide selección** — Cualquier ejecución (URLs directas o menú)

@@ -78,6 +78,23 @@ En resumen: arrancas el Docker y te olvidas. Cuando tu streamer favorito empiece
 
 ---
 
+## 🐳 Arrancar el contenedor
+
+Contenedor: **`twitchrecorder-sendo`** (servicio `twitchrecorder`, `restart: unless-stopped`).
+
+```bash
+cd TwitchRecorder
+
+docker compose build                     # primera vez o tras cambios
+docker compose up -d twitchrecorder      # arrancar en segundo plano
+
+docker compose ps                        # estado
+docker compose logs -f twitchrecorder    # logs en tiempo real
+docker compose stop twitchrecorder       # parar (o: docker compose down)
+```
+
+---
+
 ## Configuración
 
 Edita `config.json`:

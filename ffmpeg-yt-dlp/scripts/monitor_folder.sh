@@ -21,7 +21,6 @@ WATCH_DIR="${WATCH_DIR:-$HOME/data/pipeline/grabaciones/test}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
 # Disable log file by default. Set LOG_FILE to a path to enable file logging.
 LOG_FILE="${LOG_FILE:-/dev/null}"
-PROCESSED_DIR="$OUTPUT_DIR/.processed"
 CRF="${CRF:-28}"
 PRESET="${PRESET:-fast}"
 CODEC="${CODEC:-libx264}"
@@ -127,7 +126,7 @@ compress_video() {
     # 3. Opcionalmente recorta (corte de extremos con margen), reescala y muxea.
     # 4. Si supera TAMANO_MAX_MB, re-codifica en 2 pasadas para asegurar el tope.
     # 5. Escribe a *.tmp y renombra al final (nunca incompleto para el uploader).
-    # 6. Mueve el original a .processed y notifica al bot vía IPC.
+    # 6. Borra el original (el directo completo sigue en grabaciones/).
     local input="$1"
     local filename
     filename=$(basename "$input")
@@ -164,7 +163,6 @@ compress_video() {
         local det
         det=$(python3 "$SCRIPT_DIR/detectar_episodios.py" "$input" "$OCR_STEP" "$CORTE_MARGEN" 2>/dev/null)
         if [[ -n "$det" ]] && echo "$det" | grep -q '"episodios"'; then
-            echo "$det" > "$det_json"
             local rango desc
             desc=$(echo "$det" | python3 -c "import sys,json;print(json.load(sys.stdin).get('descripcion',''))" 2>/dev/null)
             rango=${desc:-$(echo "$det" | python3 -c "import sys,json;print(json.load(sys.stdin).get('rango',''))" 2>/dev/null)}
@@ -284,16 +282,14 @@ compress_video() {
 
         log_ok "$filename → ${output_mb}MB (-${savings}%)"
 
-        # Mover original a carpeta procesados
-        mkdir -p "$PROCESSED_DIR"
-        mv "$input" "$PROCESSED_DIR/$filename"
-        log_info "  Original movido a: $PROCESSED_DIR/$filename"
+        # Borrar el original: el directo completo sigue en grabaciones/
+        rm -f "$input"
+        log_info "  Original borrado (copia completa en grabaciones/)"
 
         return 0
     else
         log_error "Error al comprimir: $filename"
         rm -f "$tmp_output"
-        rm -f "$det_json"
         return 1
     fi
 }
@@ -331,7 +327,7 @@ process_pending() {
 }
 
 # ── Main ─────────────────────────────────────────────────────────────
-mkdir -p "$WATCH_DIR" "$OUTPUT_DIR" "$PROCESSED_DIR"
+mkdir -p "$WATCH_DIR" "$OUTPUT_DIR"
 
 log "${CYAN}╔══════════════════════════════════════╗${NC}"
 log "${CYAN}║   Monitor de vídeo iniciado         ║${NC}"

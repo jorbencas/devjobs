@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir \
     pip install 'urllib3<2.8' --break-system-packages
 
 COPY app/ /app/app/
-COPY config/config.bin config/secret.key config/grupos.json config/enviados.json /app/config/
-COPY sessions/* /app/sessions/
+COPY tg_toolbox/ /app/tg_toolbox/
+COPY config/ /app/config/
+RUN mkdir -p /app/sessions
 
-CMD ["python", "-u", "/app/app/tg_toolbox.py"]
+CMD ["sh", "-c", "cd /app && exec python -u -m tg_toolbox.tg_toolbox"]

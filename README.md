@@ -264,6 +264,52 @@ tg_menu
 
 ---
 
+## 🐳 Arrancar cada contenedor (comandos Docker)
+
+Cada herramienta tiene su propio `docker-compose.yml`. Estos son **todos** los servicios del ecosistema y el comando para arrancarlos por separado (`-f` apunta al compose correspondiente):
+
+| Contenedor | Servicio | Herramienta | Comando |
+|------------|----------|-------------|---------|
+| `twitchrecorder-sendo` | `twitchrecorder` | TwitchRecorder | `docker compose -f TwitchRecorder/docker-compose.yml up -d twitchrecorder` |
+| `ffmpeg_monitor-sendo` | `monitor` | ffmpeg-yt-dlp | `docker compose -f ffmpeg-yt-dlp/docker-compose.yml up -d monitor` |
+| `yt_ffmpeg_downloader` | `downloader` | ffmpeg-yt-dlp | `docker compose -f ffmpeg-yt-dlp/docker-compose.yml run --rm downloader` |
+| `telegram-downloader` | `telegram` | downloader_telegram (CLI) | `docker compose -f downloader_telegram/docker-compose.yml up -d telegram` |
+| `telegram-uploader-sendo` | `uploader` | downloader_telegram (daemon) | `docker compose -f downloader_telegram/docker-compose.yml up -d uploader` |
+| `telegram-bot` | `telegram_bot` | downloader_telegram (bot) | `docker compose -f downloader_telegram/docker-compose.yml up -d telegram_bot` |
+| `yt-to-telegram` | `yt-pipeline` | yt-to-telegram (daemon) | `docker compose -f yt-to-telegram/docker-compose.yml up -d yt-pipeline` |
+| `yt-download` | `yt-download` | yt-to-telegram (test) | `docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-download` |
+| `yt-convert` | `yt-convert` | yt-to-telegram (test) | `docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-convert` |
+| `yt-upload` | `yt-upload` | yt-to-telegram (test) | `docker compose -f yt-to-telegram/docker-compose.yml run --rm yt-upload` |
+| `pdfmanager` | `pdfmanager` | pdfmanager | `docker compose -f pdfmanager/docker-compose.yml run --rm pdfmanager` |
+| `aula-downloader` | `aula_downloader` | aula-downloader | `docker compose -f aula-downloader/docker-compose.yml run --rm aula_downloader` |
+| `hdfull-downloader` | `hdfull_downloader` | hdfull-downloader | `docker compose -f hdfull-downloader/docker-compose.yml run --rm hdfull_downloader` |
+
+> Los daemons (`twitchrecorder-sendo`, `ffmpeg_monitor-sendo`, `telegram-uploader-sendo`, `yt-to-telegram`) usan `up -d` y tienen `restart: unless-stopped`. Las herramientas interactivas (`pdfmanager`, `aula-downloader`, `hdfull-downloader`, `yt_ffmpeg_downloader`, pruebas de yt) se ejecutan con `run --rm` (se autodestruyen al salir).
+>
+> `telegram-downloader` (CLI) se levanta con `up -d telegram` (queda vivo con `tail -f /dev/null`) y se entra con `tg_menu`.
+
+Arrancar **todos** los servicios de una herramienta (por defecto sin argumento arranca todos los de ese compose):
+
+```bash
+docker compose -f downloader_telegram/docker-compose.yml up -d   # telegram + uploader + telegram_bot
+docker compose -f yt-to-telegram/docker-compose.yml up -d         # yt-pipeline + yt-download + yt-convert + yt-upload
+docker compose -f ffmpeg-yt-dlp/docker-compose.yml up -d          # downloader + monitor
+```
+
+Parar / logs / estado (mismo patrón en cualquier herramienta):
+
+```bash
+docker compose -f <herramienta>/docker-compose.yml stop            # parar
+docker compose -f <herramienta>/docker-compose.yml restart         # reiniciar
+docker compose -f <herramienta>/docker-compose.yml logs -f <serv>  # logs
+docker compose -f <herramienta>/docker-compose.yml ps              # estado
+docker compose -f <herramienta>/docker-compose.yml down            # parar y eliminar
+```
+
+> Algunas herramientas necesitan variables en su `.env` antes de arrancar (p. ej. `downloader_telegram`, `yt-to-telegram` → `BOT_TOKEN`; `hdfull-downloader` → `HDFULL_USER`/`HDFULL_PASS`; `aula-downloader` → `AULA_USER`/`AULA_PASS`).
+
+---
+
 ## 📋 Cheat Sheet
 
 | Alias | Descripción |

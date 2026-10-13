@@ -71,6 +71,24 @@ cd test_video
 bash midu.sh
 ```
 
+### 🐳 Arrancar cada contenedor
+
+Desde `ffmpeg-yt-dlp/`:
+
+```bash
+docker compose build
+
+# Monitor (daemon de compresión) → contenedor ffmpeg_monitor-sendo
+docker compose up -d monitor
+
+# Descargador/conversor interactivo → contenedor yt_ffmpeg_downloader
+docker compose run --rm downloader
+
+docker compose ps
+docker compose logs -f monitor
+docker compose stop monitor          # o: docker compose down
+```
+
 ## Uso
 
 ### Ejecutar midu.sh (interactivo)
@@ -175,7 +193,7 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Vigila una c
    - **Garantía de tamaño <2 GB**: si el resultado de CRF 23 supera `TAMANO_MAX_MB` (default **1900 MB**, por el tope de Telegram), se re-codifica automáticamente en **2 pasadas** apuntando a ese tamaño. Así nunca supera 2 GB y no hay que partir el vídeo.
 4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
    en `../data/pipeline/comprimidos`.
-5. Mueve el original a `$OUTPUT_DIR/.processed`.
+5. Borra el original (el directo completo sigue en `grabaciones/`).
 6. Repite cada `POLL_INTERVAL` segundos.
 
 Salida → es la carpeta que vigila el servicio `uploader` de `downloader_telegram` para subir a Telegram.

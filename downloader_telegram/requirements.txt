@@ -1,0 +1,9 @@
+telethon
+mtranslate
+cryptography
+cryptg
+rich
+inquirerpy
+Pillow
+imagehash
+urllib3<2.8

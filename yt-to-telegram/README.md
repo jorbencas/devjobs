@@ -70,6 +70,23 @@ Los topics se crean automáticamente en `config/topics.json` cuando se sube el p
 
 Los canales sin tema propio van a **General**.
 
+## 🐳 Arrancar cada contenedor
+
+Desde `yt-to-telegram/`:
+
+```bash
+docker compose build
+
+docker compose up -d yt-pipeline      # pipeline completo → contenedor yt-to-telegram
+docker compose run --rm yt-download   # solo descarga   → yt-download
+docker compose run --rm yt-convert    # solo conversión → yt-convert
+docker compose run --rm yt-upload     # solo subida     → yt-upload
+
+docker compose ps
+docker compose logs -f yt-pipeline
+docker compose stop yt-pipeline       # o: docker compose down
+```
+
 ## Uso
 
 ### Ejecutar pipeline completo
