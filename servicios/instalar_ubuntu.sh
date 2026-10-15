@@ -70,7 +70,16 @@ fi
 # ----------------------------------------------------------------------------
 info "1/8 Instalando/verificando Docker..."
 
-if ! command -v docker >/dev/null 2>&1; then
+# ¿Docker está presente Y respondiendo? No basta con que exista el binario:
+# p. ej. en WSL el "shim" existe aunque la integración esté apagada.
+docker_ok(){ docker info >/dev/null 2>&1 || sudo docker info >/dev/null 2>&1; }
+
+if command -v docker >/dev/null 2>&1 && docker_ok; then
+    ok "Docker ya instalado y funcionando: $(docker --version 2>/dev/null | cut -d, -f1)"
+else
+    if command -v docker >/dev/null 2>&1; then
+        warn "Existe un 'docker' pero no responde (daemon parado o integración WSL off). Instalando/arrancando..."
+    fi
     sudo apt-get update -y
     sudo apt-get install -y ca-certificates curl gnupg git
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -85,15 +94,16 @@ if ! command -v docker >/dev/null 2>&1; then
     sudo apt-get update -y
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl enable --now docker
-    ok "Docker instalado."
-else
-    ok "Docker ya instalado: $(docker --version 2>/dev/null | cut -d, -f1)"
-    if ! docker compose version >/dev/null 2>&1; then
-        warn "Falta el plugin 'docker compose'; instalándolo..."
-        sudo apt-get update -y
-        sudo apt-get install -y docker-compose-plugin
-    fi
+    ok "Docker instalado y arrancado."
 fi
+
+# Asegurar el plugin 'docker compose' (v2).
+if ! (docker compose version >/dev/null 2>&1 || sudo docker compose version >/dev/null 2>&1); then
+    warn "Falta el plugin 'docker compose'; instalándolo..."
+    sudo apt-get update -y
+    sudo apt-get install -y docker-compose-plugin
+fi
+
 command -v git >/dev/null 2>&1 || sudo apt-get install -y git
 
 # Permisos del usuario sobre el socket de Docker.
