@@ -80,6 +80,10 @@ else
     if command -v docker >/dev/null 2>&1; then
         warn "Existe un 'docker' pero no responde (daemon parado o integración WSL off). Instalando/arrancando..."
     fi
+    case "$(. /etc/os-release && echo "$VERSION_ID")" in
+        20.04|22.04|24.04) ;;
+        *) warn "Ubuntu $(. /etc/os-release && echo "${VERSION_ID:-?}"): no es un LTS moderno; el repo oficial de Docker puede no tener paquetes para esta versión. Si falla, usa Ubuntu 20.04 / 22.04 / 24.04." ;;
+    esac
     sudo apt-get update -y
     sudo apt-get install -y ca-certificates curl gnupg git
     sudo install -m 0755 -d /etc/apt/keyrings
