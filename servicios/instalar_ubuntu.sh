@@ -5,6 +5,8 @@
 #
 #  Hace, de un tirón y de forma idempotente (puedes relanzarlo sin miedo):
 #    1) Instala dependencias del sistema y Docker (Engine + compose plugin).
+#       En Ubuntu antiguo/EOL (p. ej. 18.10) repunta apt a old-releases y usa el
+#       repo de Docker de bionic (glibc compatible) para tener 'docker compose' v2.
 #    2) Localiza el repo (o lo clona si no lo encuentra).
 #    3) Crea las carpetas de vídeo (data/pipeline/...).
 #    4) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
@@ -80,22 +82,67 @@ else
     if command -v docker >/dev/null 2>&1; then
         warn "Existe un 'docker' pero no responde (daemon parado o integración WSL off). Instalando/arrancando..."
     fi
-    case "$(. /etc/os-release && echo "$VERSION_ID")" in
-        20.04|22.04|24.04) ;;
-        *) warn "Ubuntu $(. /etc/os-release && echo "${VERSION_ID:-?}"): no es un LTS moderno; el repo oficial de Docker puede no tener paquetes para esta versión. Si falla, usa Ubuntu 20.04 / 22.04 / 24.04." ;;
-    esac
-    sudo apt-get update -y
+    CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+    VERSION_ID="$(. /etc/os-release && echo "${VERSION_ID:-}")"
+
+    # Versiones antiguas/EOL (p. ej. 18.10 "cosmic") no tienen repos de Ubuntu
+    # (hay que usar old-releases) NI un repo propio de Docker con 'docker compose'
+    # v2: usamos el repo de Docker de "bionic" (glibc compatible) que sí lo trae.
+    EOL=0
+    if [ -n "$VERSION_ID" ] && dpkg --compare-versions "$VERSION_ID" lt 20.04 2>/dev/null; then
+        EOL=1
+    fi
+
+    if [ "$EOL" -eq 1 ]; then
+        DOCKER_DIST="bionic"
+        warn "Ubuntu '$CODENAME' ($VERSION_ID) es antiguo/EOL."
+        info "  → apt usará old-releases.ubuntu.com y Docker el repo 'bionic'."
+        if [ -f /etc/apt/sources.list ]; then
+            if [ ! -f /etc/apt/sources.list.bak-devjobs ]; then
+                sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak-devjobs
+                ok "Backup: /etc/apt/sources.list.bak-devjobs"
+            fi
+            sudo sed -i -E \
+                -e 's#https?://[a-z0-9.-]*archive\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
+                -e 's#https?://[a-z0-9.-]*security\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
+                /etc/apt/sources.list
+            ok "sources.list → old-releases.ubuntu.com"
+        fi
+    else
+        DOCKER_DIST="$CODENAME"
+    fi
+
+    sudo apt-get update -y || warn "apt-get update dio errores (continúo)."
     sudo apt-get install -y ca-certificates curl gnupg git
+
+    # En EOL, libseccomp2 del sistema es demasiado viejo para containerd moderno
+    # (exige >= 2.5.0). Instalamos el de focal-updates (ABI compatible; solo libc6).
+    if [ "$EOL" -eq 1 ] && [ "$ARCH" = "amd64" ]; then
+        SECC="$(dpkg-query -W -f='${Version}' libseccomp2 2>/dev/null || echo 0)"
+        if ! dpkg --compare-versions "$SECC" ge 2.5.0 2>/dev/null; then
+            info "Actualizando libseccomp2 ($SECC → 2.5.1) para containerd..."
+            tmpd="$(mktemp -d)"
+            if curl -fsSL -o "$tmpd/libseccomp2.deb" \
+                 "https://archive.ubuntu.com/ubuntu/pool/main/libs/libseccomp/libseccomp2_2.5.1-1ubuntu1~20.04.2_amd64.deb"; then
+                sudo dpkg -i "$tmpd/libseccomp2.deb" || sudo apt-get -f install -y
+            else
+                warn "No pude bajar libseccomp2 2.5.1; Docker podría no instalar."
+            fi
+            rm -rf "$tmpd"
+        else
+            ok "libseccomp2 ya es >= 2.5.0 ($SECC)."
+        fi
+    fi
+
     sudo install -m 0755 -d /etc/apt/keyrings
     if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
             | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
         sudo chmod a+r /etc/apt/keyrings/docker.gpg
     fi
-    CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
-    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $CODENAME stable" \
+    echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $DOCKER_DIST stable" \
         | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-    sudo apt-get update -y
+    sudo apt-get update -y || warn "apt-get update (repo Docker) dio errores."
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl enable --now docker
     ok "Docker instalado y arrancado."
