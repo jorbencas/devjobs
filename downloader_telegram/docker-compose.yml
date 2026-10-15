@@ -46,7 +46,7 @@ services:
     volumes:
       - ./app:/app/app
       - /home/jorge/dev/test_githubActions:/data/.test_githubActions
-      - /home/jorge/dev/devjobs/data/jorbencas_bot:/data/descargas
+      - ../data/jorbencas_bot:/data/descargas
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
