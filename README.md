@@ -239,6 +239,20 @@ pipelines de vídeo de este repo. Así `devjobs` queda sin claves de IA ni workf
 
 ## 📦 Instalación Rápida
 
+### ⚡ Todo-en-uno (Ubuntu 64 bits) — instala Docker y arranca el pipeline
+
+```bash
+git clone https://github.com/jorbencas/devjobs.git
+cd devjobs
+bash servicios/instalar_ubuntu.sh
+```
+
+Instala Docker (Engine + compose), crea las carpetas y secretos, construye las
+imágenes, arranca **grabadora + compresor + uploader** y deja el auto-arranque
+configurado (systemd). Es idempotente: puedes relanzarlo sin miedo.
+
+### Paso a paso
+
 ```bash
 # Clonar
 git clone https://github.com/jorbencas/devjobs.git
