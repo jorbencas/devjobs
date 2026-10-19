@@ -39,11 +39,15 @@ grabadora + compresor + uploader y deja el auto-arranque configurado (systemd).
 Es idempotente: puedes relanzarlo tantas veces como quieras.
 
   -h, --help   Muestra esta ayuda.
+  --rebuild    Fuerza reconstruir las imágenes (por defecto solo se construyen
+               si faltan; así relanzar el instalador no recompila nada).
 TXT
 }
 
+REBUILD=0
 case "${1:-}" in
     -h|--help) uso; exit 0 ;;
+    --rebuild) REBUILD=1 ;;
 esac
 
 REPO_URL="https://github.com/jorbencas/devjobs.git"
@@ -232,13 +236,31 @@ if [ "$CREDS_OK" -eq 0 ]; then
 fi
 
 # ----------------------------------------------------------------------------
-# 5) Build de imágenes
+# 5) Build de imágenes (solo si faltan, salvo --rebuild)
 # ----------------------------------------------------------------------------
-info "5/8 Construyendo imágenes (puede tardar unos minutos)..."
-$DOCKER compose -f "$ROOT/TwitchRecorder/docker-compose.yml" build
-$DOCKER compose -f "$ROOT/ffmpeg-yt-dlp/docker-compose.yml" build monitor
-$DOCKER compose -f "$ROOT/downloader_telegram/docker-compose.yml" build uploader
-ok "Imágenes construidas."
+info "5/8 Imágenes Docker..."
+construir=0
+if [ "$REBUILD" -eq 1 ]; then
+    construir=1
+else
+    REPO_IMGS="$($DOCKER images --format '{{.Repository}}' 2>/dev/null || true)"
+    if grep -q 'twitchrecorder' <<<"$REPO_IMGS" \
+       && grep -qE 'ffmpeg[_-]yt[_-]dlp' <<<"$REPO_IMGS" \
+       && grep -qE 'downloader[_-]telegram' <<<"$REPO_IMGS"; then
+        construir=0
+    else
+        construir=1
+    fi
+fi
+if [ "$construir" -eq 1 ]; then
+    info "Construyendo imágenes (puede tardar unos minutos)..."
+    $DOCKER compose -f "$ROOT/TwitchRecorder/docker-compose.yml" build
+    $DOCKER compose -f "$ROOT/ffmpeg-yt-dlp/docker-compose.yml" build monitor
+    $DOCKER compose -f "$ROOT/downloader_telegram/docker-compose.yml" build uploader
+    ok "Imágenes construidas."
+else
+    ok "Imágenes ya construidas (usa --rebuild para reconstruirlas)."
+fi
 
 # ----------------------------------------------------------------------------
 # 6) Arranque
