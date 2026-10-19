@@ -88,6 +88,8 @@ fi
 echo ""
 
 # 4) ¿compose v2 (plugin) o v1 vieja?
+info "docker --version: $(docker --version 2>&1 | head -1)"
+CERR="$(docker compose version 2>&1 || true)"
 if docker compose version >/dev/null 2>&1; then
     CV="$(docker compose version --short 2>/dev/null || docker compose version 2>/dev/null | head -1)"
     ok "docker compose (v2): $CV"
@@ -97,8 +99,27 @@ elif command -v docker-compose >/dev/null 2>&1; then
     echo "        sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
     echo "        sudo apt-get remove -y docker-compose"
 else
-    err "No hay 'docker compose'."
-    echo "    → sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+    err "No funciona 'docker compose' (ni existe el binario 'docker-compose' v1)."
+    echo "    Error exacto de 'docker compose version':"
+    echo "$CERR" | sed 's/^/      /'
+    # ¿Está el plugin v2 instalado en disco?
+    PLUG=0
+    for p in /usr/libexec/docker/cli-plugins/docker-compose \
+             /usr/lib/docker/cli-plugins/docker-compose \
+             /usr/local/lib/docker/cli-plugins/docker-compose \
+             "$HOME/.docker/cli-plugins/docker-compose"; do
+        if [ -f "$p" ]; then info "Plugin v2 presente en disco: $p"; PLUG=1; fi
+    done
+    if echo "$CERR" | grep -qi "is not a docker command"; then
+        echo "    → Es docker pero SIN el plugin v2:  sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+    elif echo "$CERR" | grep -qiE "command not found|no se encontró|not found"; then
+        echo "    → No hay CLI de Docker (o no está en el PATH):  bash servicios/instalar_ubuntu.sh"
+    elif [ "$PLUG" -eq 1 ]; then
+        echo "    → El plugin existe pero tu 'docker' no lo ve (¿docker de snap/WSL/otro?)."
+        echo "       Revisa el binario de la sección 1 y asegúrate de usar /usr/bin/docker."
+    else
+        echo "    → Falta el plugin:  sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+    fi
 fi
 echo ""
 
