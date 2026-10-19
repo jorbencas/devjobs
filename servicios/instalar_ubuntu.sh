@@ -4,19 +4,20 @@
 #  = grabadora (TwitchRecorder) + compresor (ffmpeg-yt-dlp) + uploader Telegram.
 #
 #  Hace, de un tirón y de forma idempotente (puedes relanzarlo sin miedo):
-#    1) Instala dependencias del sistema y Docker (Engine + compose plugin),
-#       mete tu usuario en el grupo 'docker' y comprueba que 'docker compose'
-#       es la v2 (flags como --rm fallan con una v1 vieja).
-#       En Ubuntu antiguo/EOL (p. ej. 18.10) repunta apt a old-releases y usa el
-#       repo de Docker de bionic (glibc compatible) para tener 'docker compose' v2.
-#    2) Localiza el repo (o lo clona si no lo encuentra).
-#    3) Crea las carpetas de vídeo (data/pipeline/...).
-#    4) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
-#    5) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
-#    6) Arranca grabadora + compresor (+ uploader si hay secretos).
-#    7) Instala y habilita systemd (auto-arranque al encender el PC).
-#    8) Instala los alias del pipeline en ~/.bashrc.
-#    9) Sincroniza la hora (NTP) y limita los logs de Docker (rotación).
+#    1) Prepara repos (old-releases.ubuntu.com en Ubuntu antiguo/EOL) y las
+#       dependencias base.
+#    2) Instala opencode (CLI) — instalación normal (lo primero, tras las deps).
+#    3) Instala Docker (Engine + compose plugin), mete tu usuario en el grupo
+#       'docker' y comprueba que 'docker compose' es la v2 (flags como --rm
+#       fallan con una v1 vieja). En EOL usa el repo de Docker de bionic.
+#    4) Localiza el repo (o lo clona si no lo encuentra).
+#    5) Crea las carpetas de vídeo (data/pipeline/...).
+#    6) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
+#    7) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
+#    8) Arranca grabadora + compresor (+ uploader si hay secretos).
+#    9) Instala y habilita systemd (auto-arranque al encender el PC).
+#   10) Instala los alias del pipeline en ~/.bashrc.
+#   11) Sincroniza la hora (NTP) y limita los logs de Docker (rotación).
 #
 #  Uso:
 #      bash servicios/instalar_ubuntu.sh [--rebuild]
@@ -78,9 +79,50 @@ if [ "$ARCH" != "amd64" ] && [ "$ARCH" != "arm64" ]; then
 fi
 
 # ----------------------------------------------------------------------------
-# 1) Docker (Engine + compose plugin)
+# 1) Sistema: repos (old-releases si EOL) + dependencias base
 # ----------------------------------------------------------------------------
-info "1/9 Instalando/verificando Docker..."
+info "1/11 Preparando repos y dependencias base..."
+CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+VERSION_ID="$(. /etc/os-release && echo "${VERSION_ID:-}")"
+
+# Versiones antiguas/EOL (p. ej. 18.10 "cosmic") ya no tienen repos de Ubuntu:
+# hay que usar old-releases.ubuntu.com.
+EOL=0
+if [ -n "$VERSION_ID" ] && dpkg --compare-versions "$VERSION_ID" lt 20.04 2>/dev/null; then
+    EOL=1
+fi
+if [ "$EOL" -eq 1 ]; then
+    warn "Ubuntu '$CODENAME' ($VERSION_ID) es antiguo/EOL → apt usará old-releases.ubuntu.com."
+    if [ -f /etc/apt/sources.list ]; then
+        if [ ! -f /etc/apt/sources.list.bak-devjobs ]; then
+            sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak-devjobs
+            ok "Backup: /etc/apt/sources.list.bak-devjobs"
+        fi
+        sudo sed -i -E \
+            -e 's#https?://[a-z0-9.-]*archive\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
+            -e 's#https?://[a-z0-9.-]*security\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
+            /etc/apt/sources.list
+        ok "sources.list → old-releases.ubuntu.com"
+    fi
+fi
+sudo apt-get update -y || warn "apt-get update dio errores (continúo)."
+sudo apt-get install -y ca-certificates curl gnupg git || warn "No pude instalar alguna dependencia base."
+
+# ----------------------------------------------------------------------------
+# 2) opencode (CLI) — lo primero que quieres tener listo
+# ----------------------------------------------------------------------------
+info "2/11 Instalando opencode..."
+OC_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/instalar_opencode.sh"
+if [ -f "$OC_SCRIPT" ]; then
+    bash "$OC_SCRIPT" || warn "No se pudo instalar opencode (sigo con el pipeline)."
+else
+    curl -fsSL https://opencode.ai/install | bash || warn "No se pudo instalar opencode."
+fi
+
+# ----------------------------------------------------------------------------
+# 3) Docker (Engine + compose plugin)
+# ----------------------------------------------------------------------------
+info "3/11 Instalando/verificando Docker..."
 
 # ¿Docker está presente Y respondiendo? No basta con que exista el binario:
 # p. ej. en WSL el "shim" existe aunque la integración esté apagada.
@@ -92,38 +134,15 @@ else
     if command -v docker >/dev/null 2>&1; then
         warn "Existe un 'docker' pero no responde (daemon parado o integración WSL off). Instalando/arrancando..."
     fi
-    CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
-    VERSION_ID="$(. /etc/os-release && echo "${VERSION_ID:-}")"
 
-    # Versiones antiguas/EOL (p. ej. 18.10 "cosmic") no tienen repos de Ubuntu
-    # (hay que usar old-releases) NI un repo propio de Docker con 'docker compose'
-    # v2: usamos el repo de Docker de "bionic" (glibc compatible) que sí lo trae.
-    EOL=0
-    if [ -n "$VERSION_ID" ] && dpkg --compare-versions "$VERSION_ID" lt 20.04 2>/dev/null; then
-        EOL=1
-    fi
-
+    # En EOL usamos el repo de Docker de "bionic" (glibc compatible) que sí trae
+    # 'docker compose' v2.
     if [ "$EOL" -eq 1 ]; then
         DOCKER_DIST="bionic"
-        warn "Ubuntu '$CODENAME' ($VERSION_ID) es antiguo/EOL."
-        info "  → apt usará old-releases.ubuntu.com y Docker el repo 'bionic'."
-        if [ -f /etc/apt/sources.list ]; then
-            if [ ! -f /etc/apt/sources.list.bak-devjobs ]; then
-                sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak-devjobs
-                ok "Backup: /etc/apt/sources.list.bak-devjobs"
-            fi
-            sudo sed -i -E \
-                -e 's#https?://[a-z0-9.-]*archive\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
-                -e 's#https?://[a-z0-9.-]*security\.ubuntu\.com#http://old-releases.ubuntu.com#g' \
-                /etc/apt/sources.list
-            ok "sources.list → old-releases.ubuntu.com"
-        fi
+        info "  → Docker desde el repo 'bionic'."
     else
         DOCKER_DIST="$CODENAME"
     fi
-
-    sudo apt-get update -y || warn "apt-get update dio errores (continúo)."
-    sudo apt-get install -y ca-certificates curl gnupg git
 
     # En EOL, libseccomp2 del sistema es demasiado viejo para containerd moderno
     # (exige >= 2.5.0). Instalamos el de focal-updates (ABI compatible; solo libc6).
@@ -199,7 +218,7 @@ fi
 # ----------------------------------------------------------------------------
 # 2) Repo
 # ----------------------------------------------------------------------------
-info "2/9 Localizando el código..."
+info "4/11 Localizando el código..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CANDIDATE="$(dirname "$SCRIPT_DIR")"
 if [ -d "$CANDIDATE/.git" ]; then
@@ -220,7 +239,7 @@ cd "$ROOT"
 # ----------------------------------------------------------------------------
 # 3) Carpetas de vídeo
 # ----------------------------------------------------------------------------
-info "3/9 Creando carpetas..."
+info "5/11 Creando carpetas..."
 mkdir -p "$ROOT/data/pipeline/grabaciones/test" \
          "$ROOT/data/pipeline/comprimidos" \
          "$ROOT/data/pipeline/partes"
@@ -230,7 +249,7 @@ ok "data/pipeline/{grabaciones/test,comprimidos,partes}, config/ y sessions/ lis
 # ----------------------------------------------------------------------------
 # 4) Secretos
 # ----------------------------------------------------------------------------
-info "4/9 Comprobando secretos..."
+info "6/11 Comprobando secretos..."
 DL="$ROOT/downloader_telegram"
 CREDS_OK=0; GRUPOS_OK=0; SESION_OK=0
 
@@ -262,7 +281,7 @@ fi
 # ----------------------------------------------------------------------------
 # 5) Build de imágenes (solo si faltan, salvo --rebuild)
 # ----------------------------------------------------------------------------
-info "5/9 Imágenes Docker..."
+info "7/11 Imágenes Docker..."
 construir=0
 if [ "$REBUILD" -eq 1 ]; then
     construir=1
@@ -289,7 +308,7 @@ fi
 # ----------------------------------------------------------------------------
 # 6) Arranque
 # ----------------------------------------------------------------------------
-info "6/9 Arrancando servicios..."
+info "8/11 Arrancando servicios..."
 $DOCKER compose -f "$ROOT/TwitchRecorder/docker-compose.yml" up -d twitchrecorder
 $DOCKER compose -f "$ROOT/ffmpeg-yt-dlp/docker-compose.yml" up -d monitor
 
@@ -308,7 +327,7 @@ $DOCKER ps --filter name=twitchrecorder-sendo --filter name=ffmpeg_monitor-sendo
 # ----------------------------------------------------------------------------
 # 7) systemd (auto-arranque al boot)
 # ----------------------------------------------------------------------------
-info "7/9 Configurando auto-arranque (systemd)..."
+info "9/11 Configurando auto-arranque (systemd)..."
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     sudo tee /etc/systemd/system/twitch-stream-pipeline.service >/dev/null <<UNIT
 [Unit]
@@ -343,7 +362,7 @@ fi
 # ----------------------------------------------------------------------------
 # 8) Alias
 # ----------------------------------------------------------------------------
-info "8/9 Instalando alias..."
+info "10/11 Instalando alias..."
 if [ -f "$ROOT/servicios/instalar_aliases.sh" ]; then
     bash "$ROOT/servicios/instalar_aliases.sh"
 else
@@ -353,7 +372,7 @@ fi
 # ----------------------------------------------------------------------------
 # 9) Hora (NTP) y rotación de logs de Docker
 # ----------------------------------------------------------------------------
-info "9/9 Sincronizando hora y límite de logs de Docker..."
+info "11/11 Sincronizando hora y límite de logs de Docker..."
 
 # 9a) Reloj sincronizado (Telegram/MTProto es muy sensible a la hora).
 if command -v timedatectl >/dev/null 2>&1; then
