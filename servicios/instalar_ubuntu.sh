@@ -6,18 +6,19 @@
 #  Hace, de un tirón y de forma idempotente (puedes relanzarlo sin miedo):
 #    1) Prepara repos (old-releases.ubuntu.com en Ubuntu antiguo/EOL) y las
 #       dependencias base.
-#    2) Instala opencode (CLI) — instalación normal (lo primero, tras las deps).
-#    3) Instala Docker (Engine + compose plugin), mete tu usuario en el grupo
+#    2) Instala Docker (Engine + compose plugin), mete tu usuario en el grupo
 #       'docker' y comprueba que 'docker compose' es la v2 (flags como --rm
 #       fallan con una v1 vieja). En EOL usa el repo de Docker de bionic.
-#    4) Localiza el repo (o lo clona si no lo encuentra).
-#    5) Crea las carpetas de vídeo (data/pipeline/...).
-#    6) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
-#    7) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
-#    8) Arranca grabadora + compresor (+ uploader si hay secretos).
-#    9) Instala y habilita systemd (auto-arranque al encender el PC).
-#   10) Instala los alias del pipeline en ~/.bashrc.
-#   11) Sincroniza la hora (NTP) y limita los logs de Docker (rotación).
+#    3) Localiza el repo (o lo clona si no lo encuentra).
+#    4) Crea las carpetas de vídeo (data/pipeline/...).
+#    5) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
+#    6) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
+#    7) Arranca grabadora + compresor (+ uploader si hay secretos).
+#    8) Instala y habilita systemd (auto-arranque al encender el PC).
+#    9) Instala los alias del pipeline en ~/.bashrc.
+#   10) Sincroniza la hora (NTP) y limita los logs de Docker (rotación).
+#
+#  opencode (CLI) se instala APARTE, con:  bash servicios/instalar_opencode.sh
 #
 #  Uso:
 #      bash servicios/instalar_ubuntu.sh [--rebuild]
@@ -41,6 +42,8 @@ Instalador todo-en-uno (Ubuntu 64 bits) del pipeline "directo sendo".
 Instala Docker, prepara carpetas y secretos, construye las imágenes, arranca
 grabadora + compresor + uploader y deja el auto-arranque configurado (systemd).
 Es idempotente: puedes relanzarlo tantas veces como quieras.
+
+opencode (CLI) se instala aparte con:  bash servicios/instalar_opencode.sh
 
   -h, --help   Muestra esta ayuda.
   --rebuild    Fuerza reconstruir las imágenes (por defecto solo se construyen
@@ -81,7 +84,7 @@ fi
 # ----------------------------------------------------------------------------
 # 1) Sistema: repos (old-releases si EOL) + dependencias base
 # ----------------------------------------------------------------------------
-info "1/11 Preparando repos y dependencias base..."
+info "1/10 Preparando repos y dependencias base..."
 CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
 VERSION_ID="$(. /etc/os-release && echo "${VERSION_ID:-}")"
 
@@ -109,20 +112,9 @@ sudo apt-get update -y || warn "apt-get update dio errores (continúo)."
 sudo apt-get install -y ca-certificates curl gnupg git || warn "No pude instalar alguna dependencia base."
 
 # ----------------------------------------------------------------------------
-# 2) opencode (CLI) — lo primero que quieres tener listo
+# 2) Docker (Engine + compose plugin)
 # ----------------------------------------------------------------------------
-info "2/11 Instalando opencode..."
-OC_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/instalar_opencode.sh"
-if [ -f "$OC_SCRIPT" ]; then
-    bash "$OC_SCRIPT" || warn "No se pudo instalar opencode (sigo con el pipeline)."
-else
-    curl -fsSL https://opencode.ai/install | bash || warn "No se pudo instalar opencode."
-fi
-
-# ----------------------------------------------------------------------------
-# 3) Docker (Engine + compose plugin)
-# ----------------------------------------------------------------------------
-info "3/11 Instalando/verificando Docker..."
+info "2/10 Instalando/verificando Docker..."
 
 # ¿Docker está presente Y respondiendo? No basta con que exista el binario:
 # p. ej. en WSL el "shim" existe aunque la integración esté apagada.
@@ -242,12 +234,18 @@ DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
 # La config de usuario ~/.docker debe ser accesible por tu usuario. Si no, el CLI
 # de Docker ABORTA la búsqueda de plugins y 'docker compose' da "unknown command"
 # aunque el plugin esté instalado (bug de docker/cli #5643 y #5656).
-if [ -e "$HOME/.docker" ] && [ "$(stat -c '%U' "$HOME/.docker" 2>/dev/null || echo '?')" != "$TARGET_USER" ]; then
-    warn "~/.docker no pertenece a '$TARGET_USER'; corrigiendo permisos (rompen 'docker compose')..."
-    sudo chown -R "$TARGET_USER:$TARGET_USER" "$HOME/.docker"
-    chmod 700 "$HOME/.docker" 2>/dev/null || true
-    [ -f "$HOME/.docker/config.json" ] && chmod 600 "$HOME/.docker/config.json" 2>/dev/null || true
-    ok "Permisos de ~/.docker corregidos."
+if [ -e "$HOME/.docker" ] && id "$TARGET_USER" >/dev/null 2>&1; then
+    DCFG_OWNER="$(stat -c '%U' "$HOME/.docker" 2>/dev/null || echo '?')"
+    if [ "$DCFG_OWNER" != "$TARGET_USER" ] || [ ! -r "$HOME/.docker" ] || [ ! -x "$HOME/.docker" ]; then
+        warn "~/.docker no es accesible por '$TARGET_USER'; corrigiendo (rompe 'docker compose')..."
+        if sudo chown -R "$TARGET_USER:$TARGET_USER" "$HOME/.docker"; then
+            chmod 700 "$HOME/.docker" 2>/dev/null || true
+            [ -f "$HOME/.docker/config.json" ] && chmod 600 "$HOME/.docker/config.json" 2>/dev/null || true
+            ok "Permisos de ~/.docker corregidos."
+        else
+            warn "No pude corregir ~/.docker; hazlo a mano:  sudo chown -R $TARGET_USER:$TARGET_USER $HOME/.docker"
+        fi
+    fi
 fi
 
 # Verificar que 'docker compose' es la v2 (plugin). Si es una v1 vieja o un docker
@@ -264,7 +262,7 @@ fi
 # ----------------------------------------------------------------------------
 # 2) Repo
 # ----------------------------------------------------------------------------
-info "4/11 Localizando el código..."
+info "3/10 Localizando el código..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CANDIDATE="$(dirname "$SCRIPT_DIR")"
 if [ -d "$CANDIDATE/.git" ]; then
@@ -285,7 +283,7 @@ cd "$ROOT"
 # ----------------------------------------------------------------------------
 # 3) Carpetas de vídeo
 # ----------------------------------------------------------------------------
-info "5/11 Creando carpetas..."
+info "4/10 Creando carpetas..."
 mkdir -p "$ROOT/data/pipeline/grabaciones/test" \
          "$ROOT/data/pipeline/comprimidos" \
          "$ROOT/data/pipeline/partes"
@@ -295,7 +293,7 @@ ok "data/pipeline/{grabaciones/test,comprimidos,partes}, config/ y sessions/ lis
 # ----------------------------------------------------------------------------
 # 4) Secretos
 # ----------------------------------------------------------------------------
-info "6/11 Comprobando secretos..."
+info "5/10 Comprobando secretos..."
 DL="$ROOT/downloader_telegram"
 CREDS_OK=0; GRUPOS_OK=0; SESION_OK=0
 
@@ -327,7 +325,7 @@ fi
 # ----------------------------------------------------------------------------
 # 5) Build de imágenes (solo si faltan, salvo --rebuild)
 # ----------------------------------------------------------------------------
-info "7/11 Imágenes Docker..."
+info "6/10 Imágenes Docker..."
 construir=0
 if [ "$REBUILD" -eq 1 ]; then
     construir=1
@@ -354,7 +352,7 @@ fi
 # ----------------------------------------------------------------------------
 # 6) Arranque
 # ----------------------------------------------------------------------------
-info "8/11 Arrancando servicios..."
+info "7/10 Arrancando servicios..."
 $DOCKER compose -f "$ROOT/TwitchRecorder/docker-compose.yml" up -d twitchrecorder
 $DOCKER compose -f "$ROOT/ffmpeg-yt-dlp/docker-compose.yml" up -d monitor
 
@@ -373,7 +371,7 @@ $DOCKER ps --filter name=twitchrecorder-sendo --filter name=ffmpeg_monitor-sendo
 # ----------------------------------------------------------------------------
 # 7) systemd (auto-arranque al boot)
 # ----------------------------------------------------------------------------
-info "9/11 Configurando auto-arranque (systemd)..."
+info "8/10 Configurando auto-arranque (systemd)..."
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     sudo tee /etc/systemd/system/twitch-stream-pipeline.service >/dev/null <<UNIT
 [Unit]
@@ -408,7 +406,7 @@ fi
 # ----------------------------------------------------------------------------
 # 8) Alias
 # ----------------------------------------------------------------------------
-info "10/11 Instalando alias..."
+info "9/10 Instalando alias..."
 if [ -f "$ROOT/servicios/instalar_aliases.sh" ]; then
     bash "$ROOT/servicios/instalar_aliases.sh"
 else
@@ -418,7 +416,7 @@ fi
 # ----------------------------------------------------------------------------
 # 9) Hora (NTP) y rotación de logs de Docker
 # ----------------------------------------------------------------------------
-info "11/11 Sincronizando hora y límite de logs de Docker..."
+info "10/10 Sincronizando hora y límite de logs de Docker..."
 
 # 9a) Reloj sincronizado (Telegram/MTProto es muy sensible a la hora).
 if command -v timedatectl >/dev/null 2>&1; then
@@ -475,10 +473,13 @@ else
     ok "Todos los secretos presentes."
 fi
 echo ""
-# Verificación final: ¿puede tu usuario usar docker sin sudo ya?
+# Verificación final: ¿puede tu usuario usar docker/'docker compose' sin sudo?
 echo ""
-if docker info >/dev/null 2>&1; then
-    ok "Tu usuario ya puede usar Docker/'docker compose' sin sudo."
+if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    ok "Tu usuario ya puede usar Docker y 'docker compose' sin sudo."
+elif docker info >/dev/null 2>&1; then
+    warn "Docker funciona, pero 'docker compose' NO (¿plugin o permisos de ~/.docker?)."
+    warn "Diagnóstico:  bash servicios/diagnostico_docker.sh"
 else
     DINFO="$(docker info 2>&1 || true)"
     warn "Tu usuario AÚN no puede usar Docker sin sudo en esta sesión."
