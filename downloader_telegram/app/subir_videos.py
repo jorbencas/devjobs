@@ -891,7 +891,7 @@ async def _conectar(client, pedir_login=False):
         raise SystemExit(
             "\n[x] No hay sesión de Telegram autenticada (o está vencida).\n"
             f"  → Archivo de sesión: {SESION_UPLOADER}\n"
-            "  → Inicia sesión una vez con: python subir_videos.py --setup"
+            "  → Inicia sesión una vez con el alias: pipe_setup  (o bash servicios/pipe_setup.sh)"
         )
     return False
 
@@ -901,11 +901,12 @@ async def run_setup(api_id, api_hash):
     la primera vez. Si la sesión ya está autenticada, no vuelve a pedir nada."""
     log("INFO", "Modo setup: creará uploader.session (inicio de sesión único).")
     client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
-    if await _conectar(client):
+    if await _conectar(client, pedir_login=True):
         me = await client.get_me()
         log("OK", f"Sesión ya autenticada. Cuenta: {me.first_name} ({me.username}) → no hace falta loguear de nuevo.")
         await client.disconnect()
         return
+    log("INFO", "Sin sesión válida: iniciando login interactivo (teléfono + código)...")
     await client.start()
     me = await client.get_me()
     log("OK", f"Sesión uploader creada. Cuenta: {me.first_name} ({me.username})")
@@ -1231,8 +1232,8 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
         await client.disconnect()
         raise SystemExit(
             f"\n[x] No se pudo conectar con la sesión uploader: {e}\n"
-            "  → Si la sesión expiró o es inválida, regenérala:\n"
-            "    docker compose run --rm uploader python /app/subir_videos.py --setup"
+            "  → Si la sesión expiró o es inválida, regenérala (desde el repo):\n"
+            "    bash servicios/pipe_setup.sh --reset"
         )
 
     info_foros = f", foros: {[f['nombre'] for f in foros]}" if foros else ""
