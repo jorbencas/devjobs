@@ -70,6 +70,10 @@ KICK.COM:
   kick_dl <url>    Descargar vídeo de Kick.com
                    Ejemplo: kick_dl https://kick.com/sendosama/videos/01a087f2-...
 
+AYUDA / DIAGNÓSTICO:
+  docker_help      Ver esta ayuda
+  docker_diag     Diagnóstico de Docker (grupo del socket, daemon, compose v2)
+
 DISCORD (grabación automática):
   discord_monitor          Bot de Discord que graba streams/llamadas automáticamente
   discord_obs start [escena]  Iniciar grabación de OBS manualmente

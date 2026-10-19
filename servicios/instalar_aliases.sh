@@ -148,6 +148,7 @@ alias discord_obs='python3 $DEVJOBS/scripts/obs_control.py'
 
 # ---------- Ayuda ----------
 alias docker_help='bash $SCRIPT_DIR/docker_help.sh'
+alias docker_diag='bash $SCRIPT_DIR/diagnostico_docker.sh'
 ALIASES2
 fi
 

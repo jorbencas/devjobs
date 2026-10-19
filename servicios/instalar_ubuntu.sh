@@ -186,19 +186,47 @@ fi
 
 command -v git >/dev/null 2>&1 || sudo apt-get install -y git
 
-# Permisos del usuario sobre el socket de Docker: debe estar en el grupo 'docker'.
+# Permisos del usuario sobre el socket de Docker: hay que pertenecer al grupo
+# del socket (normalmente 'docker', pero puede no serlo).
 if ! getent group docker >/dev/null 2>&1; then
     sudo groupadd docker
     ok "Grupo 'docker' creado."
 fi
-if id -nG "$TARGET_USER" | grep -qw docker; then
-    ok "El usuario '$TARGET_USER' ya pertenece al grupo 'docker'."
-else
-    sudo usermod -aG docker "$TARGET_USER"
-    warn "Añadido '$TARGET_USER' al grupo 'docker'."
-    warn "No surte efecto en esta sesión: cierra sesión y vuelve a entrar," \
-         "o ejecuta 'newgrp docker' (o usa sudo mientras tanto)."
+
+# Grupo REAL del socket (en algunas instalaciones no es 'docker').
+SOCK="/var/run/docker.sock"
+SOCK_GROUP="docker"
+if [ -S "$SOCK" ]; then
+    SOCK_GROUP="$(stat -c '%G' "$SOCK" 2>/dev/null || echo docker)"
 fi
+if [ "$SOCK_GROUP" = "root" ] || ! getent group "$SOCK_GROUP" >/dev/null 2>&1; then
+    # El socket quedó root:root (dockerd arrancó antes de existir el grupo):
+    # se reinicia para que pase a root:docker.
+    sudo systemctl restart docker 2>/dev/null || true
+    SOCK_GROUP="docker"
+fi
+info "Grupo del socket Docker: '$SOCK_GROUP'."
+
+# Añade al grupo al usuario que ejecuta el script y también al de la sesión
+# activa (por si el script se lanzó desde otra cuenta).
+USERS_TO_ADD=("$TARGET_USER")
+while read -r u; do
+    [ -z "$u" ] && continue
+    [ "$u" = "$TARGET_USER" ] && continue
+    id "$u" >/dev/null 2>&1 || continue
+    USERS_TO_ADD+=("$u")
+done < <(who 2>/dev/null | awk '{print $1}' | sort -u)
+
+for u in "${USERS_TO_ADD[@]}"; do
+    if id -nG "$u" | grep -qw "$SOCK_GROUP"; then
+        ok "El usuario '$u' ya pertenece al grupo '$SOCK_GROUP'."
+    else
+        sudo usermod -aG "$SOCK_GROUP" "$u"
+        warn "Añadido '$u' al grupo '$SOCK_GROUP'."
+        warn "No surte efecto en esta sesión: cierra sesión y vuelve a entrar," \
+             "o ejecuta 'newgrp $SOCK_GROUP' (o usa sudo mientras tanto)."
+    fi
+done
 
 # Cómo invocar docker DURANTE este script (si el grupo aún no aplica, con sudo).
 DOCKER="docker"
@@ -434,8 +462,18 @@ echo ""
 if docker info >/dev/null 2>&1; then
     ok "Tu usuario ya puede usar Docker/'docker compose' sin sudo."
 else
-    warn "Tu usuario AÚN necesita sudo para docker en esta sesión."
-    warn "Cierra sesión y vuelve a entrar (o reinicia), o ejecuta:  newgrp docker"
-    warn "Y comprueba:  docker ps   (debe listar sin 'permission denied')."
+    DINFO="$(docker info 2>&1 || true)"
+    warn "Tu usuario AÚN no puede usar Docker sin sudo en esta sesión."
+    if echo "$DINFO" | grep -qi 'permission denied'; then
+        warn "Motivo: no perteneces (aún) al grupo '$SOCK_GROUP' en esta sesión."
+        warn "Cierra sesión y vuelve a entrar (o reinicia), o ejecuta:  newgrp $SOCK_GROUP"
+    elif echo "$DINFO" | grep -qi 'cannot connect'; then
+        warn "Motivo: el daemon Docker no está arrancado."
+        warn "Arráncalo:  sudo systemctl enable --now docker"
+    else
+        warn "Detalle:  $DINFO"
+    fi
+    warn "Comprueba:  docker ps   (debe listar sin 'permission denied')."
+    warn "Diagnóstico completo:  bash servicios/diagnostico_docker.sh"
 fi
 
