@@ -16,6 +16,7 @@ PIPELINE (Directo → Telegram):
   pipe_test        Copiar vídeo de prueba para verificar upload
   plogs            Logs de los 3 daemons a la vez
   pipe_setup       Autenticar sesión de Telegram (una vez)
+  pipe_verificar   Comprobar secretos/sesión del uploader (sin subir)
   pipe_chats       Listar chats de Telegram
   pipe_topics      Listar topics de un grupo
 

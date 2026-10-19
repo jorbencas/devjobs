@@ -29,6 +29,7 @@ cat >> "$BASHRC" <<ALIASES
 $MARCA
 alias plogs='bash $SCRIPT_DIR/pipeline_logs.sh'
 alias pipe_setup='bash $SCRIPT_DIR/pipe_setup.sh'
+alias pipe_verificar='bash $SCRIPT_DIR/pipe_verificar.sh'
 alias pipe_chats='bash $SCRIPT_DIR/pipe_chats.sh'
 alias pipe_chats_sendo='bash $SCRIPT_DIR/pipe_chats.sh --folder sendo'
 alias pipe_topics='bash $SCRIPT_DIR/pipe_topics.sh'

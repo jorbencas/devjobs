@@ -25,6 +25,7 @@ Credenciales:
 
 Modos CLI:
   --setup         Iniciar sesión una vez (genera uploader.session).
+  --verificar     Comprobar config.bin/secret.key, grupos.json y sesión (sin subir).
   --list-chats    Mostrar tus chats/grupos para configurar grupos.json.
   --list-topics   Listar los temas (series) de un grupo con foro.
   --create-topics Crear temas nuevos en un grupo con foro.
@@ -913,6 +914,49 @@ async def run_setup(api_id, api_hash):
     await client.disconnect()
 
 
+async def run_verificar(api_id, api_hash):
+    """Modo --verificar: comprueba de un vistazo que los secretos de Telegram
+    funcionan, sin subir nada ni pedir login:
+      1) config.bin + secret.key (ya descifrado al cargar credenciales),
+      2) grupos.json válido,
+      3) uploader.session existe y está AUTORIZADA."""
+    ok = True
+    log("OK", f"config.bin + secret.key OK (api_id={api_id}).")
+
+    try:
+        default, grupos, foros = cargar_grupos()
+        log("OK", f"grupos.json OK (default={default}, chats={len(grupos)}, foros={len(foros)}).")
+    except SystemExit as e:
+        ok = False
+        print(e)
+
+    ses = Path(SESION_UPLOADER)
+    if not ses.exists():
+        ok = False
+        log("ERR", f"No existe la sesión: {ses}\n"
+                   "  → Haz el login una vez:  bash servicios/pipe_setup.sh")
+    else:
+        log("OK", f"Sesión presente: {ses} ({ses.stat().st_size} bytes).")
+        try:
+            client = TelegramClient(SESION_UPLOADER, api_id, api_hash)
+            if await _conectar(client, pedir_login=False):
+                me = await client.get_me()
+                log("OK", f"Sesión VÁLIDA. Cuenta: {me.first_name} ({me.username}).")
+            await client.disconnect()
+        except SystemExit as e:
+            ok = False
+            print(e)
+        except Exception as e:
+            ok = False
+            log("ERR", f"No pude validar la sesión: {e}")
+
+    if ok:
+        log("OK", "Todo listo: los secretos de Telegram funcionan.")
+    else:
+        log("WARN", "Hay problemas (ver arriba). El uploader no funcionará hasta arreglarlos.")
+    return ok
+
+
 async def run_list_chats(api_id, api_hash, folder=None, creados=False):
     """Modo --list-chats: lista tus chats/grupos con ID, tipo y si son foros,
     para copiar los IDs a grupos.json. Filtros: --folder (nombre/carpeta) y
@@ -1307,11 +1351,12 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
 
 
 def main():
-    """CLI: subir_videos.py [--setup|--list-chats|--list-topics|--create-topics|
+    """CLI: subir_videos.py [--setup|--verificar|--list-chats|--list-topics|--create-topics|
     --delete-videos|--once] [carpetas...]. Sin modo explícito → autoupload."""
     parser = argparse.ArgumentParser(description="Subir videos comprimidos a grupos de Telegram")
     grupo = parser.add_mutually_exclusive_group()
     grupo.add_argument("--setup", action="store_true", help="Iniciar sesión una vez (crea uploader.session)")
+    grupo.add_argument("--verificar", action="store_true", help="Comprobar secretos (config.bin/grupos.json/sesión) sin subir nada")
     grupo.add_argument("--list-chats", action="store_true", help="Listar chats/grupos")
     grupo.add_argument("--list-topics", metavar="GRUPO", help="Listar los temas (series) de un grupo con foro")
     grupo.add_argument("--create-topics", metavar="GRUPO:TÍT1,TÍT2,...", help="Crear temas en un grupo con foro")
@@ -1339,6 +1384,9 @@ def main():
         if args.setup:
             asyncio.run(run_setup(api_id, api_hash))
             return
+        if args.verificar:
+            rc = asyncio.run(run_verificar(api_id, api_hash))
+            raise SystemExit(0 if rc else 1)
         if args.list_chats:
             asyncio.run(run_list_chats(api_id, api_hash, args.folder, args.creados))
             return
