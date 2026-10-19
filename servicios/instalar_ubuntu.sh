@@ -127,11 +127,17 @@ info "3/11 Instalando/verificando Docker..."
 # ¿Docker está presente Y respondiendo? No basta con que exista el binario:
 # p. ej. en WSL el "shim" existe aunque la integración esté apagada.
 docker_ok(){ docker info >/dev/null 2>&1 || sudo docker info >/dev/null 2>&1; }
+# Y debe tener el plugin 'docker compose' v2 (un docker.io viejo, p. ej. 18.09,
+# responde pero su CLI < 19.03 NO soporta plugins).
+docker_compose_ok(){ docker compose version >/dev/null 2>&1 || sudo docker compose version >/dev/null 2>&1; }
 
-if command -v docker >/dev/null 2>&1 && docker_ok; then
+if command -v docker >/dev/null 2>&1 && docker_ok && docker_compose_ok; then
     ok "Docker ya instalado y funcionando: $(docker --version 2>/dev/null | cut -d, -f1)"
 else
-    if command -v docker >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1 && docker_ok; then
+        warn "Existe un 'docker' que responde pero SIN 'docker compose' v2 (CLI viejo, p. ej. docker.io 18.09)."
+        warn "Instalando docker-ce (repo oficial), que sí trae el plugin..."
+    elif command -v docker >/dev/null 2>&1; then
         warn "Existe un 'docker' pero no responde (daemon parado o integración WSL off). Instalando/arrancando..."
     fi
 

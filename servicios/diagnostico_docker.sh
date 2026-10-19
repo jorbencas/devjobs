@@ -42,6 +42,11 @@ case "$REAL" in
         echo "    → Quita uno (recomendado el snap):  sudo snap remove docker"
         ;;
 esac
+if dpkg -S "$REAL" >/dev/null 2>&1; then
+    info "Paquete del CLI: $(dpkg -S "$REAL" 2>/dev/null | cut -d: -f1)"
+else
+    warn "El CLI 'docker' no lo provee ningún paquete .deb (¿snap, WSL o copia manual?)."
+fi
 echo ""
 
 # 2) Grupo del socket.
@@ -102,23 +107,38 @@ else
     err "No funciona 'docker compose' (ni existe el binario 'docker-compose' v1)."
     echo "    Error exacto de 'docker compose version':"
     echo "$CERR" | sed 's/^/      /'
-    # ¿Está el plugin v2 instalado en disco?
+
+    # Versión del CLI (los plugins 'docker compose' necesitan CLI >= 19.03).
+    DVER="$(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    [ -n "$DVER" ] && info "Versión del CLI 'docker': $DVER  (los plugins necesitan >= 19.03)"
+
+    # ¿Está el plugin v2 instalado en disco? ¿Funciona por sí solo?
     PLUG=0
     for p in /usr/libexec/docker/cli-plugins/docker-compose \
              /usr/lib/docker/cli-plugins/docker-compose \
              /usr/local/lib/docker/cli-plugins/docker-compose \
              "$HOME/.docker/cli-plugins/docker-compose"; do
-        if [ -f "$p" ]; then info "Plugin v2 presente en disco: $p"; PLUG=1; fi
+        if [ -f "$p" ]; then
+            info "Plugin v2 presente en disco: $p"
+            PLUG=1
+            if [ -x "$p" ]; then
+                ok "El plugin funciona por sí solo: $("$p" version 2>&1 | head -1)"
+                echo "    → Tu CLI 'docker' es viejo y NO soporta plugins. Instala el CLI moderno:"
+                echo "        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+            fi
+        fi
     done
+
     if echo "$CERR" | grep -qi "is not a docker command"; then
-        echo "    → Es docker pero SIN el plugin v2:  sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+        echo "    → Es docker pero SIN el plugin v2:  sudo apt-get install -y docker-compose-plugin"
     elif echo "$CERR" | grep -qiE "command not found|no se encontró|not found"; then
         echo "    → No hay CLI de Docker (o no está en el PATH):  bash servicios/instalar_ubuntu.sh"
     elif [ "$PLUG" -eq 1 ]; then
-        echo "    → El plugin existe pero tu 'docker' no lo ve (¿docker de snap/WSL/otro?)."
-        echo "       Revisa el binario de la sección 1 y asegúrate de usar /usr/bin/docker."
+        echo "    → El plugin existe pero tu 'docker' no lo ve. Suele ser un CLI viejo"
+        echo "       (docker.io 18.09) o otro docker (snap/WSL). Instala docker-ce:"
+        echo "        sudo apt-get install -y docker-ce docker-ce-cli containerd.io"
     else
-        echo "    → Falta el plugin:  sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+        echo "    → Falta el plugin:  sudo apt-get install -y docker-compose-plugin"
     fi
 fi
 echo ""
