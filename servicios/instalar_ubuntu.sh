@@ -10,13 +10,14 @@
 #    2) Localiza el repo (o lo clona si no lo encuentra).
 #    3) Crea las carpetas de vídeo (data/pipeline/...).
 #    4) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
-#    5) Construye las imágenes Docker.
+#    5) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
 #    6) Arranca grabadora + compresor (+ uploader si hay secretos).
 #    7) Instala y habilita systemd (auto-arranque al encender el PC).
 #    8) Instala los alias del pipeline en ~/.bashrc.
+#    9) Sincroniza la hora (NTP) y limita los logs de Docker (rotación).
 #
 #  Uso:
-#      bash servicios/instalar_ubuntu.sh
+#      bash servicios/instalar_ubuntu.sh [--rebuild]
 #
 #  NO lo ejecutes como root ni con sudo: el script pide sudo cuando lo necesita.
 # =============================================================================
@@ -74,7 +75,7 @@ fi
 # ----------------------------------------------------------------------------
 # 1) Docker (Engine + compose plugin)
 # ----------------------------------------------------------------------------
-info "1/8 Instalando/verificando Docker..."
+info "1/9 Instalando/verificando Docker..."
 
 # ¿Docker está presente Y respondiendo? No basta con que exista el binario:
 # p. ej. en WSL el "shim" existe aunque la integración esté apagada.
@@ -175,7 +176,7 @@ DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
 # ----------------------------------------------------------------------------
 # 2) Repo
 # ----------------------------------------------------------------------------
-info "2/8 Localizando el código..."
+info "2/9 Localizando el código..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CANDIDATE="$(dirname "$SCRIPT_DIR")"
 if [ -d "$CANDIDATE/.git" ]; then
@@ -196,7 +197,7 @@ cd "$ROOT"
 # ----------------------------------------------------------------------------
 # 3) Carpetas de vídeo
 # ----------------------------------------------------------------------------
-info "3/8 Creando carpetas..."
+info "3/9 Creando carpetas..."
 mkdir -p "$ROOT/data/pipeline/grabaciones/test" \
          "$ROOT/data/pipeline/comprimidos" \
          "$ROOT/data/pipeline/partes"
@@ -206,7 +207,7 @@ ok "data/pipeline/{grabaciones/test,comprimidos,partes}, config/ y sessions/ lis
 # ----------------------------------------------------------------------------
 # 4) Secretos
 # ----------------------------------------------------------------------------
-info "4/8 Comprobando secretos..."
+info "4/9 Comprobando secretos..."
 DL="$ROOT/downloader_telegram"
 CREDS_OK=0; GRUPOS_OK=0; SESION_OK=0
 
@@ -238,7 +239,7 @@ fi
 # ----------------------------------------------------------------------------
 # 5) Build de imágenes (solo si faltan, salvo --rebuild)
 # ----------------------------------------------------------------------------
-info "5/8 Imágenes Docker..."
+info "5/9 Imágenes Docker..."
 construir=0
 if [ "$REBUILD" -eq 1 ]; then
     construir=1
@@ -265,7 +266,7 @@ fi
 # ----------------------------------------------------------------------------
 # 6) Arranque
 # ----------------------------------------------------------------------------
-info "6/8 Arrancando servicios..."
+info "6/9 Arrancando servicios..."
 $DOCKER compose -f "$ROOT/TwitchRecorder/docker-compose.yml" up -d twitchrecorder
 $DOCKER compose -f "$ROOT/ffmpeg-yt-dlp/docker-compose.yml" up -d monitor
 
@@ -284,7 +285,7 @@ $DOCKER ps --filter name=twitchrecorder-sendo --filter name=ffmpeg_monitor-sendo
 # ----------------------------------------------------------------------------
 # 7) systemd (auto-arranque al boot)
 # ----------------------------------------------------------------------------
-info "7/8 Configurando auto-arranque (systemd)..."
+info "7/9 Configurando auto-arranque (systemd)..."
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     sudo tee /etc/systemd/system/twitch-stream-pipeline.service >/dev/null <<UNIT
 [Unit]
@@ -319,11 +320,49 @@ fi
 # ----------------------------------------------------------------------------
 # 8) Alias
 # ----------------------------------------------------------------------------
-info "8/8 Instalando alias..."
+info "8/9 Instalando alias..."
 if [ -f "$ROOT/servicios/instalar_aliases.sh" ]; then
     bash "$ROOT/servicios/instalar_aliases.sh"
 else
     warn "No encuentro servicios/instalar_aliases.sh (se omite)."
+fi
+
+# ----------------------------------------------------------------------------
+# 9) Hora (NTP) y rotación de logs de Docker
+# ----------------------------------------------------------------------------
+info "9/9 Sincronizando hora y límite de logs de Docker..."
+
+# 9a) Reloj sincronizado (Telegram/MTProto es muy sensible a la hora).
+if command -v timedatectl >/dev/null 2>&1; then
+    if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo no)" != "yes" ]; then
+        sudo apt-get install -y systemd-timesyncd >/dev/null 2>&1 || true
+        if sudo timedatectl set-ntp true 2>/dev/null; then
+            ok "NTP activado (la hora se sincroniza sola)."
+        else
+            warn "No pude activar NTP; revisa la hora a mano (date -u)."
+        fi
+    else
+        ok "Hora ya sincronizada por NTP."
+    fi
+else
+    warn "Sin 'timedatectl' (¿no es systemd?): asegúrate de que la hora sea correcta."
+fi
+
+# 9b) Rotación de logs de Docker (evita llenar el disco corriendo 24/7).
+DAEMON_JSON=/etc/docker/daemon.json
+NUEVO_DAEMON=0
+if [ ! -f "$DAEMON_JSON" ]; then
+    echo '{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }' \
+        | sudo tee "$DAEMON_JSON" >/dev/null
+    NUEVO_DAEMON=1
+elif ! grep -q '"max-size"' "$DAEMON_JSON" 2>/dev/null; then
+    warn "Ya existe $DAEMON_JSON sin límite de logs; NO lo toco (añade 'log-opts' a mano si quieres)."
+else
+    ok "Rotación de logs de Docker ya configurada."
+fi
+if [ "$NUEVO_DAEMON" -eq 1 ]; then
+    sudo systemctl restart docker 2>/dev/null || true
+    ok "Docker limitará los logs (10 MB × 3 por contenedor)."
 fi
 
 # ----------------------------------------------------------------------------
