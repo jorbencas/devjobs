@@ -26,6 +26,7 @@ services:
     container_name: telegram-uploader-sendo
     restart: unless-stopped
     volumes:
+      - ./app:/app/app
       - ./config:/app/config
       - ./sessions:/app/sessions
       - ../data/pipeline/partes:/app/partes
