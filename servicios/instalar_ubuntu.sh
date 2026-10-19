@@ -239,6 +239,17 @@ DOCKER="docker"
 if ! docker info >/dev/null 2>&1; then DOCKER="sudo docker"; fi
 DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
 
+# La config de usuario ~/.docker debe ser accesible por tu usuario. Si no, el CLI
+# de Docker ABORTA la búsqueda de plugins y 'docker compose' da "unknown command"
+# aunque el plugin esté instalado (bug de docker/cli #5643 y #5656).
+if [ -e "$HOME/.docker" ] && [ "$(stat -c '%U' "$HOME/.docker" 2>/dev/null || echo '?')" != "$TARGET_USER" ]; then
+    warn "~/.docker no pertenece a '$TARGET_USER'; corrigiendo permisos (rompen 'docker compose')..."
+    sudo chown -R "$TARGET_USER:$TARGET_USER" "$HOME/.docker"
+    chmod 700 "$HOME/.docker" 2>/dev/null || true
+    [ -f "$HOME/.docker/config.json" ] && chmod 600 "$HOME/.docker/config.json" 2>/dev/null || true
+    ok "Permisos de ~/.docker corregidos."
+fi
+
 # Verificar que 'docker compose' es la v2 (plugin). Si es una v1 vieja o un docker
 # antiguo, muchos flags (p. ej. --rm) dan "unknown flag"/error.
 if $DOCKER compose version 2>/dev/null | grep -qE 'v2\.|version v2'; then
@@ -247,6 +258,7 @@ else
     warn "El comando 'docker compose' no parece la v2 → flags como --rm pueden fallar."
     warn "Comprueba:  docker compose version   (debe decir 'Docker Compose version v2.x')"
     warn "Si tienes una v1 vieja, bórrala:  sudo apt-get remove -y docker-compose"
+    warn "Si el plugin está pero no se detecta, revisa permisos de ~/.docker:  bash servicios/diagnostico_docker.sh"
 fi
 
 # ----------------------------------------------------------------------------

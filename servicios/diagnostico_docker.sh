@@ -77,6 +77,45 @@ else
 fi
 echo ""
 
+# 2b) Config de usuario (~/.docker). Si NO es accesible, el CLI de Docker ABORTA
+#     la búsqueda de plugins y da "'compose' is not a docker command" aunque el
+#     plugin esté bien instalado (bug conocido de docker/cli #5643 y #5656).
+DCFG="$HOME/.docker"
+if [ -e "$DCFG" ]; then
+    DCFG_OWNER="$(stat -c '%U' "$DCFG" 2>/dev/null || echo '?')"
+    DCFG_MODE="$(stat -c '%A' "$DCFG" 2>/dev/null || echo '?')"
+    info "Config de usuario: $DCFG ($DCFG_OWNER, $DCFG_MODE)"
+    if [ "$DCFG_OWNER" != "$U" ]; then
+        err "Pertenece a '$DCFG_OWNER', no a ti → docker no puede leer su config"
+        err "ni buscar plugins (esto SÍ causa \"'compose' is not a docker command\")."
+        echo "    → sudo chown -R $U:$U $DCFG && chmod 700 $DCFG"
+    elif [ ! -r "$DCFG" ] || [ ! -x "$DCFG" ]; then
+        err "No puedes entrar/leer $DCFG → rompe la búsqueda de plugins."
+        echo "    → chmod 700 $DCFG"
+    else
+        ok "Puedes acceder a $DCFG."
+    fi
+    CFG="$DCFG/config.json"
+    if [ -e "$CFG" ]; then
+        COWN="$(stat -c '%U' "$CFG" 2>/dev/null || echo '?')"
+        CMODE="$(stat -c '%A' "$CFG" 2>/dev/null || echo '?')"
+        if [ -r "$CFG" ]; then
+            ok "config.json legible ($COWN, $CMODE)."
+        else
+            err "config.json NO legible por ti ($COWN, $CMODE) → causa el fallo de plugins."
+            echo "    → sudo chown $U:$U $CFG && chmod 600 $CFG"
+        fi
+    fi
+    if [ -d "$DCFG/cli-plugins" ]; then
+        info "Plugins de usuario: $(ls -1 "$DCFG/cli-plugins" 2>/dev/null | tr '\n' ' ')"
+        warn "El PRIMER plugin que encuentra docker gana: un archivo roto aquí oculta al bueno."
+        echo "    → Revisa/borra lo que sobre:  ls -l $DCFG/cli-plugins"
+    fi
+else
+    ok "No existe $DCFG (normal; se usan los plugins del sistema)."
+fi
+echo ""
+
 # 3) ¿Responde sin sudo?
 if docker info >/dev/null 2>&1; then
     ok "'docker info' funciona sin sudo."
@@ -123,20 +162,25 @@ else
             PLUG=1
             if [ -x "$p" ]; then
                 ok "El plugin funciona por sí solo: $("$p" version 2>&1 | head -1)"
-                echo "    → Tu CLI 'docker' es viejo y NO soporta plugins. Instala el CLI moderno:"
-                echo "        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
             fi
         fi
     done
 
     if echo "$CERR" | grep -qi "is not a docker command"; then
-        echo "    → Es docker pero SIN el plugin v2:  sudo apt-get install -y docker-compose-plugin"
+        if [ -n "$DVER" ] && ! dpkg --compare-versions "$DVER" ge 19.03 2>/dev/null; then
+            echo "    → Tu CLI 'docker' ($DVER) es viejo y NO soporta plugins. Actualízalo:"
+            echo "        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+        elif [ "$PLUG" -eq 1 ]; then
+            echo "    → El plugin ESTÁ instalado y tu CLI es moderno ($DVER), pero no lo detecta."
+            echo "       Suele ser la config de usuario ~/.docker (ver sección 2b arriba) o un"
+            echo "       archivo roto en ~/.docker/cli-plugins. Arregla el permiso:"
+            echo "        sudo chown -R \$USER:\$USER ~/.docker && chmod 700 ~/.docker"
+            echo "       y comprueba:  docker info   (mira la sección 'Plugins')"
+        else
+            echo "    → Falta el plugin v2:  sudo apt-get install -y docker-compose-plugin"
+        fi
     elif echo "$CERR" | grep -qiE "command not found|no se encontró|not found"; then
         echo "    → No hay CLI de Docker (o no está en el PATH):  bash servicios/instalar_ubuntu.sh"
-    elif [ "$PLUG" -eq 1 ]; then
-        echo "    → El plugin existe pero tu 'docker' no lo ve. Suele ser un CLI viejo"
-        echo "       (docker.io 18.09) o otro docker (snap/WSL). Instala docker-ce:"
-        echo "        sudo apt-get install -y docker-ce docker-ce-cli containerd.io"
     else
         echo "    → Falta el plugin:  sudo apt-get install -y docker-compose-plugin"
     fi
@@ -144,9 +188,11 @@ fi
 echo ""
 
 # 5) Resumen.
-echo "Comprobación final:  docker ps"
-if docker ps >/dev/null 2>&1; then
-    ok "¡Todo listo! Ya puedes usar Docker sin sudo."
+echo "Comprobación final:  docker ps  +  docker compose version"
+if docker ps >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    ok "¡Todo listo! Docker y 'docker compose' funcionan sin sudo."
+elif docker ps >/dev/null 2>&1; then
+    warn "Docker va, pero 'docker compose' NO. Aplica el '→' de la sección 4."
 else
     warn "Aún falla. Aplica el '→' de arriba y reinicia la sesión (cerrar/abrir)."
 fi
