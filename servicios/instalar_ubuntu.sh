@@ -4,7 +4,9 @@
 #  = grabadora (TwitchRecorder) + compresor (ffmpeg-yt-dlp) + uploader Telegram.
 #
 #  Hace, de un tirón y de forma idempotente (puedes relanzarlo sin miedo):
-#    1) Instala dependencias del sistema y Docker (Engine + compose plugin).
+#    1) Instala dependencias del sistema y Docker (Engine + compose plugin),
+#       mete tu usuario en el grupo 'docker' y comprueba que 'docker compose'
+#       es la v2 (flags como --rm fallan con una v1 vieja).
 #       En Ubuntu antiguo/EOL (p. ej. 18.10) repunta apt a old-releases y usa el
 #       repo de Docker de bionic (glibc compatible) para tener 'docker compose' v2.
 #    2) Localiza el repo (o lo clona si no lo encuentra).
@@ -61,6 +63,9 @@ if [ "$(id -u)" -eq 0 ]; then
     err "Ejecútalo como tu usuario:  bash servicios/instalar_ubuntu.sh"
     exit 1
 fi
+
+# Usuario real que ejecuta el script (para el grupo docker y el servicio systemd).
+TARGET_USER="$(id -un)"
 
 if ! command -v apt-get >/dev/null 2>&1; then
     err "Este instalador es para Ubuntu/Debian (no encuentro apt-get)."
@@ -162,16 +167,34 @@ fi
 
 command -v git >/dev/null 2>&1 || sudo apt-get install -y git
 
-# Permisos del usuario sobre el socket de Docker.
-if ! id -nG "$USER" | grep -qw docker; then
-    sudo usermod -aG docker "$USER"
-    warn "Añadido '$USER' al grupo docker (efecto permanente tras re-loguear)."
+# Permisos del usuario sobre el socket de Docker: debe estar en el grupo 'docker'.
+if ! getent group docker >/dev/null 2>&1; then
+    sudo groupadd docker
+    ok "Grupo 'docker' creado."
+fi
+if id -nG "$TARGET_USER" | grep -qw docker; then
+    ok "El usuario '$TARGET_USER' ya pertenece al grupo 'docker'."
+else
+    sudo usermod -aG docker "$TARGET_USER"
+    warn "Añadido '$TARGET_USER' al grupo 'docker'."
+    warn "No surte efecto en esta sesión: cierra sesión y vuelve a entrar," \
+         "o ejecuta 'newgrp docker' (o usa sudo mientras tanto)."
 fi
 
 # Cómo invocar docker DURANTE este script (si el grupo aún no aplica, con sudo).
 DOCKER="docker"
 if ! docker info >/dev/null 2>&1; then DOCKER="sudo docker"; fi
 DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+
+# Verificar que 'docker compose' es la v2 (plugin). Si es una v1 vieja o un docker
+# antiguo, muchos flags (p. ej. --rm) dan "unknown flag"/error.
+if $DOCKER compose version 2>/dev/null | grep -qE 'v2\.|version v2'; then
+    ok "docker compose v2 detectado ($( { $DOCKER compose version --short 2>/dev/null; } | head -1 ))."
+else
+    warn "El comando 'docker compose' no parece la v2 → flags como --rm pueden fallar."
+    warn "Comprueba:  docker compose version   (debe decir 'Docker Compose version v2.x')"
+    warn "Si tienes una v1 vieja, bórrala:  sudo apt-get remove -y docker-compose"
+fi
 
 # ----------------------------------------------------------------------------
 # 2) Repo
@@ -297,7 +320,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-User=$USER
+User=$TARGET_USER
 SupplementaryGroups=docker
 WorkingDirectory=$ROOT
 ExecStart=$DOCKER_BIN compose -f $ROOT/TwitchRecorder/docker-compose.yml up -d twitchrecorder
@@ -387,4 +410,13 @@ else
     ok "Todos los secretos presentes."
 fi
 echo ""
-warn "Si acabas de entrar al grupo docker, cierra sesión y vuelve a entrar (o reinicia) para no necesitar sudo."
+# Verificación final: ¿puede tu usuario usar docker sin sudo ya?
+echo ""
+if docker info >/dev/null 2>&1; then
+    ok "Tu usuario ya puede usar Docker/'docker compose' sin sudo."
+else
+    warn "Tu usuario AÚN necesita sudo para docker en esta sesión."
+    warn "Cierra sesión y vuelve a entrar (o reinicia), o ejecuta:  newgrp docker"
+    warn "Y comprueba:  docker ps   (debe listar sin 'permission denied')."
+fi
+
