@@ -106,8 +106,10 @@ fi
 
 # --- 4) Carpetas ---
 print_info "4/8 Creando carpetas de vídeo..."
-mkdir -p "$DEVJOBS/data/grabaciones/test" "$DEVJOBS/data/comprimidos" "$DEVJOBS/data/backups" "$DEVJOBS/data/partes"
-print_ok "data: grabaciones/test, comprimidos, backups y partes listas"
+DATA_ROOT="${DEVJOBS_DATA:-/srv/devjobs-data}"
+sudo mkdir -p "$DATA_ROOT/grabaciones/test" "$DATA_ROOT/comprimidos" "$DATA_ROOT/partes" "$DATA_ROOT/.native"
+sudo chown -R "$(id -un):$(id -gn)" "$DATA_ROOT"
+print_ok "$DATA_ROOT: grabaciones/test, comprimidos y partes listas"
 
 # --- 5) Secretos (config.bin, secret.key, uploader.session, .env, grupos.json) ---
 print_info "5/8 Revisando secretos..."

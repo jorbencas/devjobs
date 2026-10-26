@@ -186,13 +186,13 @@ Parte del pipeline **"Grabar → Comprimir → Subir a Telegram"**. Vigila una c
 
 #### Qué hace
 
-1. Vigila una carpeta (en el pipeline, `../data/pipeline/grabaciones/test` — donde TwitchRecorder deja los `*_completed.mp4`,
+1. Vigila una carpeta (en el pipeline, `/srv/devjobs-data/grabaciones/test` — donde TwitchRecorder deja los `*_completed.mp4`,
    que pueden incluir la keyword del directo: `*_KW_<keyword>_completed.mp4`).
 2. Detecta archivos que terminan en `*_completed.mp4`.
 3. Los comprime a **720p** (H.264/libx264, CRF 23, preset medium, AAC 128k) — misma config que el preset "default" de midu.sh, para máxima compatibilidad.
    - **Garantía de tamaño <2 GB**: si el resultado de CRF 23 supera `TAMANO_MAX_MB` (default **1900 MB**, por el tope de Telegram), se re-codifica automáticamente en **2 pasadas** apuntando a ese tamaño. Así nunca supera 2 GB y no hay que partir el vídeo.
 4. Guarda el resultado como `*_compressed.mp4` (conservando el prefijo, incluida la keyword)
-   en `../data/pipeline/comprimidos`.
+   en `/srv/devjobs-data/comprimidos`.
 5. Borra el original (el directo completo sigue en `grabaciones/`).
 6. Repite cada `POLL_INTERVAL` segundos.
 
@@ -220,8 +220,8 @@ COMPLETED_ONLY=true RESOLUTION=720 WATCH_DIR=/ruta/a/vigilar bash scripts/monito
 
 | Variable | Descripción | Default |
 |---|---|---|
-| `WATCH_DIR` | Carpeta a vigilar | `~/data/pipeline/grabaciones/test` |
-| `OUTPUT_DIR` | Directorio de salida | `~/data/pipeline/comprimidos` |
+| `WATCH_DIR` | Carpeta a vigilar | `/srv/devjobs-data/grabaciones/test` |
+| `OUTPUT_DIR` | Directorio de salida | `/srv/devjobs-data/comprimidos` |
 | `CRF` | Calidad CRF (menor = mejor) | `28` |
 | `PRESET` | Preset de velocidad | `fast` |
 | `CODEC` | Códec de vídeo | `libx264` |
@@ -262,7 +262,7 @@ Parar:
 docker compose stop monitor   # o docker compose down
 ```
 
-Vigila `../data/pipeline/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `../data/pipeline/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
+Vigila `/srv/devjobs-data/grabaciones/test` (donde TwitchRecorder deja los `*_completed.mp4`), comprime a **720p** y guarda en `/srv/devjobs-data/comprimidos`, que es la carpeta que vigila el `uploader` para subir a Telegram.
 
 #### Corte de inicio/fin del directo
 
@@ -327,8 +327,8 @@ OCR (sección anterior).
 
 El `monitor` es la **segunda pieza** del pipeline (`TwitchRecorder` → este
 servicio → `downloader_telegram.uploader`). Aquí solo se documenta su papel:
-**lees los `*_completed.mp4` de `data/pipeline/grabaciones/test/`, los comprimes a 720p y
-dejas los `*_compressed.mp4` en `data/pipeline/comprimidos/`**. El flujo completo y el
+**lees los `*_completed.mp4` de `/srv/devjobs-data/grabaciones/test/`, los comprimes a 720p y
+dejas los `*_compressed.mp4` en `/srv/devjobs-data/comprimidos/`**. El flujo completo y el
 arranque están en el `README.md` de la raíz de `devjobs` (sección *PIPELINE*).
 
 > Documentación completa del pipeline en el `README.md` de la raíz de `devjobs` y en `docker_help.txt` (sección *PIPELINE* y *PIPELINE VÍA SYSTEMD*).

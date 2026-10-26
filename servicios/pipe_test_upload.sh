@@ -5,13 +5,13 @@
 #   sin argumento -> prueba el grupo fallback (default)
 #   con uno -> prueba el ruteo por keyword (ej. cuid_opcional)
 KEY=${1:-prueba_upload}
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC=${2:-$ROOT/data/pipeline/grabaciones/test/.placeholder}
-DEST=$ROOT/data/pipeline/comprimidos/sendo_KW_${KEY}_compressed.mp4
+DATA="${DEVJOBS_DATA:-/srv/devjobs-data}"
+SRC=${2:-$DATA/grabaciones/test/.placeholder}
+DEST=$DATA/comprimidos/sendo_KW_${KEY}_compressed.mp4
 
 # Buscar un mp4 de ejemplo si no se pasó uno explícito
 if [ ! -f "$SRC" ]; then
-    SRC=$(find "$ROOT/data/pipeline/grabaciones" -maxdepth 2 -name "*.mp4" 2>/dev/null | head -1)
+    SRC=$(find "$DATA/grabaciones" -maxdepth 2 -name "*.mp4" 2>/dev/null | head -1)
 fi
 if [ -z "$SRC" ]; then
     echo "[!] No hay un .mp4 de ejemplo. Pasa la ruta: bash pipe_test_upload.sh <keyword> <ruta>"

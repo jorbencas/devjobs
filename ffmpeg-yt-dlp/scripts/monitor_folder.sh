@@ -17,8 +17,8 @@ set -e
 
 # ── Configuración ────────────────────────────────────────────────────
 CONTAINER_NAME="ffmpeg_monitor-sendo"
-WATCH_DIR="${WATCH_DIR:-$HOME/data/pipeline/grabaciones/test}"
-OUTPUT_DIR="${OUTPUT_DIR:-$HOME/data/pipeline/comprimidos}"
+WATCH_DIR="${WATCH_DIR:-${DEVJOBS_DATA:-/srv/devjobs-data}/grabaciones/test}"
+OUTPUT_DIR="${OUTPUT_DIR:-${DEVJOBS_DATA:-/srv/devjobs-data}/comprimidos}"
 # Disable log file by default. Set LOG_FILE to a path to enable file logging.
 LOG_FILE="${LOG_FILE:-/dev/null}"
 CRF="${CRF:-28}"
@@ -254,12 +254,13 @@ compress_video() {
             local video_bytes=$(( max_bytes - audio_bytes ))
             local video_bps=$(( video_bytes * 8 / duration ))
             if [[ "$video_bps" -gt 0 ]]; then
+                local passlog="/tmp/ffmpeg2pass"
                 run_with_error_log ffmpeg "${slice_args[@]}" "${vf_args[@]}" -map 0:v:0 -c:v "$CODEC" -b:v "$video_bps" \
-                    -preset "$PRESET" -threads "$threads" -pass 1 -an -f null -
+                    -preset "$PRESET" -threads "$threads" -pass 1 -passlogfile "$passlog" -an -f null -
                 local pass2_map=(-map 0:v:0)
                 [[ -n "$has_audio" ]] && pass2_map+=(-map 0:a:0)
                 if run_with_error_log ffmpeg "${slice_args[@]}" "${vf_args[@]}" "${pass2_map[@]}" -c:v "$CODEC" -b:v "$video_bps" \
-                    -preset "$PRESET" -threads "$threads" -pass 2 \
+                    -preset "$PRESET" -threads "$threads" -pass 2 -passlogfile "$passlog" \
                     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
                     -map_metadata 0 \
                     -movflags +faststart -f mp4 "$tmp_output"; then
@@ -267,7 +268,7 @@ compress_video() {
                 else
                     log_error "  Falló la 2ª pasada; se mantiene el CRF one-pass."
                 fi
-                rm -f ffmpeg2pass-*.log ffmpeg2pass-*.log.mbtree
+                rm -f "${passlog}"-*.log "${passlog}"-*.log.mbtree
             fi
         fi
 

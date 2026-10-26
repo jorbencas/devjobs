@@ -11,7 +11,7 @@ services:
       - ./config:/app/config
       - ./sessions:/app/sessions
       - ./Descargas_Telegram:/app/Descargas_Telegram
-      - ../data/pipeline/comprimidos:/comprimidos
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/comprimidos:/comprimidos
     environment:
       - TG_TOOLBOX_SESION=/app/sessions/tg_toolbox.session
     stdin_open: true
@@ -29,10 +29,14 @@ services:
       - ./app:/app/app
       - ./config:/app/config
       - ./sessions:/app/sessions
-      - ../data/pipeline/partes:/app/partes
-      - ../data/pipeline/comprimidos:/comprimidos
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/partes:/app/partes
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/comprimidos:/comprimidos
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/grabaciones:/grabaciones
     environment:
       UPLOADER_INTERVALO: "60"
+      UPLOADER_PARTES: /app/partes
+      UPLOADER_GRABACIONES: /grabaciones
+      UPLOADER_BORRAR_ORIGINAL: "${UPLOADER_BORRAR_ORIGINAL:-1}"
     command: python -u /app/app/subir_videos.py /comprimidos
 
   #          ============================================================

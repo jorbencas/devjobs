@@ -9,71 +9,94 @@ cat << 'HELP'
 ╚══════════════════════════════════════════════════════════════════════╝
 
 PIPELINE (Directo → Telegram):
-  pipe_up          Arranca los 3 daemons del pipeline
+  pipe_up          Arranca los 3 daemons del pipeline (twitchrecorder + monitor + uploader)
   pipe_down        Para los 3 daemons
+  pipe_recreate    Recrea los 3 daemons (force-recreate)
   pipe_ps          Estado de los contenedores
   pipe_rebuild     Reconstruir y recrear los 3 daemons
   pipe_test        Copiar vídeo de prueba para verificar upload
+  pipe_once        Una sola pasada del uploader (sube lo pendiente y sale)
   plogs            Logs de los 3 daemons a la vez
   pipe_setup       Autenticar sesión de Telegram (una vez)
   pipe_verificar   Comprobar secretos/sesión del uploader (sin subir)
   pipe_chats       Listar chats de Telegram
+  pipe_chats_sendo Solo la carpeta "sendo"
   pipe_topics      Listar topics de un grupo
+  pipe_sys_start   Arrancar servicio systemd del pipeline
+  pipe_sys_stop    Parar servicio systemd del pipeline
+  pipe_sys_status  Ver estado del servicio systemd
 
 TWITCHRECORDER:
   tw_logs          Ver logs del grabador
-  tw_stop          Parar el grabador
+  tw_stop          Parar el grabador (contenedor twitchrecorder-sendo)
   tw_restart       Reiniciar el grabador
   tw_run           Ejecutar grabador manualmente
   tw_dry           Dry-run (sin grabar)
+  tw_down          Parar contenedor
 
 FFMPEG-YT-DLP (Monitor):
   ff_logs          Ver logs del monitor
-  ff_stop          Parar el monitor
+  ff_stop          Parar el monitor (contenedor ffmpeg_monitor-sendo)
   ff_restart       Reiniciar el monitor
   ff_midu          Ejecutar midu.sh (conversor interactivo)
-  watcher          Preview watcher (host)
-  watcher_daemon   Preview watcher como daemon
+  ff_manual_stop   Parar downloader manual
+  ff_manual_logs   Ver logs del downloader manual
+  watcher          Preview watcher (host/WSL)
+  watcher_daemon   Preview watcher como daemon (host/WSL)
+  watcher_stop     Parar preview watcher
+  watcher_status   Estado del preview watcher
 
 TELEGRAM BOT:
   tg_bot           Arrancar bot
   tg_bot_logs      Ver logs del bot
   tg_bot_stop      Parar bot
   tg_bot_restart   Reiniciar bot
-  tg_bot_rebuild   Reconstruir bot
+  tg_bot_rebuild   Reconstruir y arrancar bot
 
-TELEGRAM CLI:
+TELEGRAM CLI / Uploader:
   tg_menu          Toolbox interactivo de Telegram
-  tg_sessions      Gestionar sesiones
+  tg_sessions      Gestionar sesiones (igual que tg_menu)
   tg_logs          Ver logs del uploader
-  tg_stop          Parar el uploader
+  tg_stop          Parar el uploader (contenedor telegram-uploader-sendo)
+  tg_restart       Reiniciar el uploader
+  tg_manual_logs   Ver logs del contenedor telegram
+  tg_manual_stop   Parar contenedor telegram
+  tg_down          Parar stack de downloader_telegram
 
-YT-TELEGRAM (Pipeline YouTube):
+YT-TELEGRAM (Pipeline YouTube → Telegram):
   yt_up            Arrancar pipeline
   yt_down          Parar pipeline
   yt_logs          Ver logs
   yt_restart       Reiniciar pipeline
-  yt_rebuild       Reconstruir pipeline
+  yt_rebuild       Reconstruir y arrancar pipeline
   yt_ps            Estado del pipeline
   yt_download      Ejecutar solo descarga
   yt_convert       Ejecutar solo conversión
   yt_upload        Ejecutar solo subida
 
+PDF MANAGER:
+  pdf_run          Ejecutar pdfmanager
+  pdf_logs         Ver logs
+  pdf_down         Parar contenedor
+
 AULA DOWNLOADER:
-  aula_up           Arrancar menú interactivo (menú principal de vídeos)
-  aula_run          Descarga directa (siempre muestra lista con títulos y
-                    deja elegir TODOS, algunos o ninguno)
-  aula_down         Parar contenedor
-  aula_logs         Ver logs
-  aula_rebuild      Reconstruir contenedor
+  al_run           Descarga directa (muestra lista con títulos, elegir todos/algunos/ninguno)
+  al_menu          Menú interactivo
+  al_build         Construir imagen
+  al_logs          Ver logs
+  al_down          Parar contenedor
+
+HDFULL DOWNLOADER:
+  hd_run           Descargar película (con noVNC, --service-ports)
+  hd_clear         Borrar perfil del navegador y descargar
+  hd_menu          Menú interactivo (recomendado)
+  hd_build         Construir imagen sin caché
+  hd_logs          Ver logs
+  hd_down          Parar stack
 
 KICK.COM:
   kick_dl <url>    Descargar vídeo de Kick.com
                    Ejemplo: kick_dl https://kick.com/sendosama/videos/01a087f2-...
-
-AYUDA / DIAGNÓSTICO:
-  docker_help      Ver esta ayuda
-  docker_diag     Diagnóstico de Docker (grupo del socket, daemon, compose v2)
 
 DISCORD (grabación automática):
   discord_monitor          Bot de Discord que graba streams/llamadas automáticamente
@@ -82,19 +105,8 @@ DISCORD (grabación automática):
   discord_obs status       Estado de OBS
   discord_obs scenes       Listar escenas de OBS
 
-  Configuración: scripts/discord_config.json
-  Requisitos: Discord bot token, OBS con obs-websocket, discord.py + obs-websocket-py
-
-  Modos (record_mode):
-    "stream"  - Solo streams (compartir pantalla)
-    "call"    - Solo llamadas (unión al canal)
-    "both"    - Ambos
-
-  Configurar bot de Discord:
-    1. Crear en https://discord.com/developers/applications
-    2. Copiar token a discord_config.json
-    3. Activar "Server Members Intent"
-    4. Invitar con permisos: Connect, Speak, Use Voice Activity
-    5. Abrir OBS → WebSocket → puerto 4455
+AYUDA / DIAGNÓSTICO:
+  docker_help      Ver esta ayuda
+  docker_diag      Diagnóstico de Docker (grupo del socket, daemon, compose v2)
 
 HELP

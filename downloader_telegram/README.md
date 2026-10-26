@@ -221,16 +221,16 @@ docker compose logs -f telegram_bot
 
 ### Qué hace
 
-1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
+1. Vigila `/srv/devjobs-data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
-4. Marca los enviados **en memoria** y elimina el archivo local (y todos sus restos: logs `log_*.txt` y partes divididas).
+4. Marca los enviados **en memoria**, elimina el comprimido local (y todos sus restos: logs `log_*.txt` y partes divididas) y borra la **grabación original** de `grabaciones/` cuando todas las partes se han subido a todos los destinos.
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 
 ### Estado "ya subido" (sin ficheros)
 
-El uploader **no crea ningún fichero de estado**. Lleva en **memoria** (`enviado(archivo)` / `marcar_enviado`) la lista de lo subido en la ejecución actual y, al terminar de subir un vídeo, **borra el propio comprimido** (`*_compressed.mp4`). Así, la presencia del fichero en `../data/comprimidos` es la única fuente de verdad: si ya no está, ya se subió. No hay `enviados.json` que podar ni que limpiar.
+El uploader **no crea ningún fichero de estado**. Lleva en **memoria** (`enviado(archivo)` / `marcar_enviado`) la lista de lo subido en la ejecución actual y, al terminar de subir un vídeo a todos sus destinos, **borra el propio comprimido** (`*_compressed.mp4`) y la **grabación original** correspondiente en `/srv/devjobs-data/grabaciones/`. Así, la presencia del fichero en `/srv/devjobs-data/comprimidos` es la única fuente de verdad: si ya no está, ya se subió. No hay `enviados.json` que podar ni que limpiar.
 
 ### Configuración inicial (importante — hacer ANTES del viaje)
 
@@ -443,10 +443,10 @@ python app/tg_toolbox/tg_toolbox.py
 
 ### Qué hace
 
-1. Vigila `../data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
+1. Vigila `/srv/devjobs-data/comprimidos` (donde `monitor_folder.sh` deja los `*_compressed.mp4`).
 2. Por cada `*_compressed.mp4` no enviado, lo sube a **todos** los grupos de `grupos.json`.
 3. Si un archivo supera **2 GB** (límite de cuenta de Telegram), lo **divide en partes** con ffmpeg (`-c copy`, sin recompresión) y sube cada parte.
-4. Marca los enviados **en memoria** y elimina el archivo local (y todos sus restos: logs `log_*.txt` y partes divididas).
+4. Marca los enviados **en memoria**, elimina el comprimido local (y todos sus restos: logs `log_*.txt` y partes divididas) y borra la **grabación original** de `grabaciones/` cuando todas las partes se han subido a todos los destinos.
 
 Reutiliza las credenciales cifradas del proyecto (`config/config.bin` + `config/secret.key`), pero usa su **propia sesión** (`sessions/uploader.session`) para no entrar en conflicto con la sesión del cli (`sessions/tg_toolbox.session`). Así puedes correr el cli de descargas y el uploader **a la vez**.
 

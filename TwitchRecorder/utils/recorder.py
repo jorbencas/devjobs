@@ -1,4 +1,5 @@
 import json
+import os
 import platform
 from datetime import datetime
 import re
@@ -731,7 +732,11 @@ class Recorder:
         Devuelve el destino. (Sidecar INACTIU)"""
         self.test_path.mkdir(parents=True, exist_ok=True)
         dest = self.test_path / f"{orig.stem}_completed.mp4"
-        shutil.copy2(str(orig), str(dest))
+        dest.unlink(missing_ok=True)
+        try:
+            os.link(str(orig), str(dest))
+        except OSError:
+            shutil.copy2(str(orig), str(dest))
         # sidecar = _sidecar_path(orig)
         # if sidecar.exists():
         #     shutil.copy2(str(sidecar), str(_sidecar_path(dest)))

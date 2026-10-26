@@ -14,17 +14,18 @@ services:
 
   monitor:
     build:
-      context: ..
-      dockerfile: ffmpeg-yt-dlp/Dockerfile.monitor
+      context: .
+      dockerfile: Dockerfile.monitor
     container_name: ffmpeg_monitor-sendo
     restart: unless-stopped
     user: root
     command: >-
       su-exec 1000 bash /app/ffmpeg-yt-dlp/scripts/monitor_folder.sh
     volumes:
-      - ..:/app
-      - ../data/pipeline/grabaciones/test:/watch
-      - ../data/pipeline/comprimidos:/comprimidos
+      - ./scripts:/app/ffmpeg-yt-dlp/scripts:ro
+      - ../TwitchRecorder/config.json:/app/TwitchRecorder/config.json:ro
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/grabaciones/test:/watch
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/comprimidos:/comprimidos
     environment:
       - WATCH_DIR=/watch
       - OUTPUT_DIR=/comprimidos
@@ -35,3 +36,4 @@ services:
       - PRESET=fast
       - THREADS=4
       - MONITOR_CONFIG_FILE=/app/TwitchRecorder/config.json
+      - PYTHONDONTWRITEBYTECODE=1

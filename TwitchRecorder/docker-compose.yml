@@ -7,7 +7,7 @@ services:
     volumes:
       - ./config.json:/app/config.json:ro
       - ./entrypoint.sh:/app/entrypoint.sh:ro
-      - ../data/pipeline/grabaciones:/recordings
+      - ${DEVJOBS_DATA:-/srv/devjobs-data}/grabaciones:/recordings
     environment:
       - TZ=Europe/Madrid
     entrypoint: ["/app/entrypoint.sh"]

@@ -10,7 +10,7 @@
 #       'docker' y comprueba que 'docker compose' es la v2 (flags como --rm
 #       fallan con una v1 vieja). En EOL usa el repo de Docker de bionic.
 #    3) Localiza el repo (o lo clona si no lo encuentra).
-#    4) Crea las carpetas de vídeo (data/pipeline/...).
+#    4) Crea las carpetas de vídeo (/srv/devjobs-data o $DEVJOBS_DATA).
 #    5) Comprueba los secretos (config/, sessions/) y avisa de lo que falte.
 #    6) Construye las imágenes Docker (solo si faltan; usa --rebuild para forzar).
 #    7) Arranca grabadora + compresor (+ uploader si hay secretos).
@@ -284,11 +284,11 @@ cd "$ROOT"
 # 3) Carpetas de vídeo
 # ----------------------------------------------------------------------------
 info "4/10 Creando carpetas..."
-mkdir -p "$ROOT/data/pipeline/grabaciones/test" \
-         "$ROOT/data/pipeline/comprimidos" \
-         "$ROOT/data/pipeline/partes"
+DATA_ROOT="${DEVJOBS_DATA:-/srv/devjobs-data}"
+sudo mkdir -p "$DATA_ROOT/grabaciones/test" "$DATA_ROOT/comprimidos" "$DATA_ROOT/partes" "$DATA_ROOT/.native"
+sudo chown -R "$TARGET_USER:$TARGET_USER" "$DATA_ROOT"
 mkdir -p "$ROOT/downloader_telegram/config" "$ROOT/downloader_telegram/sessions"
-ok "data/pipeline/{grabaciones/test,comprimidos,partes}, config/ y sessions/ listas."
+ok "$DATA_ROOT/{grabaciones/test,comprimidos,partes}, config/ y sessions/ listas."
 
 # ----------------------------------------------------------------------------
 # 4) Secretos

@@ -346,7 +346,7 @@ GET https://kick.com/api/v2/channels/sendosama
 | `check_every` | Cada cuántos segundos se comprueba si el canal está en directo |
 | `max_duration` | Duración máxima de grabación en formato `HH:MM:SS` |
 | `retry_interval` | Si se pierde la conexión, espera estos segundos antes de reconectar |
-| `copy_to_test` | Si `true`, al terminar un directo **copia** la grabación a `test_path` renombrada a `*_completed.mp4` (el original queda en grabaciones/) |
+| `copy_to_test` | Si `true`, al terminar un directo **enlaza** (hardlink) o copia la grabación a `test_path` renombrada a `*_completed.mp4` (el original queda en grabaciones/) |
 | `test_path` | Carpeta donde van los `*_completed.mp4` (para el pipeline de compresión/subida) |
 
 **Campos por canal** (dentro de `channels.<canal>`):
@@ -408,8 +408,8 @@ canal solo en su día y cuando ya ha pasado su hora de inicio. Si un canal no de
 `days`, graba todos los días; si no define `start_time`, usa el valor por defecto
 `19:55`.
 
-> **Nota:** `copy_to_test` escribe los `*_completed.mp4` en `data/grabaciones/test/`
-> (el compose monta `../data/grabaciones:/recordings`). Esa carpeta es la que
+> **Nota:** `copy_to_test` escribe los `*_completed.mp4` en `/srv/devjobs-data/grabaciones/test/`
+> (el compose monta `${DEVJOBS_DATA:-/srv/devjobs-data}/grabaciones:/recordings`). Esa carpeta es la que
 > vigila `monitor_folder.sh` del pipeline (ver sección
 > [Pipeline completo](#pipeline-completo-grabar--comprimir--subir-a-telegram)).
 
@@ -467,7 +467,7 @@ docker compose build
 ```bash
 docker run --rm \
   -v ./config.json:/app/config.json:ro \
-  -v "$(pwd)/../data/grabaciones:/recordings" \
+  -v "/srv/devjobs-data/grabaciones:/recordings" \
   -e TZ=Europe/Madrid \
   twitchrecorder
 ```

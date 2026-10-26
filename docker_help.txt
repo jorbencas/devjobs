@@ -197,7 +197,8 @@ Qué hace: gestor de PDFs (desbloquear, unir, dividir, comprimir). App interacti
 3B. DOWNLOADER_TELEGRAM  (2 modos)     — forma parte del pipeline (paso 3)
 ------------------------------------------------------------------------------
 Qué hace: descargador masivo / clonador de Telegram. En el pipeline actúa como
-el "uploader" que sube los vídeos comprimidos a los grupos.
+el "uploader" que sube los vídeos comprimidos a los grupos. Tras subirlos a todos
+los destinos, borra el comprimido y la grabación original de grabaciones/.
 
   DAEMON — uploader (parte del pipeline)     contenedor: telegram-uploader-sendo
     tg_logs       Ver logs del subidor
@@ -241,7 +242,8 @@ Qué hace: descargador de vídeos de aula Moodle/Vimeo con Python puro.
 3E. TWITCHRECORDER  (2 modos)          — forma parte del pipeline (paso 1)
 ------------------------------------------------------------------------------
 Qué hace: grabador automático de directos de Twitch/YouTube/Kick. En el pipeline
-graba el directo y lo deja como `*_completed.mp4` en data/grabaciones/test/.
+graba el directo en /srv/devjobs-data/grabaciones/<año>/<mes>/ y crea un enlace
+`*_completed.mp4` en /srv/devjobs-data/grabaciones/test/.
 
   DAEMON — producción (parte del pipeline)   contenedor: twitchrecorder-sendo
     tw_logs       Ver logs del grabador
@@ -255,7 +257,7 @@ graba el directo y lo deja como `*_completed.mp4` en data/grabaciones/test/.
   TODO el proyecto
     tw_down       Parar todo
 
-Notas: config en `config.json` (channels, start_time). Salida → data/grabaciones/test/.
+Notas: config en `config.json` (channels, start_time). Salida → /srv/devjobs-data/grabaciones/<año>/<mes>/ y enlace en .../grabaciones/test/.
   Nota: los aliases `tw_logs`/`tw_stop`/`tw_restart` usan el nombre de contenedor `twitchrecorder-sendo`, mientras que `tw_run`/`tw_dry`/`pipe_up` usan el servicio `twitchrecorder` en los comandos `docker compose`.
   **Cambio en `recorder.py`: web wrappers (plataforma "web") usan SOLO Kick API
   (`https://kick.com/api/v2/channels/{canal}`) para obtener el título del directo.
@@ -414,7 +416,7 @@ termina, la grabación se mueve al pipeline para compresión y subida a Telegram
     1. Bot detecta stream/llamada en canal de voz
     2. Inicia grabación en OBS
     3. Stream/llamada termina → OBS guarda archivo
-    4. Archivo se mueve a data/pipeline/grabaciones/discord/
+    4. Archivo se mueve a /srv/devjobs-data/grabaciones/discord/
     5. ffmpeg_monitor lo comprime y sube a Telegram
 
  ==============================================================================
@@ -445,9 +447,13 @@ pipe_chats --creados   # ver tus canales/grupos con IDs → rellena grupos.json
 pipe_topics <grupo>    # si el grupo es un foro: lista los temas (series) → rellena "temas"
 
 --- Carpetas ---
-data/grabaciones/test/   Grabaciones terminadas (*_KW_<kw>_completed.mp4)
-data/comprimidos/        Videos listos para subir (*_KW_<kw>_compressed.mp4)
-data/backups/            Grabaciones antiguas archivadas
+/srv/devjobs-data/grabaciones/<año>/<mes>/  Grabaciones originales (*_KW_<kw>.mp4)
+/srv/devjobs-data/grabaciones/test/        Enlaces para comprimir (*_KW_<kw>_completed.mp4)
+/srv/devjobs-data/comprimidos/             Videos listos para subir (*_KW_<kw>_completed_compressed.mp4)
+
+  El uploader borra la grabación original de grabaciones/<año>/<mes>/ cuando
+  termina de subir todas las partes del comprimido a todos los destinos.
+  Desactivable con UPLOADER_BORRAR_ORIGINAL=0.
 
 --- Conversión (todos los pipelines usan lo mismo) ---
   ffmpeg -c:v libx264 -crf 28 -preset fast -vf scale=-2:720
@@ -513,7 +519,7 @@ PIPELINE_END
      1/8 Comprueba Docker y WSL2; si falta algo te dice qué instalar y se para.
      2/8 Clona el repo en ~/devjobs (o reutiliza el que ya exista; te pregunta).
      3/8 Sustituye la ruta fija /home/jorge/... por la de TU máquina.
-     4/8 Crea las carpetas de vídeo (data/grabaciones/test y data/comprimidos).
+     4/8 Crea las carpetas de vídeo en /srv/devjobs-data (o $DEVJOBS_DATA).
      5/8 Revisa los secretos (config.bin/secret.key, uploader.session,
           grupos.json) y te dice cuáles faltan y cómo crearlos.
      6/8 Construye las imágenes Docker.
@@ -550,3 +556,107 @@ du -sh ../devjobs/*/     Peso por proyecto (videos y backups pesan mucho)
 df -h                 Uso de los discos
 
 ==============================================================================
+
+# =============================================================================
+# ALIAS COMPLETOS (actualizado)
+# =============================================================================
+
+PIPELINE (Directo → Telegram):
+  pipe_up          Arranca los 3 daemons del pipeline (twitchrecorder + monitor + uploader)
+  pipe_down        Para los 3 daemons
+  pipe_recreate    Recrea los 3 daemons (force-recreate)
+  pipe_ps          Estado de los contenedores
+  pipe_rebuild     Reconstruir y recrear los 3 daemons
+  pipe_test        Copiar vídeo de prueba para verificar upload
+  pipe_once        Una sola pasada del uploader (sube lo pendiente y sale)
+  plogs            Logs de los 3 daemons a la vez
+  pipe_setup       Autenticar sesión de Telegram (una vez)
+  pipe_verificar   Comprobar secretos/sesión del uploader (sin subir)
+  pipe_chats       Listar chats de Telegram
+  pipe_chats_sendo Solo la carpeta "sendo"
+  pipe_topics      Listar topics de un grupo
+  pipe_sys_start   Arrancar servicio systemd del pipeline
+  pipe_sys_stop    Parar servicio systemd del pipeline
+  pipe_sys_status  Ver estado del servicio systemd
+
+TWITCHRECORDER:
+  tw_logs          Ver logs del grabador
+  tw_stop          Parar el grabador (twitchrecorder-sendo)
+  tw_restart       Reiniciar el grabador
+  tw_run           Ejecutar grabador manualmente
+  tw_dry           Dry-run (sin grabar)
+  tw_down          Parar contenedor
+
+FFMPEG-YT-DLP (Monitor):
+  ff_logs          Ver logs del monitor
+  ff_stop          Parar el monitor (ffmpeg_monitor-sendo)
+  ff_restart       Reiniciar el monitor
+  ff_midu          Ejecutar midu.sh (conversor interactivo)
+  ff_manual_stop   Parar downloader manual
+  ff_manual_logs   Ver logs del downloader manual
+  watcher          Preview watcher (host/WSL)
+  watcher_daemon   Preview watcher como daemon (host/WSL)
+  watcher_stop     Parar preview watcher
+  watcher_status   Estado del preview watcher
+
+TELEGRAM BOT:
+  tg_bot           Arrancar bot
+  tg_bot_logs      Ver logs del bot
+  tg_bot_stop      Parar bot
+  tg_bot_restart   Reiniciar bot
+  tg_bot_rebuild   Reconstruir y arrancar bot
+
+TELEGRAM CLI / Uploader:
+  tg_menu          Toolbox interactivo de Telegram
+  tg_sessions      Gestionar sesiones
+  tg_logs          Ver logs del uploader
+  tg_stop          Parar el uploader (telegram-uploader-sendo)
+  tg_restart       Reiniciar el uploader
+  tg_manual_logs   Ver logs del contenedor telegram
+  tg_manual_stop   Parar contenedor telegram
+  tg_down          Parar stack de downloader_telegram
+
+YT-TELEGRAM (Pipeline YouTube → Telegram):
+  yt_up            Arrancar pipeline
+  yt_down          Parar pipeline
+  yt_logs          Ver logs
+  yt_restart       Reiniciar pipeline
+  yt_rebuild       Reconstruir y arrancar pipeline
+  yt_ps            Estado del pipeline
+  yt_download      Ejecutar solo descarga
+  yt_convert       Ejecutar solo conversión
+  yt_upload        Ejecutar solo subida
+
+PDF MANAGER:
+  pdf_run          Ejecutar pdfmanager
+  pdf_logs         Ver logs
+  pdf_down         Parar contenedor
+
+AULA DOWNLOADER:
+  al_run           Descarga directa
+  al_menu          Menú interactivo
+  al_build         Construir imagen
+  al_logs          Ver logs
+  al_down          Parar contenedor
+
+HDFULL DOWNLOADER:
+  hd_run           Descargar película (con noVNC, --service-ports)
+  hd_clear         Borrar perfil del navegador y descargar (con noVNC, --service-ports)
+  hd_menu          Menú interactivo
+  hd_build         Construir imagen sin caché
+  hd_logs          Ver logs
+  hd_down          Parar stack
+
+KICK.COM:
+  kick_dl <url>    Descargar vídeo de Kick.com
+
+DISCORD:
+  discord_monitor                Bot de Discord (grabar streams/llamadas)
+  discord_obs start [escena]    Iniciar grabación OBS
+  discord_obs stop              Parar grabación OBS
+  discord_obs status            Estado OBS
+  discord_obs scenes            Listar escenas OBS
+
+AYUDA / DIAGNÓSTICO:
+  docker_help      Ver esta ayuda
+  docker_diag      Diagnóstico de Docker

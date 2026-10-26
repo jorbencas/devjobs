@@ -89,8 +89,8 @@ alias tg_manual_stop='docker compose -f $DEVJOBS/downloader_telegram/docker-comp
 alias tg_down='docker compose -f $DEVJOBS/downloader_telegram/docker-compose.yml down'
 
 # ---------- hdfull-downloader (1 instancia, --rm) ----------
-alias hd_run='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml run --rm hdfull_downloader'
-alias hd_clear='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml run --rm hdfull_downloader --clear-profile'
+alias hd_run='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml run --rm --service-ports hdfull_downloader'
+alias hd_clear='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml run --rm --service-ports hdfull_downloader --clear-profile'
 alias hd_menu='bash $DEVJOBS/hdfull-downloader/menu.sh'
 alias hd_build='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml build --no-cache'
 alias hd_logs='docker compose -f $DEVJOBS/hdfull-downloader/docker-compose.yml logs -f -t --tail=50'

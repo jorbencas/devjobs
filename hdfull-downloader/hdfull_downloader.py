@@ -129,11 +129,20 @@ def find_working_domain(url):
 
 STEALTH = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-Object.defineProperty(navigator, 'languages', {get: () => ['es-ES', 'es']});
+delete navigator.__proto__.webdriver;
+Object.defineProperty(navigator, 'languages', {get: () => ['es-ES', 'es', 'en-US', 'en']});
 Object.defineProperty(navigator, 'language', {get: () => 'es-ES'});
 Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
 Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
 Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 0});
+const originalQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = (parameters) => (
+  parameters.name === 'notifications' ?
+    Promise.resolve({ state: Notification.permission }) :
+    originalQuery(parameters)
+);
 """
 
 BLOB_HOOK = """
@@ -155,11 +164,11 @@ BLOB_HOOK = """
 def launch():
     co = ChromiumOptions()
     co.set_browser_path("/usr/bin/chromium")
-    co.headless(True)
+    co.headless(False)
     co.set_user_data_path("/profile")
     co.set_local_port(9312)
-    co.set_argument("--no-sandbox")
-    co.set_argument("--disable-dev-shm-usage")
+    # Forzar uso de X11 para que se vea en noVNC
+    co.set_argument("--ozone-platform=x11")
     co.set_argument("--remote-allow-origins=*")
     co.set_argument("--disable-blink-features=AutomationControlled")
     co.set_argument("--window-size=1400,900")
@@ -172,8 +181,8 @@ def launch():
     co.set_argument("--no-sandbox")
     co.set_argument("--disable-dev-shm-usage")
     co.set_argument("--disable-gpu")
-    co.set_argument("--disable-dev-shm-usage")
     co.set_argument("--disable-extensions")
+    co.set_argument("--disable-infobars")
     page = ChromiumPage(co)
     page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=STEALTH)
     page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=BLOB_HOOK)
@@ -181,40 +190,302 @@ def launch():
     return page
 
 
+def is_logged_in(page):
+    try:
+        if page.ele('text:Mi cuenta', timeout=2):
+            return True
+        if page.ele('css:a[href*="logout"], a[href*="salir"]', timeout=2):
+            return True
+        if page.ele('css:.user-menu, .logged-in', timeout=2):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def login(page, domain):
     if not HDFULL_USER or not HDFULL_PASS:
         log("FALTAN credenciales (HDFULL_USER / HDFULL_PASS)")
         return False
+    # Comprobar si ya hay sesión
+    try:
+        page.get(f"https://{domain}/")
+        time.sleep(6)
+        if is_logged_in(page):
+            log("LOGIN OK (sesión ya activa)")
+            return True
+    except Exception:
+        pass
     login_url = f"https://{domain}/login"
     page.get(login_url)
-    time.sleep(4)
-    if "login" not in page.url.lower():
+    time.sleep(25)
+    if is_logged_in(page):
         log("LOGIN OK (sesión ya activa)")
         return True
-    for attempt in range(4):
+    # Intentar abrir modal de login si existe
+    try:
+        for txt in ["Acceder", "Iniciar sesión", "Entrar", "Login", "Mi cuenta"]:
+            try:
+                el = page.ele(f'text:{txt}', timeout=5)
+                if el:
+                    try:
+                        el.click()
+                        time.sleep(20)
+                        break
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        user_el = page.ele('css:input[name=username], input[name=user], input[type=email]', timeout=10)
+        pass_el = page.ele('css:input[name=password], input[type=password]', timeout=10)
+        if user_el and pass_el:
+            pass
+    except Exception:
+        pass
+    for attempt in range(20):
         try:
-            user_el = page.ele("css:#popup_login_form input[name=username]", timeout=3) or \
-                      page.ele("css:input[name=username]", timeout=3)
-            pass_el = page.ele("css:#popup_login_form input[name=password]", timeout=2) or \
-                      page.ele("css:input[name=password]", timeout=2)
+            user_el = None
+            pass_el = None
+            for sel in [
+                "css:#popup_login_form input[name=username]",
+                "css:#login_form input[name=username]",
+                "css:form[action*='login'] input[name=username]",
+                "css:form[action*='usuario'] input[type=text]",
+                "css:input[name=username]",
+                "css:input[name='user']",
+                "css:input[name='login']",
+                "css:input[name='email']",
+                "css:input[type=email]",
+                "css:input[type=text][name*=user i]",
+                "css:input[type=text][placeholder*=usuario i]",
+                "css:input[type=text][placeholder*=Usuario i]",
+                "css:input[type=text][placeholder*=email i]",
+            ]:
+                try:
+                    user_el = page.ele(sel, timeout=2)
+                    if user_el:
+                        break
+                except Exception:
+                    continue
+            for sel in [
+                "css:#popup_login_form input[name=password]",
+                "css:#login_form input[name=password]",
+                "css:form[action*='login'] input[name=password]",
+                "css:input[name=password]",
+                "css:input[type=password]",
+            ]:
+                try:
+                    pass_el = page.ele(sel, timeout=2)
+                    if pass_el:
+                        break
+                except Exception:
+                    continue
+            if not user_el or not pass_el:
+                # Debug: look for any inputs
+                try:
+                    inputs = page.eles('tag:input', timeout=2)
+                    if inputs:
+                        names = []
+                        for inp in inputs[:15]:
+                            try:
+                                names.append(f"{inp.attr('name')}|{inp.attr('type')}|{inp.attr('id')}|{inp.attr('placeholder')}")
+                            except Exception:
+                                pass
+                        log(f"login intento {attempt}: inputs encontrados: {names} (URL:{page.url[:80]})")
+                    else:
+                        log(f"login intento {attempt}: sin inputs (URL:{page.url[:80]})")
+                    # Revisar si hay turnstile/captcha
+                    try:
+                        turn = page.ele('css:.cf-turnstile', timeout=1)
+                        ifr = page.ele('css:iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]', timeout=1)
+                        if turn or ifr:
+                            log(f"LOGIN: Turnstile/Cloudflare detectado en formulario. Ábrelo en http://localhost:6080/vnc.html y resuélvelo manualmente. Esperando...")
+                        cf_wait = 0
+                        cf_timeout = 900
+                        while cf_wait < cf_timeout:
+                            if has_cf_clearance(page):
+                                log("cf_clearance detectado")
+                                break
+                            try:
+                                if not page.ele('css:.cf-turnstile', timeout=1) and not page.ele('css:iframe[src*="challenges.cloudflare.com"]', timeout=1):
+                                    log("Turnstile parece resuelto")
+                                    break
+                            except Exception:
+                                pass
+                            # Comprobar si ya aparecen campos de login
+                            try:
+                                ue = page.ele('css:input[name=username], input[name=user], input[type=email]', timeout=1)
+                                pe = page.ele('css:input[name=password], input[type=password]', timeout=1)
+                                if ue and pe:
+                                    log("Campos de login visibles")
+                                    break
+                            except Exception:
+                                pass
+                            if cf_wait % 30 == 0:
+                                log(f"Esperando resolución... ({cf_wait}s / {cf_timeout}s)")
+                            time.sleep(5)
+                            cf_wait += 5
+                        time.sleep(30)
+                        # Ir a home y abrir login
+                        try:
+                            page.get(f"https://{domain}/")
+                            time.sleep(30)
+                            for txt in ["Acceder", "Iniciar sesión", "Entrar", "Login"]:
+                                try:
+                                    el = page.ele(f'text:{txt}', timeout=5)
+                                    if el:
+                                        el.click()
+                                        time.sleep(30)
+                                        break
+                                except Exception:
+                                    continue
+                        except Exception:
+                            pass
+                        # Buscar campos con polling
+                        user_el = None
+                        pass_el = None
+                        for _ in range(60):
+                            try:
+                                for sel in [
+                                    "css:input[name=username]",
+                                    "css:input[name=user]",
+                                    "css:input[name='login']",
+                                    "css:input[type=email]",
+                                    "css:input[type=text][name*=user i]",
+                                    "css:input[type=text]",
+                                    "xpath://input[@type='text' or @type='email']",
+                                ]:
+                                    try:
+                                        user_el = page.ele(sel, timeout=1)
+                                        if user_el:
+                                            break
+                                    except Exception:
+                                        continue
+                                for sel in [
+                                    "css:input[name=password]",
+                                    "css:input[type=password]",
+                                    "xpath://input[@type='password']",
+                                ]:
+                                    try:
+                                        pass_el = page.ele(sel, timeout=1)
+                                        if pass_el:
+                                            break
+                                    except Exception:
+                                        continue
+                                if user_el and pass_el:
+                                    break
+                            except Exception:
+                                pass
+                            try:
+                                inputs = []
+                                for inp in page.eles('css:input', timeout=1) or []:
+                                    try:
+                                        inputs.append(f"{inp.attr('name')}|{inp.attr('type')}|{inp.attr('id')}|{inp.attr('placeholder')}")
+                                    except Exception:
+                                        continue
+                                if inputs and _ % 10 == 0:
+                                    log(f"inputs ahora: {inputs} (URL:{page.url[:50]})")
+                            except Exception:
+                                pass
+                            time.sleep(5)
+                        if not (user_el and pass_el):
+                            log("Sin campos aún tras polling, reintentando login desde /login")
+                            try:
+                                page.get(f"https://{domain}/login")
+                                time.sleep(40)
+                            except Exception:
+                                pass
+                            for _ in range(40):
+                                try:
+                                    for sel in [
+                                        "css:input[name=username]", "css:input[name=user]", "css:input[name='login']", "css:input[type=email]",
+                                        "css:input[type=text][name*=user i]", "css:input[type=text]", "xpath://input[@type='text' or @type='email']",
+                                    ]:
+                                        try:
+                                            user_el = page.ele(sel, timeout=1)
+                                            if user_el: break
+                                        except Exception: continue
+                                    for sel in ["css:input[name=password]", "css:input[type=password]", "xpath://input[@type='password']"]:
+                                        try:
+                                            pass_el = page.ele(sel, timeout=1)
+                                            if pass_el: break
+                                        except Exception: continue
+                                    if user_el and pass_el: break
+                                except Exception: pass
+                                time.sleep(5)
+                        if user_el and pass_el:
+                            log("Campos encontrados, procediendo a login")
+                        else:
+                            log("Sin campos tras todos los intentos")
+                            time.sleep(60)
+                            continue
+                    except Exception:
+                        pass
+                except Exception as e:
+                    log(f"login intento {attempt}: no se encuentran campos de login (URL:{page.url[:60]}) err:{e}")
+                    time.sleep(6)
+                    continue
+                time.sleep(6)
+                continue
+            try:
+                user_el.clear()
+            except Exception:
+                pass
+            try:
+                pass_el.clear()
+            except Exception:
+                pass
             user_el.input(HDFULL_USER)
-            time.sleep(0.5)
+            time.sleep(0.8)
             pass_el.input(HDFULL_PASS)
             time.sleep(1)
-            btn = page.ele("css:#popup_login_form a[onclick*=doLogin]", timeout=2) or \
-                  page.ele("css:form[action*=login] button, button[type=submit], .btn[onclick*=login]",
-                           timeout=2)
+            btn = None
+            for sel in [
+                "css:#popup_login_form a[onclick*=doLogin]",
+                "css:#loginForm button[type=submit]",
+                "css:form[action*=login] button[type=submit]",
+                "css:button[type=submit]",
+                "css:.btn-login",
+                "css:a.btn[onclick*=login]",
+            ]:
+                try:
+                    btn = page.ele(sel, timeout=2)
+                    if btn:
+                        break
+                except Exception:
+                    continue
             if btn:
                 btn.click()
-            time.sleep(6)
+            else:
+                try:
+                    pass_el.input('\n')
+                except Exception:
+                    pass
+            time.sleep(8)
+            if is_logged_in(page):
+                log("LOGIN OK")
+                return True
             if "login" not in page.url.lower():
                 log("LOGIN OK")
                 return True
-            res = page.ele("#popup_login_result", timeout=3)
-            log(f"login intento {attempt}: {res.text[:80] if res else '?'}")
+            res = None
+            for sel in ["#popup_login_result", ".login-error", ".error-message", "#login-error"]:
+                try:
+                    res = page.ele(sel, timeout=2)
+                    if res:
+                        break
+                except Exception:
+                    continue
+            if res and res.text:
+                log(f"login intento {attempt}: {res.text[:100]}")
+            else:
+                log(f"login intento {attempt}: sin mensaje de error claro")
         except Exception as e:
             log(f"login intento {attempt} error: {e}")
-        time.sleep(3)
+        time.sleep(4)
     log("LOGIN FALLIDO")
     return False
 
@@ -568,6 +839,26 @@ def page_title(page):
         return ""
 
 
+def has_cf_clearance(page):
+    try:
+        cookies = page.cookies()
+        for c in cookies:
+            name = str(c.get('name') or c.get('Name') or '').lower()
+            if name == 'cf_clearance':
+                return True
+        try:
+            cookies_all = page.cookies(all_domains=True)
+            for c in cookies_all:
+                name = str(c.get('name') or c.get('Name') or '').lower()
+                if name == 'cf_clearance':
+                    return True
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return False
+
+
 def main():
     global TARGET_URL
     TARGET_URL = find_working_domain(TARGET_URL)
@@ -577,46 +868,108 @@ def main():
     page = launch()
 
     # Resolver Cloudflare del dominio original ANTES de hacer login
-    log("Comprobando Cloudflare (si aparece, resuélvelo en noVNC)...")
+    log("Comprobando Cloudflare...")
     page.get(TARGET_URL)
-    time.sleep(8)
+    time.sleep(12)
     cf_wait = 0
-    while "just a moment" in page_title(page).lower() and cf_wait < 120:
-        if cf_wait % 10 == 0:
-            log(f"PENDIENTE: Cloudflare activo ({cf_wait}s / 120s) - resuélvelo en http://localhost:6080/vnc.html")
+    cf_timeout = int(os.environ.get("HDFULL_CF_TIMEOUT", "300"))
+    while cf_wait < cf_timeout:
+        title = page_title(page)
+        t = title.lower()
+        if has_cf_clearance(page):
+            log("cf_clearance detectado - Cloudflare resuelto")
+            break
+        if "just a moment" not in t and "checking your browser" not in t and "cloudflare" not in t and "challenge" not in t:
+            break
+        # Intentar click en checkbox/radio si aparece
+        try:
+            cb = page.ele('css:input[type=checkbox]', timeout=1)
+            if cb:
+                try:
+                    cb.click()
+                    log("Intentando resolver Cloudflare (click en checkbox)")
+                    time.sleep(4)
+                    continue
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for f in page.get_frames():
+                try:
+                    cb2 = f.ele('css:input[type=checkbox], .cb-lb, #challenge-stage input', timeout=1)
+                    if cb2:
+                        cb2.click()
+                        log("Intentando resolver Cloudflare (click en iframe)")
+                        time.sleep(4)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if cf_wait % 15 == 0:
+            log(f"Esperando Cloudflare... ({cf_wait}s / {cf_timeout}s) - usa noVNC si pide verificación manual")
         time.sleep(5)
         cf_wait += 5
-    if "just a moment" in page_title(page).lower():
-        log("Cloudflare no resuelto a tiempo")
-        page.quit()
-        sys.exit(1)
+    if not has_cf_clearance(page):
+        title = page_title(page)
+        if "just a moment" in title.lower() or "checking your browser" in title.lower():
+            log("Cloudflare sin cf_clearance aún; continúa (con perfil guardado suele pasar)")
 
     if not login(page, domain):
         page.quit()
         sys.exit(1)
 
     page.get(TARGET_URL)
-    time.sleep(8)
+    time.sleep(12)
 
     title = page_title(page)
     log(f"Página: {page.url[:100]} | {title[:70]}")
 
     # Esperar a que se resuelva Cloudflare challenge si está presente
     cf_wait = 0
-    cf_timeout = 120
+    cf_timeout = int(os.environ.get("HDFULL_CF_TIMEOUT", "300"))
     title = page_title(page)
-    while "just a moment" in title.lower() and cf_wait < cf_timeout:
-        if cf_wait % 10 == 0:
-            log(f"PENDIENTE: Cloudflare challenge activo ({cf_wait}s / {cf_timeout}s) - resuélvelo en http://localhost:6080/vnc.html")
+    while cf_wait < cf_timeout:
+        t = title.lower()
+        if has_cf_clearance(page):
+            log("cf_clearance detectado tras navegación")
+            break
+        if "just a moment" not in t and "checking your browser" not in t and "cloudflare" not in t and "challenge" not in t:
+            break
+        try:
+            cb = page.ele('css:input[type=checkbox]', timeout=1)
+            if cb:
+                try:
+                    cb.click()
+                    time.sleep(4)
+                    continue
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for f in page.get_frames():
+                try:
+                    cb2 = f.ele('css:input[type=checkbox]', timeout=1)
+                    if cb2:
+                        cb2.click()
+                        time.sleep(4)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if cf_wait % 15 == 0:
+            log(f"Esperando Cloudflare challenge... ({cf_wait}s / {cf_timeout}s)")
         time.sleep(5)
         cf_wait += 5
         title = page_title(page)
 
-    title = page_title(page)
-    if "just a moment" in title.lower():
-        log("Cloudflare challenge no resuelto a tiempo")
-        page.quit()
-        sys.exit(1)
+    if not has_cf_clearance(page):
+        title = page_title(page)
+        if "just a moment" in title.lower() or "checking your browser" in title.lower():
+            log("Cloudflare challenge persiste; abre noVNC http://localhost:6080/vnc.html para resolverlo")
 
     log(f"Página cargada: {title[:70]}")
 

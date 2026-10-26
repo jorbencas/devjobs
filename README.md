@@ -61,7 +61,7 @@ Automatización que graba directos de **Twitch/YouTube/Kick/Web**, los comprime,
 │ TwitchRecorder│ ──────────────► │ ffmpeg-yt-dlp     │ ────────────────► │ downloader_telegram│
 │  (grabar)     │  copiar a test/ │  monitor + OCR    │    comprimir      │  uploader (subir) │
 └──────────────┘                  └──────────────────┘                    └──────────────────┘
-   data/pipeline/grabaciones/    data/pipeline/comprimidos/                  N grupos/temas
+   /srv/devjobs-data/grabaciones/  /srv/devjobs-data/comprimidos/            N grupos/temas
 ```
 
 ### Flujo completo
@@ -71,11 +71,11 @@ Automatización que graba directos de **Twitch/YouTube/Kick/Web**, los comprime,
 | 1. **Detectar** | `twitchrecorder-sendo` | Comprueba directos cada 30s en web → YouTube → Kick → Twitch (orden configurable) |
 | 2. **Grabar** | `twitchrecorder-sendo` | Graba calidad original con yt-dlp, concatena partes si cambia de plataforma |
 | 3. **Keyword** | — | Extrae título del directo → `*_KW_<keyword>_completed.mp4` |
-| 4. **Cola** | — | Copia a `test/` (el original queda en `grabaciones/`) |
+| 4. **Cola** | — | Enlace duro a `test/` (el original queda en `grabaciones/` hasta que se sube) |
 | 5. **OCR** | `ffmpeg_monitor-sendo` | Detecta episodios/temporada/película por OCR de la franja superior |
 | 6. **Comprimir** | `ffmpeg_monitor-sendo` | Convierte a 720p (CRF 28), recorta extremos si `corte: true` |
 | 7. **Subir** | `telegram-uploader-sendo` | Rutea por keyword a grupos/temas de Telegram, divide si >2GB |
-| 8. **Limpiar** | `telegram-uploader-sendo` | Marca como enviado, borra comprimido y residuos |
+| 8. **Limpiar** | `telegram-uploader-sendo` | Marca como enviado, borra comprimido, residuos y grabación original |
 
 ### Contenedores Docker
 
@@ -86,6 +86,10 @@ Automatización que graba directos de **Twitch/YouTube/Kick/Web**, los comprime,
 | `telegram-uploader-sendo` | Subidor (daemon) | — | `unless-stopped` |
 
 > **Solo estos 3 contenedores** forman el pipeline "sendo". Se eliminaron todos los contenedores auxiliares/obsoletos. Ver `TwitchRecorder/README.md` sección *Limpieza de contenedores*.
+>
+> Los vídeos viven por defecto en `/srv/devjobs-data` (ext4), configurable con `DEVJOBS_DATA`. Evita usar rutas de `C:\` en WSL porque Docker las monta por 9p y el pipeline va mucho más lento.
+>
+> Cuando el uploader termina de subir todas las partes a todos los destinos, elimina también la grabación original de `grabaciones/`. Se puede desactivar con `UPLOADER_BORRAR_ORIGINAL=0`.
 
 ### Detección de episodios (OCR)
 

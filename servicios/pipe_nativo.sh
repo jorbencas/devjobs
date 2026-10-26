@@ -18,7 +18,7 @@ set -euo pipefail
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-DATA="$ROOT/data/pipeline"
+DATA="${DEVJOBS_DATA:-/srv/devjobs-data}"
 RECORD_DIR="$DATA/grabaciones"
 WATCH_DIR="$RECORD_DIR/test"
 OUTPUT_DIR="$DATA/comprimidos"

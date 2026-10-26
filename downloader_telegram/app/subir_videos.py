@@ -53,6 +53,7 @@ Variables de entorno:
 
 import argparse
 import asyncio
+import glob
 import json
 import os
 import shutil
@@ -79,6 +80,13 @@ SESION_UPLOADER = os.environ.get("UPLOADER_SESION", str(REPO_DIR / "sessions" / 
 GRUPOS_FILE = Path(os.environ.get("UPLOADER_GRUPOS", REPO_DIR / "config" / "grupos.json"))
 MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 PARTES_DIR = Path(os.environ.get("UPLOADER_PARTES", SCRIPT_DIR / "partes"))
+GRABACIONES_DIR = Path(os.environ.get("UPLOADER_GRABACIONES", "/grabaciones"))
+BORRAR_ORIGINAL = os.environ.get("UPLOADER_BORRAR_ORIGINAL", "1").strip().lower() not in (
+    "0", "false", "no", "off"
+)
+MEDIA_SUFFIXES = {
+    ".mp4", ".mkv", ".webm", ".mov", ".avi", ".flv", ".ts", ".m4v",
+}
 
 
 def cargar_o_generar_llave():
@@ -361,8 +369,9 @@ def enviado(archivo):
 
 
 def marcar_enviado(archivo):
-    """Marca un archivo como subido (en memoria), borra el comprimido ya subido
-    y limpia todos sus restos del pipeline. No deja ningún fichero de estado."""
+    """Marca un archivo como subido (en memoria), borra el comprimido ya subido,
+    limpia sus restos y elimina la grabación original de /grabaciones.
+    No deja ningún fichero de estado."""
     _ENVIADOS.add(str(archivo))
     if archivo.exists():
         try:
@@ -370,6 +379,7 @@ def marcar_enviado(archivo):
         except OSError as e:
             log("WARN", f"No se pudo eliminar el archivo ya subido: {e}")
     limpiar_restos(archivo)
+    borrar_grabacion_original(archivo)
 
 
 def limpiar_restos(archivo):
@@ -410,6 +420,43 @@ def limpiar_restos(archivo):
     except OSError as e:
         log("WARN", f"No se pudo acceder a {PARTES_DIR}: {e}")
 
+
+def _base_grabacion(archivo):
+    """Nombre base de la grabación original a partir del comprimido.
+    'canal_fecha_KW_x_completed_compressed.mp4' → 'canal_fecha_KW_x'."""
+    base = archivo.stem
+    for sufijo in ("_compressed", "_completed"):
+        if base.endswith(sufijo):
+            base = base[: -len(sufijo)]
+    return base
+
+
+def borrar_grabacion_original(archivo):
+    """Borra la grabación original (no el enlace de test/) tras subir el
+    comprimido a todos los destinos. Solo actúa dentro de GRABACIONES_DIR."""
+    if not BORRAR_ORIGINAL:
+        return
+    if not GRABACIONES_DIR.is_dir():
+        log("WARN", f"No existe {GRABACIONES_DIR}; no se borra la grabación original de {archivo.name}")
+        return
+
+    patron = glob.escape(_base_grabacion(archivo)) + ".*"
+    candidatos = [
+        p for p in GRABACIONES_DIR.rglob(patron)
+        if p.is_file()
+        and p.suffix.lower() in MEDIA_SUFFIXES
+        and p.parent.name not in ("test", ".corruptos")
+    ]
+    if not candidatos:
+        log("INFO", f"Sin grabación original para {archivo.name} (quizá ya borrada)")
+        return
+
+    for original in sorted(candidatos):
+        try:
+            original.unlink()
+            log("LIMP", f"Eliminada grabación original: {original.relative_to(GRABACIONES_DIR)}")
+        except OSError as e:
+            log("WARN", f"No se pudo eliminar la grabación original {original}: {e}")
 
 
 def dividir_video(archivo):
@@ -873,11 +920,11 @@ async def subir_archivo(client, archivo, destinos, caption_base, keyword=""):
         except OSError:
             pass
 
-    if subidos >= len(destinos) * max(1, len(partes)) or subidos >= len(destinos):
-        # Se marcó como enviado si al menos llegó a todos los destinos de la 1ª parte
+    total_envios = len(destinos) * len(partes)
+    if destinos and subidos >= total_envios:
         marcar_enviado(archivo)
     else:
-        log("WARN", f"{nombre}: no se completó la subida a todos los destinos. Se reintentará.")
+        log("WARN", f"{nombre}: no se completó la subida a todos los destinos/partes. Se reintentará.")
 
 
 async def _conectar(client, pedir_login=False):

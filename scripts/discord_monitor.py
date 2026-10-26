@@ -47,13 +47,14 @@ except ImportError:
 # ============================================================================
 SCRIPT_DIR = Path(__file__).parent
 DEVJOBS = SCRIPT_DIR.parent
+DATA_DIR = Path(os.environ.get("DEVJOBS_DATA", "/srv/devjobs-data"))
 CONFIG_FILE = DEVJOBS / "TwitchRecorder" / "config.json"
 DISCORD_CONFIG_FILE = SCRIPT_DIR / "discord_config.json"
 
 # Valores por defecto
 DEFAULT_OBS_HOST = "localhost"
 DEFAULT_OBS_PORT = 4455
-DEFAULT_OUTPUT_DIR = str(DEVJOBS / "data" / "discord-recordings")
+DEFAULT_OUTPUT_DIR = str(DATA_DIR / "discord-recordings")
 
 
 def load_config() -> dict:
@@ -307,7 +308,7 @@ class DiscordMonitor(commands.Bot):
         """Procesa la grabación: mover al pipeline y comprimir."""
         try:
             # Mover a la carpeta de grabaciones del pipeline
-            pipeline_dir = DEVJOBS / "data" / "pipeline" / "grabaciones" / "discord"
+            pipeline_dir = DATA_DIR / "grabaciones" / "discord"
             pipeline_dir.mkdir(parents=True, exist_ok=True)
 
             source = Path(recording_path)
@@ -318,7 +319,7 @@ class DiscordMonitor(commands.Bot):
             print(f"[Pipeline] Movido a {dest}")
 
             # Copiar a test/ para que ffmpeg_monitor lo procese
-            test_dir = DEVJOBS / "data" / "pipeline" / "grabaciones" / "test"
+            test_dir = DATA_DIR / "grabaciones" / "test"
             test_dir.mkdir(parents=True, exist_ok=True)
             test_file = test_dir / f"discord_{source.stem}_completed.mp4"
             shutil.copy2(str(dest), str(test_file))
