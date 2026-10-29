@@ -282,6 +282,80 @@ tg_menu
 
 ---
 
+## 🔑 Credenciales de Telegram (equipo nuevo, sin conflictos)
+
+Aplica al pipeline **sendo** (TwitchRecorder → ffmpeg → `telegram-uploader-sendo`) y a los demás contenedores de Telegram. Cada equipo o máquina debe usar **sus propias credenciales** y **su propio bot**. No compartas tokens, sesiones ni `config.bin` entre equipos: dos procesos usando el mismo token de bot se pisan (Telegram solo entrega las actualizaciones a uno) y una sesión copiada reutiliza el login de otra cuenta.
+
+| Credencial | Dónde se genera | La usa | Dónde se guarda |
+|---|---|---|---|
+| `BOT_TOKEN` | Telegram → **@BotFather** → `/newbot` | `telegram-bot` (y `yt-to-telegram`) | `.env` de cada proyecto |
+| `API_ID` + `API_HASH` | https://my.telegram.org/apps | `telegram` y `telegram-uploader-sendo` (Telethon) | `downloader_telegram/config/config.bin` |
+| Sesión `.session` | Login interactivo (teléfono + código + 2FA) | uploader / CLI | `downloader_telegram/sessions/` |
+
+### 1. Bot propio (`BOT_TOKEN`)
+
+1. Habla con **@BotFather** en Telegram y ejecuta `/newbot`.
+2. Elige un nombre y un usuario terminado en `bot` (p. ej. `mi_equipo_devjobs_bot`).
+3. Copia el token y guárdalo **solo** en el `.env` del proyecto:
+
+   ```bash
+   cd downloader_telegram
+   printf '\nBOT_TOKEN=%s\n' '123456789:AA...' >> .env
+   ```
+
+   Usa la variable **`BOT_TOKEN`** (es la que lee `docker-compose.yml`; `TELEGRAM_BOT_TOKEN` no se usa en el bot).
+4. Arranca el bot: `docker compose up -d telegram_bot`.
+5. Añádelo al grupo/foro como **administrador** (necesita permiso para crear temas).
+
+> Si el token se filtra: @BotFather → `/mybots` → tu bot → **API Token** → **Revoke**, actualiza el `.env` y reinicia el contenedor.
+
+### 2. API ID/Hash y sesión (uploader)
+
+El contenedor del pipeline (`telegram-uploader-sendo`) **no usa `BOT_TOKEN`**: sube como una cuenta de Telegram con Telethon.
+
+1. Entra en https://my.telegram.org/apps con la cuenta de ese equipo y crea una app; obtendrás `api_id` y `api_hash`.
+2. Guárdalos cifrados en `config.bin` (con su `secret.key`). Desde `downloader_telegram/`:
+
+   ```bash
+   read -rp "API ID: " API_ID
+   read -rsp "API HASH: " API_HASH; echo
+   docker compose run --rm -T -e API_ID -e API_HASH telegram python -c '
+   import json, os
+   from pathlib import Path
+   from cryptography.fernet import Fernet
+   d = Path("config"); d.mkdir(exist_ok=True)
+   k = d / "secret.key"
+   key = k.read_bytes() if k.exists() else Fernet.generate_key()
+   if not k.exists():
+       k.write_bytes(key)
+   data = json.dumps({"api_id": os.environ["API_ID"], "api_hash": os.environ["API_HASH"]}).encode()
+   (d / "config.bin").write_bytes(Fernet(key).encrypt(data))
+   print("OK: config/config.bin + config/secret.key")
+   '
+   ```
+
+3. Crea la sesión del uploader (pide teléfono + código y 2FA si aplica):
+
+   ```bash
+   touch sessions/uploader.session
+   bash ../servicios/pipe_setup.sh
+   ```
+
+4. Verifica sin subir nada: `bash ../servicios/pipe_verificar.sh`.
+
+> No copies `sessions/*.session`, `config.bin` ni `secret.key` entre equipos: son el login de una cuenta concreta. Cada equipo debe autenticarse con la suya. Si migras **la misma cuenta** a otra máquina, copia los ficheros y usa `pipe_setup.sh --reset` si la sesión falla.
+
+### Checklist de aislamiento
+
+- [ ] Cada equipo tiene su propio clon del repo y su propio `.env`.
+- [ ] `config/config.bin`, `config/secret.key`, `sessions/` y `config/grupos.json` son propios y **nunca** se commitean.
+- [ ] Un `BOT_TOKEN` = un bot = **una sola instancia** de `telegram-bot` corriendo.
+- [ ] No ejecutes dos copias del compose en el mismo host: los `container_name` son fijos y chocarían.
+
+Guía ampliada: [`downloader_telegram/README.md`](downloader_telegram/README.md#-credenciales-de-un-equipo-nuevo-token-propio-sin-conflictos).
+
+---
+
 ## 🐳 Arrancar cada contenedor (comandos Docker)
 
 Cada herramienta tiene su propio `docker-compose.yml`. Estos son **todos** los servicios del ecosistema y el comando para arrancarlos por separado (`-f` apunta al compose correspondiente):

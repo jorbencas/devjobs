@@ -101,6 +101,79 @@ docker compose down
 
 > El servicio `telegram` se queda vivo (`tail -f /dev/null`) para poder entrar con `docker exec` (ver comando `tg_menu` más abajo). El `uploader` y el `telegram_bot` se levantan como daemons con `restart: unless-stopped`.
 
+### 🔑 Credenciales de un equipo nuevo (token propio, sin conflictos)
+
+Si este proyecto se despliega en un **equipo/máquina nuevo**, genera credenciales propias. No reutilices el `.env`, las sesiones ni el `config.bin` de otro equipo: dos instancias con el mismo token de bot se pisan y una sesión copiada reutiliza el login de otra cuenta.
+
+| Credencial | Dónde se genera | Contenedor que la usa | Se guarda en |
+|---|---|---|---|
+| `BOT_TOKEN` | Telegram → **@BotFather** | `telegram_bot` | `.env` |
+| `API_ID` + `API_HASH` | https://my.telegram.org/apps | `telegram` / `uploader` (Telethon) | `config/config.bin` |
+| Sesión `.session` | Login con teléfono + código + 2FA | `uploader` / CLI | `sessions/*.session` |
+
+#### 1. Bot propio (`BOT_TOKEN`)
+
+1. En Telegram, abre **@BotFather** y ejecuta `/newbot`.
+2. Elige nombre y usuario terminado en `bot` (p. ej. `mi_equipo_devjobs_bot`).
+3. Guarda el token **solo** en este proyecto:
+
+   ```bash
+   cd downloader_telegram
+   printf '\nBOT_TOKEN=%s\n' '123456789:AA...' >> .env
+   ```
+
+   La variable que lee `docker-compose.yml` es **`BOT_TOKEN`**; `TELEGRAM_BOT_TOKEN` no se usa en el bot.
+4. Arranca el bot y añádelo al grupo como **administrador** (para crear temas):
+
+   ```bash
+   docker compose up -d telegram_bot
+   docker compose logs -f telegram_bot
+   ```
+
+> **Conflictos:** un `BOT_TOKEN` debe tener una sola instancia de `telegram-bot` haciendo polling. Si otro equipo arranca el mismo token, los mensajes solo llegan a uno. Si se filtra: @BotFather → `/mybots` → tu bot → **API Token** → **Revoke**, actualiza el `.env` y reinicia.
+
+#### 2. API ID/Hash del uploader (`config.bin`)
+
+El uploader **no usa `BOT_TOKEN`**: sube con una cuenta de Telegram vía Telethon. Para un equipo nuevo:
+
+1. Entra en https://my.telegram.org/apps con la cuenta de Telegram de ese equipo y crea una app.
+2. Guarda `api_id` y `api_hash` cifrados con Fernet en `config/config.bin` (la clave va en `config/secret.key`). Desde `downloader_telegram/`:
+
+   ```bash
+   read -rp "API ID: " API_ID
+   read -rsp "API HASH: " API_HASH; echo
+   docker compose run --rm -T -e API_ID -e API_HASH telegram python -c '
+   import json, os
+   from pathlib import Path
+   from cryptography.fernet import Fernet
+   d = Path("config"); d.mkdir(exist_ok=True)
+   k = d / "secret.key"
+   key = k.read_bytes() if k.exists() else Fernet.generate_key()
+   if not k.exists():
+       k.write_bytes(key)
+   data = json.dumps({"api_id": os.environ["API_ID"], "api_hash": os.environ["API_HASH"]}).encode()
+   (d / "config.bin").write_bytes(Fernet(key).encrypt(data))
+   print("OK: config/config.bin + config/secret.key")
+   '
+   ```
+
+3. Crea la sesión del uploader (login interactivo, solo una vez):
+
+   ```bash
+   touch sessions/uploader.session
+   bash ../servicios/pipe_setup.sh
+   ```
+
+4. Comprueba credenciales, `grupos.json` y sesión sin subir nada:
+
+   ```bash
+   bash ../servicios/pipe_verificar.sh
+   ```
+
+> **No mezcles equipos:** `config.bin`, `secret.key` y `*.session` son el login de una cuenta concreta. Cada equipo debe generar los suyos. Si migras **la misma cuenta** a otra máquina, copia los ficheros y usa `bash ../servicios/pipe_setup.sh --reset` si la sesión no valida.
+>
+> El CLI (`telegram`) usa `sessions/tg_toolbox.session` y el daemon usa `sessions/uploader.session`: son sesiones distintas para poder correr a la vez sin conflictos.
+
 ### Generar sesión portátil
 
 ```bash

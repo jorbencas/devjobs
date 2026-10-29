@@ -42,6 +42,8 @@ BOT_TOKEN="tu-token-de-bot"
 TELEGRAM_GROUP_ID="-100xxxxxxxxxx"  # ID del grupo con temas
 ```
 
+> **Equipo nuevo / sin conflictos:** crea un bot propio con **@BotFather** (`/newbot`) y usa su token solo en este equipo. No compartas el `BOT_TOKEN` con otro proyecto que también haga polling del bot; si el token se filtra, revócalo en @BotFather (`/mybots` → **API Token** → **Revoke**) y actualiza el `.env`. El bot debe ser **administrador** del grupo para crear los temas.
+
 ### 2. Canales
 
 Editar `config/channels.json` para habilitar/deshabilitar canales:
