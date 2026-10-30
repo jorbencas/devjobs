@@ -2882,8 +2882,20 @@ async def _calcular_destinos(archivo, default, grupos, foros):
                 foro, tid = fo, m
                 break
         if foro is None:
+            for fo in foros:
+                m = match_tema_foro(fo, keyword)
+                if m:
+                    foro, tid = fo, m
+                    break
+        if foro is None and episodios:
+            for fo in foros:
+                m = match_tema_foro(fo, str(episodios))
+                if m:
+                    foro, tid = fo, m
+                    break
+        if foro is None:
             foro = foro_objetivo(foros, canal)
-            tid = match_tema_foro(foro, keyword) or (match_tema_foro(foro, str(episodios)) if episodios else None)
+            tid = None
         destinos.append((foro["id"], tid if tid else foro.get("general")))
     return list(dict.fromkeys(destinos))
 

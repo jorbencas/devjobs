@@ -47,6 +47,7 @@ Config (grupos.json):
 
 Variables de entorno:
   UPLOADER_INTERVALO     Segundos entre pasadas (default: 60)
+  UPLOADER_HEARTBEAT     Segundos entre logs de vigilancia (default: 60; 0 = cada pasada)
   UPLOADER_OCR_STEP      Paso de escaneo OCR en segundos (default: 90)
   UPLOADER_CARPETAS      Carpetas a vigilar (separadas por :)
 """
@@ -356,6 +357,31 @@ def foro_objetivo(foros, canal):
     if not foros:
         return None
     return foros[0]
+
+
+def foro_y_tema_para_video(foros, canal, keyword, episodios=None):
+    """Elige (foro, tema) para un vídeo.
+
+    Prioridad:
+      1) El canal coincide con un tema de cualquier foro.
+      2) La keyword coincide con un tema de cualquier foro.
+      3) Los episodios coinciden con un tema de cualquier foro.
+      4) Fallback: primer foro, tema general.
+    """
+    for fo in foros:
+        m = match_tema_foro(fo, canal)
+        if m:
+            return fo, m
+    for fo in foros:
+        m = match_tema_foro(fo, keyword)
+        if m:
+            return fo, m
+    if episodios:
+        for fo in foros:
+            m = match_tema_foro(fo, str(episodios))
+            if m:
+                return fo, m
+    return foro_objetivo(foros, canal), None
 
 
 # Registro en memoria de lo ya subido en esta ejecución. No se persiste a
@@ -1337,13 +1363,19 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
         return pp
 
     carpetas = [a_carpeta(c) for c in carpetas]
+    heartbeat = int(os.environ.get("UPLOADER_HEARTBEAT", "60"))
+    ultimo_log = 0.0
 
     while True:
         try:
+            pendientes = 0
             for carpeta in carpetas:
-                for archivo in sorted(carpeta.glob("*_compressed.*")):
-                    if archivo.suffix.lower() not in (".mp4", ".mkv", ".webm", ".mov", ".avi"):
-                        continue
+                archivos = [
+                    a for a in sorted(carpeta.glob("*_compressed.*"))
+                    if a.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".avi")
+                ]
+                pendientes += len(archivos)
+                for archivo in archivos:
                     keyword = keyword_from_filename(archivo.name)
                     canal = canal_from_filename(archivo.name)
                     destinos = [(g, None) for g in grupos_para_keyword(keyword, default, grupos)]
@@ -1353,24 +1385,15 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         if not episodios:
                             episodios = detectar_episodios(archivo)
                             log("INFO", f"{archivo.name}: OCR de episodios realizado")
-                        # El tema del foro actúa como clave (sin lista canales):
-                        #  1) Si el canal del archivo coincide con un tema → ese
-                        #     foro/tema (p.ej. 'midudev' → tema 'midu').
-                        #  2) Si no, al foro por defecto (catch-all) matcheando la
-                        #     keyword o episodios; si tampoco, al tema 'general'.
-                        foro = tid = None
-                        for fo in foros:
-                            m = match_tema_foro(fo, canal)
-                            if m:
-                                foro, tid = fo, m
-                                break
-                        if foro is None:
-                            foro = foro_objetivo(foros, canal)
-                            tid = match_tema_foro(foro, keyword) or \
-                                (match_tema_foro(foro, str(episodios)) if episodios else None)
+                        # El tema del foro actúa como clave:
+                        #  1) canal coincide con un tema de cualquier foro
+                        #  2) keyword coincide con un tema de cualquier foro
+                        #  3) episodios coinciden con un tema de cualquier foro
+                        #  4) fallback: primer foro, tema general
+                        foro, tid = foro_y_tema_para_video(foros, canal, keyword, episodios)
                         destinos.append((foro["id"], tid if tid else foro.get("general")))
                         destinos = list(dict.fromkeys(destinos))
-                        log("INFO", f"{archivo.name}: canal='{canal}' → foro '{foro['nombre']}' tema {tid or foro.get('general')}")
+                        log("INFO", f"{archivo.name}: canal='{canal}', keyword='{keyword}' → foro '{foro['nombre']}' tema {tid or foro.get('general')}")
                     if not destinos:
                         log("WARN", f"{archivo.name}: sin keyword, sin grupo default ni foro. Se omite.")
                         continue
@@ -1387,6 +1410,10 @@ async def run_autoupload(api_id, api_hash, carpetas, intervalo, una_pasada):
                         caption_base = f"🎬 Directo de {canal}" if canal else "🎬 Directo"
                         log("WARN", f"{archivo.name}: caption por defecto (descripción no usada)")
                     await subir_archivo(client, archivo, destinos, caption_base, keyword)
+            ahora = time.time()
+            if heartbeat <= 0 or ahora - ultimo_log >= heartbeat:
+                log("INFO", f"Monitoreo: {pendientes} vídeo(s) pendiente(s) en {len(carpetas)} carpeta(s)")
+                ultimo_log = ahora
         except Exception as e:
             log("ERR", f"Error en la pasada: {e}")
         if una_pasada:
